@@ -397,7 +397,7 @@ var UNIVERSE=[
   {t:'NEE',s:'Utilities'},{t:'DUK',s:'Utilities'}
 ];
 var G={results:[],filtered:[],gexData:[],wlTickers:[],positions:[],alerts:[],
-  sortCol:'score',sortDir:-1,selTicker:null,scanRunning:false,acctId:''};
+  sortCol:'score',sortDir:-1,selTicker:null,scanRunning:false,acctId:'',detailOpt:null};
 
 function eid(id){return document.getElementById(id);}
 function fmt2(n){return isNaN(n)?'--':(+n).toFixed(2);}
@@ -536,6 +536,8 @@ function buildDetail(r,detId,emptyId){
     var icon=ru.pass?'&#10003;':'&#10007;';
     rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';
   });
+  
+  G.detailOpt={ticker:r.ticker,strike:opt.strike,exp:opt.exp};
   det.innerHTML=
     '<div class="det-hdr"><span class="det-tk">'+r.ticker+'</span>'
     +'<span class="det-pr">$'+fmt2(r.price)+'</span>'
@@ -565,6 +567,11 @@ function buildDetail(r,detId,emptyId){
     +'<div class="og-cell"><div class="og-lbl">Expiry</div><div class="og-val">'+opt.exp+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Opt Price</div><div class="og-val">$'+fmt2(opt.optPr)+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">OI / Vol</div><div class="og-val">'+fmtK(opt.oi)+' / '+fmtK(opt.vol)+'</div></div>'
+    +'</div>'
+        +'<div style="padding:8px 12px;border-bottom:var(--bdr);display:flex;align-items:center;gap:10px;">'
+    +'<button class="btn blu" style="font-size:12px;padding:5px 14px;" onclick="doBuyCall()">&#9650; BUY CALL</button>'
+    +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">&#9660; BUY PUT</button>'
+    +'<span style="color:var(--gry);font-size:10px;">Strike: $'+fmt2(opt.strike)+'  |  Exp: '+opt.exp+'</span>'
     +'</div>'
     +'<div class="s-hdr">RULE SCORECARD</div>'
     +'<div class="rules-grid">'+rulesHtml+'</div>'
@@ -880,6 +887,25 @@ function clearPositions(){
   toast('Positions cleared');
 }
 
+function buyOrder(ticker,type,strike,exp){
+  switchTab('order');
+  setTimeout(function(){
+    eid('ord-sym').value=ticker;
+    eid('ord-type').value=type||'CALL';
+    eid('ord-strike').value=strike;
+    eid('ord-exp').value=exp||'';
+    eid('ord-action').value='BUY_TO_OPEN';
+    eid('ord-qty').value=1;
+    eid('ord-otype').value='limit';
+    var res=eid('ord-result');
+    res.innerHTML='Order pre-filled: '+ticker+' '+type+' strike:'+strike+' exp:'+exp;
+    res.className='ord-result show';
+    res.style.borderColor='var(--blu)';
+    toast('Buy pre-filled: '+ticker+' '+type);
+  },120);
+}
+function doBuyCall(){if(G.detailOpt)buyOrder(G.detailOpt.ticker,'CALL',G.detailOpt.strike,G.detailOpt.exp);}
+function doBuyPut(){if(G.detailOpt)buyOrder(G.detailOpt.ticker,'PUT',G.detailOpt.strike,G.detailOpt.exp);}
 function doClose(btn){var tr=btn.closest('tr');closePosition(tr.dataset.tk,tr.dataset.tp,+tr.dataset.st,tr.dataset.ex,+tr.dataset.qty);}
 function closePosition(symbol,type,strike,exp,qty){
   var action=type==='STOCK'?'SELL':'BUY_TO_CLOSE';
