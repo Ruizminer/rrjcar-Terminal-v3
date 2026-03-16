@@ -362,6 +362,11 @@ tr.sel-row td{background:var(--blu3);}
           <option value="live">LIVE (Real Money)</option>
         </select>
       </div>
+      <div class="api-row">
+        <label>DEFAULT ACCOUNT NUMBER (Paper / Live)</label>
+        <input id="api-acct" placeholder="e.g. VA12345678" oninput="this.value=this.value.toUpperCase()">
+        <div class="api-status" id="acct-status"></div>
+      </div>
       <div class="ord-row" style="margin-top:4px;">
         <button class="btn blu" onclick="saveKeys()">SAVE KEYS</button>
         <button class="btn wrn" onclick="clearKeys()">CLEAR KEYS</button>
@@ -770,6 +775,9 @@ function parseOccSymbol(sym){
 function fetchPositions(){
   var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
   var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+  // Use saved account number if available - skip profile lookup
+  var savedAcct='';try{savedAcct=localStorage.getItem('rrjcar_acct')||'';}catch(e){}
+  if(savedAcct&&!G.acctId){G.acctId=savedAcct;eid('ord-acct').value=savedAcct;}
   if(!key){
     eid('pos-src').textContent='[NO API KEY]';
     eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No Tradier API key configured.<br>Go to the API tab to enter your key.</p></div>';
@@ -780,6 +788,11 @@ function fetchPositions(){
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
   eid('pos-src').textContent='Loading from Tradier '+mode+'...';
   eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Fetching positions...</p></div>';
+  // If we already have an account ID saved, skip the profile lookup
+  if(G.acctId){
+    fetchPositionsDirect(key,mode,host,G.acctId);
+    return;
+  }
   fetch(host+'/v1/user/profile',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
   .then(function(r){
     if(!r.ok)throw new Error('HTTP '+r.status);
@@ -797,10 +810,14 @@ function fetchPositions(){
     if(!acct){showPosError('Could not read account number from Tradier response.');return;}
     G.acctId=acct;
     eid('ord-acct').value=acct;
-    return fetch(host+'/v1/accounts/'+acct+'/positions',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}});
+    fetchPositionsDirect(key,mode,host,acct);
   })
+  .catch(function(e){showPosError('Tradier API error: '+e.message);});
+}
+
+function fetchPositionsDirect(key,mode,host,acct){
+  fetch(host+'/v1/accounts/'+acct+'/positions',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
   .then(function(r){
-    if(!r)return null;
     if(!r.ok)throw new Error('Positions HTTP '+r.status);
     return r.json();
   })
@@ -1074,25 +1091,31 @@ function saveKeys(){
   var td=eid('api-td').value.trim();
   var tr=eid('api-tr').value.trim();
   var mode=eid('api-mode').value;
+  var acct=eid('api-acct').value.trim();
   if(td)localStorage.setItem('rrjcar_td',td);
   if(tr)localStorage.setItem('rrjcar_tradier',tr);
   localStorage.setItem('rrjcar_mode',mode);
+  if(acct){localStorage.setItem('rrjcar_acct',acct);G.acctId=acct;eid('ord-acct').value=acct;}
   eid('td-status').textContent=td?'Key saved':'(unchanged)';
   eid('td-status').className='api-status '+(td?'ok':'miss');
   eid('tr-status').textContent=tr?'Key saved':'(unchanged)';
   eid('tr-status').className='api-status '+(tr?'ok':'miss');
+  eid('acct-status').textContent=acct?'Account saved':'(unchanged)';
+  eid('acct-status').className='api-status '+(acct?'ok':'miss');
   var badge=eid('mode-badge');
   badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
   badge.style.background=mode==='live'?'var(--wrn3)':'var(--amb3)';
   badge.style.color=mode==='live'?'var(--wrn)':'var(--ambb)';
-  toast('API keys saved');
+  toast('API settings saved');
 }
 
 function clearKeys(){
-  ['rrjcar_td','rrjcar_tradier','rrjcar_mode'].forEach(function(k){localStorage.removeItem(k);});
-  eid('api-td').value='';eid('api-tr').value='';
+  ['rrjcar_td','rrjcar_tradier','rrjcar_mode','rrjcar_acct'].forEach(function(k){localStorage.removeItem(k);});
+  eid('api-td').value='';eid('api-tr').value='';eid('api-acct').value='';
+  G.acctId='';eid('ord-acct').value='';
   eid('td-status').textContent='Cleared';eid('td-status').className='api-status miss';
   eid('tr-status').textContent='Cleared';eid('tr-status').className='api-status miss';
+  eid('acct-status').textContent='Cleared';eid('acct-status').className='api-status miss';
   toast('API keys cleared');
 }
 
@@ -1100,10 +1123,21 @@ function loadKeys(){
   var td=localStorage.getItem('rrjcar_td')||'';
   var tr=localStorage.getItem('rrjcar_tradier')||'';
   var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
+  var acct=localStorage.getItem('rrjcar_acct')||'';
   if(td){eid('api-td').value='••••••••';eid('td-status').textContent='Key loaded';eid('td-status').className='api-status ok';}
   else{eid('td-status').textContent='Not set';eid('td-status').className='api-status miss';}
   if(tr){eid('api-tr').value='••••••••';eid('tr-status').textContent='Key loaded';eid('tr-status').className='api-status ok';}
   else{eid('tr-status').textContent='Not set';eid('tr-status').className='api-status miss';}
+  if(acct){
+    eid('api-acct').value=acct;
+    eid('acct-status').textContent='Account loaded';
+    eid('acct-status').className='api-status ok';
+    G.acctId=acct;
+    eid('ord-acct').value=acct;
+  } else {
+    eid('acct-status').textContent='Not set — enter account number';
+    eid('acct-status').className='api-status miss';
+  }
   eid('api-mode').value=mode;
   var badge=eid('mode-badge');
   badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
