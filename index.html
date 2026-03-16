@@ -955,95 +955,102 @@ function fetchBalances(){
 }
 
 function previewOrder(){
-  var sym=eid('ord-sym').value.trim().toUpperCase();
-  if(!sym){toast('Enter a symbol first');return;}
-  var type=eid('ord-type').value;
-  var action=eid('ord-action').value;
-  var qty=eid('ord-qty').value||1;
-  var strike=eid('ord-strike').value;
-  var expRaw=eid('ord-exp').value;
-  var otype=eid('ord-otype').value;
-  var lmt=eid('ord-lmt').value;
-  var occSym=sym;
-  if((type==='CALL'||type==='PUT')&&strike&&expRaw){
-    var dateParts=expRaw.split('-');
-    if(dateParts.length===3){
-      var yy=dateParts[0].slice(2),mo=dateParts[1],dy=dateParts[2];
-      var strikeInt=Math.round(parseFloat(strike)*1000);
-      var strikePad=''+strikeInt;
-      while(strikePad.length<8)strikePad='0'+strikePad;
-      occSym=sym+yy+mo+dy+(type==='CALL'?'C':'P')+strikePad;
-    }
+ var sym=eid('ord-sym').value.trim().toUpperCase();
+ if(!sym){toast('Enter a symbol first');return;}
+ var type=eid('ord-type').value;
+ var action=eid('ord-action').value;
+ var qty=eid('ord-qty').value||1;
+ var strike=eid('ord-strike').value;
+ var expRaw=eid('ord-exp').value;
+ var otype=eid('ord-otype').value;
+ var lmt=eid('ord-lmt').value;
+ var occSym=sym;
+ if((type==='CALL'||type==='PUT')&&strike&&expRaw){
+  var dateParts=expRaw.split('-');
+  if(dateParts.length===3){
+   var yy=dateParts[0].slice(2),mo=dateParts[1],dy=dateParts[2];
+   var strikeInt=Math.round(parseFloat(strike)*1000);
+   var strikePad=''+strikeInt;
+   while(strikePad.length<8)strikePad='0'+strikePad;
+   occSym=sym+yy+mo+dy+(type==='CALL'?'C':'P')+strikePad;
   }
-  var res=eid('ord-result');
-  var acctVal=eid('ord-acct').value||'N/A';
-  res.innerHTML='<b>PREVIEW</b><br>OCC: <b>'+occSym+'</b><br>'+action+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+'<br>Acct: '+acctVal;
-  res.className='ord-result show';
-  res.style.borderColor='var(--amb)';
+ }
+ var sideMap={'BUY_TO_OPEN':'buy_to_open','SELL_TO_OPEN':'sell_to_open','BUY_TO_CLOSE':'buy_to_close','SELL_TO_CLOSE':'sell_to_close','BUY':'buy','SELL':'sell'};
+ var side=sideMap[action]||action.toLowerCase();
+ var res=eid('ord-result');
+ var acctVal=eid('ord-acct').value||'N/A';
+ res.innerHTML='<b>PREVIEW</b><br>'
+  +'Option: <b>'+occSym+'</b><br>'
+  +side+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+(type==='STOCK'?' (stock)':' (option)')+'<br>'
+  +'Acct: '+acctVal;
+ res.className='ord-result show';
+ res.style.borderColor='var(--amb)';
 }
-
 function submitOrder(){
-  var sym=eid('ord-sym').value.trim().toUpperCase();
-  if(!sym){toast('Enter a symbol first');return;}
-  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
-  if(!key){
-    var res=eid('ord-result');
-    res.innerHTML='<span style="color:var(--wrn)">No Tradier API key configured.</span>';
-    res.className='ord-result show';return;
+ var sym=eid('ord-sym').value.trim().toUpperCase();
+ if(!sym){toast('Enter a symbol first');return;}
+ var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+ if(!key){var res=eid('ord-result');res.innerHTML='<span style="color:var(--wrn)">No Tradier API key configured.</span>';res.className='ord-result show';return;}
+ var hasBadKey=key.split('').some(function(c){return c.charCodeAt(0)>255;});
+ if(hasBadKey){var res=eid('ord-result');res.innerHTML='<span style="color:var(--wrn)">API key is corrupted — go to API tab and re-enter your key.</span>';res.className='ord-result show';return;}
+ var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+ var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+ var acct=eid('ord-acct').value.trim()||G.acctId||localStorage.getItem('rrjcar_acct')||'';
+ if(!acct){toast('No account ID - enter in API tab');return;}
+ var type=eid('ord-type').value;
+ var action=eid('ord-action').value;
+ var sideMap={'BUY_TO_OPEN':'buy_to_open','SELL_TO_OPEN':'sell_to_open','BUY_TO_CLOSE':'buy_to_close','SELL_TO_CLOSE':'sell_to_close','BUY':'buy','SELL':'sell'};
+ var side=sideMap[action]||action.toLowerCase();
+ var qty=eid('ord-qty').value||1;
+ var strike=eid('ord-strike').value;
+ var expRaw=eid('ord-exp').value;
+ var otype=eid('ord-otype').value;
+ var lmt=eid('ord-lmt').value;
+ var occSym=sym;
+ if((type==='CALL'||type==='PUT')&&strike&&expRaw){
+  var parts=expRaw.split('-');
+  if(parts.length===3){
+   var yy=parts[0].slice(2),mm=parts[1],dd=parts[2];
+   var sp=String(Math.round(parseFloat(strike)*1000)).padStart(8,'0');
+   occSym=sym+yy+mm+dd+(type==='CALL'?'C':'P')+sp;
   }
-  var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
-  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
-  var acct=eid('ord-acct').value.trim()||G.acctId||localStorage.getItem('rrjcar_acct')||'';
-  if(!acct){toast('No account ID - enter in API tab');return;}
-  var type=eid('ord-type').value;
-  var action=eid('ord-action').value;
-  var qty=eid('ord-qty').value||1;
-  var strike=eid('ord-strike').value;
-  var expRaw=eid('ord-exp').value;
-  var otype=eid('ord-otype').value;
-  var lmt=eid('ord-lmt').value;
-  var occSym=sym;
-  if((type==='CALL'||type==='PUT')&&strike&&expRaw){
-    var parts=expRaw.split('-');
-    if(parts.length===3){
-      var yy=parts[0].slice(2),mm=parts[1],dd=parts[2];
-      var sp=String(Math.round(parseFloat(strike)*1000)).padStart(8,'0');
-      occSym=sym+yy+mm+dd+(type==='CALL'?'C':'P')+sp;
-    }
-  }
-  var body='class=option&symbol='+encodeURIComponent(occSym)
-    +'&option_symbol='+encodeURIComponent(occSym)
-    +'&side='+encodeURIComponent(action)
-    +'&quantity='+qty
-    +'&type='+otype
-    +'&duration=day';
-  if(otype==='limit'&&lmt)body+='&price='+lmt;
-  if(otype==='stop'&&lmt)body+='&stop='+lmt;
-  var res=eid('ord-result');
-  res.innerHTML='Submitting...';res.className='ord-result show';res.style.borderColor='var(--amb)';
-  fetch(host+'/v1/accounts/'+acct+'/orders',{
-    method:'POST',
-    headers:{Authorization:'Bearer '+key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
-    body:body
-  }).then(function(r){return r.json();})
-  .then(function(data){
-    if(data.order&&data.order.id){
-      res.innerHTML='<span style="color:var(--blub)">Order submitted! ID: '+data.order.id+' Status: '+data.order.status+'</span>';
-      res.style.borderColor='var(--blu)';
-      addAlert(sym,'Order: '+action+' x'+qty+' '+occSym,'go');
-      toast('Order submitted: '+data.order.id);
-    } else if(data.errors){
-      var errs=data.errors.error;if(!Array.isArray(errs))errs=[errs];
-      res.innerHTML='<span style="color:var(--wrn)">Error: '+errs.join(' | ')+'</span>';
-      res.style.borderColor='var(--wrn)';
-    } else {
-      res.innerHTML='<span style="color:var(--wrn)">Response: '+JSON.stringify(data).slice(0,200)+'</span>';
-      res.style.borderColor='var(--wrn)';
-    }
-  }).catch(function(e){
-    res.innerHTML='<span style="color:var(--wrn)">Error: '+e.message+'</span>';
+ }
+ var body='class=option'
+  +'&symbol='+encodeURIComponent(sym)
+  +'&option_symbol='+encodeURIComponent(occSym)
+  +'&side='+encodeURIComponent(side)
+  +'&quantity='+qty
+  +'&type='+otype
+  +'&duration=day';
+ if(otype==='limit'&&lmt)body+='&price='+lmt;
+ if(otype==='stop'&&lmt)body+='&stop='+lmt;
+ var res=eid('ord-result');
+ res.innerHTML='Submitting...';res.className='ord-result show';res.style.borderColor='var(--amb)';
+ fetch(host+'/v1/accounts/'+acct+'/orders',{
+  method:'POST',
+  headers:{Authorization:'Bearer '+key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
+  body:body
+ }).then(function(r){var s=r.status;return r.text().then(function(t){return{s:s,t:t};});}).then(function(resp){
+  try{
+   var data=JSON.parse(resp.t);
+   if(data.order&&data.order.id){
+    res.innerHTML='<span style="color:var(--blub)">Order submitted! ID: '+data.order.id+' Status: '+data.order.status+'</span>';
+    res.style.borderColor='var(--blu)';
+    addAlert(sym,'Order: '+side+' x'+qty+' '+occSym,'go');
+    toast('Order submitted: '+data.order.id);
+   } else if(data.errors){
+    var errs=data.errors.error;if(!Array.isArray(errs))errs=[errs];
+    res.innerHTML='<span style="color:var(--wrn)">Error: '+errs.join(' | ')+(errs.join('').toLowerCase().includes('undefined symbol')?'<br><small>Tip: The option contract '+occSym+' may not exist. Check that the expiry date matches a standard Friday expiration available in your broker account.</small>':'')+'</span>';
     res.style.borderColor='var(--wrn)';
-  });
+   } else {
+    res.innerHTML='<span style="color:var(--wrn)">Response: '+JSON.stringify(data).slice(0,200)+'</span>';
+    res.style.borderColor='var(--wrn)';
+   }
+  }catch(e){
+   res.innerHTML='<span style="color:var(--wrn)">Error (HTTP '+resp.s+'): '+resp.t.slice(0,200)+'</span>';
+   res.style.borderColor='var(--wrn)';
+  }
+ }).catch(function(e){res.innerHTML='<span style="color:var(--wrn)">Error: '+e.message+'</span>';res.style.borderColor='var(--wrn)';});
 }
 function clearOrder(){
   ['ord-sym','ord-strike','ord-exp','ord-lmt'].forEach(function(id){eid(id).value='';});
