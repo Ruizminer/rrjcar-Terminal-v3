@@ -695,9 +695,9 @@ function switchTab(id){
   }
 }
 
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 //  REAL-TIME QUOTE FUNCTIONS
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 // Returns {key, mode, host} or null if no key
 function getTradierCreds(){
@@ -743,7 +743,7 @@ function fetchLiveQuote(){
   showQuoteLoading();
 
   if(!creds){
-    // No API key — show simulated quote
+    // No API key \u2014 show simulated quote
     setTimeout(function(){showSimQuote(sym,type);},300);
     return;
   }
@@ -854,7 +854,7 @@ function setLimitToBid(){
     eid('ord-lmt').value=G.liveQuote.bid.toFixed(2);
     toast('Limit set to bid: $'+fmt2(G.liveQuote.bid));
   } else {
-    toast('No live quote — click REFRESH first');
+    toast('No live quote \u2014 click REFRESH first');
   }
 }
 function setLimitToMid(){
@@ -862,13 +862,13 @@ function setLimitToMid(){
     eid('ord-lmt').value=G.liveQuote.mid.toFixed(2);
     toast('Limit set to mid: $'+fmt2(G.liveQuote.mid));
   } else {
-    toast('No live quote — click REFRESH first');
+    toast('No live quote \u2014 click REFRESH first');
   }
 }
 
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 //  STEP FILL ENGINE
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 function isCloseAction(action){
   return action==='BUY_TO_CLOSE'||action==='SELL_TO_CLOSE'||action==='SELL';
@@ -881,11 +881,11 @@ function updateStepFillMode(){
   var lbl=eid('sf-mode-label');
   var sfStart=eid('sf-start');
   if(closing){
-    lbl.innerHTML='&#9660; STEP FILL MODE — start at ask, step toward bid (best close price)';
+    lbl.innerHTML='&#9660; STEP FILL MODE \u2014 start at ask, step toward bid (best close price)';
     lbl.style.color='var(--wrn)';
     if(sfStart.value==='bid')sfStart.value='ask'; // auto-flip default
   } else {
-    lbl.innerHTML='&#9650; STEP FILL MODE — start at bid, step toward ask until filled';
+    lbl.innerHTML='&#9650; STEP FILL MODE \u2014 start at bid, step toward ask until filled';
     lbl.style.color='var(--grn)';
     if(sfStart.value==='ask')sfStart.value='bid'; // auto-flip default
   }
@@ -973,15 +973,15 @@ function cancelOrder(creds,acct,orderId){
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 
 async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,stepSize,maxAttempts,delaySec,direction){
-  // direction: 'up' = open (bid→ask), 'down' = close (ask→bid)
+  // direction: 'up' = open (bid\u2192ask), 'down' = close (ask\u2192bid)
   var goingUp=(direction!=='down');
   G.stepFillActive=true;
   G.stepFillCancel=false;
   var log=eid('step-fill-log'),prog=eid('step-progress'),bar=eid('sp-bar'),lbl=eid('sp-label');
   log.innerHTML='';log.classList.add('show');
   prog.classList.add('show');
-  var dirLabel=goingUp?('bid→ask ▲'):('ask→bid ▼');
-  sfLog((goingUp?'▲':'▼')+' Step Fill started ['+dirLabel+'] — '+side+' x'+qty+' '+occSym,'sent');
+  var dirLabel=goingUp?('bid\u2192ask \u25b2'):('ask\u2192bid \u25bc');
+  sfLog((goingUp?'\u25b2':'\u25bc')+' Step Fill started ['+dirLabel+'] \u2014 '+side+' x'+qty+' '+occSym,'sent');
   sfLog('Start: $'+fmt2(startPrice)+' | Limit: $'+fmt2(limitPrice)+' | Step: $'+fmt2(stepSize)+' | Max: '+maxAttempts+' attempts','');
 
   var currentPrice=startPrice;
@@ -990,7 +990,7 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
   for(var attempt=1;attempt<=maxAttempts;attempt++){
     if(G.stepFillCancel){sfLog('Cancelled at attempt '+attempt+'.','cancelled');break;}
 
-    // Clamp price at the far limit — don't overshoot
+    // Clamp price at the far limit \u2014 don't overshoot
     if(goingUp&&currentPrice>limitPrice){currentPrice=limitPrice;}
     if(!goingUp&&currentPrice<limitPrice){currentPrice=limitPrice;}
 
@@ -998,7 +998,7 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
     bar.style.width=pct+'%';
     lbl.textContent=attempt+' / '+maxAttempts;
 
-    sfLog('Attempt '+attempt+'/'+maxAttempts+' — submitting limit @ $'+fmt2(currentPrice)+'...','sent');
+    sfLog('Attempt '+attempt+'/'+maxAttempts+' \u2014 submitting limit @ $'+fmt2(currentPrice)+'...','sent');
 
     var orderId=null;
     try{
@@ -1008,7 +1008,7 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
     }catch(e){
       sfLog('Order rejected: '+e.message,'rejected');
       var atLimit=(goingUp&&currentPrice>=limitPrice)||(!goingUp&&currentPrice<=limitPrice);
-      if(atLimit){sfLog('Reached price limit — stopping.','rejected');break;}
+      if(atLimit){sfLog('Reached price limit \u2014 stopping.','rejected');break;}
       currentPrice=goingUp?+(currentPrice+stepSize).toFixed(2):+(currentPrice-stepSize).toFixed(2);
       await sleep(delaySec*1000);
       continue;
@@ -1018,7 +1018,7 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
     await sleep(delaySec*1000);
     if(G.stepFillCancel){
       if(orderId)await cancelOrder(creds,acct,orderId);
-      sfLog('Cancelled — open order #'+orderId+' sent cancel request.','cancelled');
+      sfLog('Cancelled \u2014 open order #'+orderId+' sent cancel request.','cancelled');
       break;
     }
 
@@ -1026,33 +1026,33 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
     sfLog('Order #'+orderId+' status: '+status.toUpperCase(),'sent');
 
     if(status==='filled'){
-      sfLog('✓ FILLED at $'+fmt2(currentPrice)+' on attempt '+attempt+'!','filled');
+      sfLog('\u2713 FILLED at $'+fmt2(currentPrice)+' on attempt '+attempt+'!','filled');
       filledOrderId=orderId;
       addAlert(sym,'Step Fill: FILLED x'+qty+' @ $'+fmt2(currentPrice)+' (attempt '+attempt+')','go');
-      toast('✓ Step Fill FILLED @ $'+fmt2(currentPrice));
+      toast('\u2713 Step Fill FILLED @ $'+fmt2(currentPrice));
       var res2=eid('ord-result');
-      res2.innerHTML='<span style="color:var(--grn)">✓ STEP FILL: Filled '+qty+' x '+occSym+' @ $'+fmt2(currentPrice)+' on attempt '+attempt+'/'+maxAttempts+'</span>';
+      res2.innerHTML='<span style="color:var(--grn)">\u2713 STEP FILL: Filled '+qty+' x '+occSym+' @ $'+fmt2(currentPrice)+' on attempt '+attempt+'/'+maxAttempts+'</span>';
       res2.className='ord-result show';
       res2.style.borderColor='var(--grn)';
       break;
     } else if(status==='pending'||status==='open'||status==='partially_filled'){
       var stepDir=goingUp?'stepping up':'stepping down';
-      sfLog('Not filled — cancelling #'+orderId+' and '+stepDir+'...','sent');
+      sfLog('Not filled \u2014 cancelling #'+orderId+' and '+stepDir+'...','sent');
       await cancelOrder(creds,acct,orderId);
       currentPrice=goingUp?+(currentPrice+stepSize).toFixed(2):+(currentPrice-stepSize).toFixed(2);
       var beyondLimit=(goingUp&&currentPrice>limitPrice+stepSize)||(!goingUp&&currentPrice<limitPrice-stepSize);
-      if(beyondLimit){sfLog('Exceeded price limit — stopping.','cancelled');break;}
+      if(beyondLimit){sfLog('Exceeded price limit \u2014 stopping.','cancelled');break;}
     } else {
       var stepDir2=goingUp?'stepping up':'stepping down';
-      sfLog('Order ended with status: '+status+' — '+stepDir2+'...','rejected');
+      sfLog('Order ended with status: '+status+' \u2014 '+stepDir2+'...','rejected');
       currentPrice=goingUp?+(currentPrice+stepSize).toFixed(2):+(currentPrice-stepSize).toFixed(2);
     }
 
     if(attempt===maxAttempts&&status!=='filled'){
       sfLog('Max attempts reached without fill.','rejected');
-      addAlert(sym,'Step Fill: max attempts ('+maxAttempts+') reached — not filled','warn');
+      addAlert(sym,'Step Fill: max attempts ('+maxAttempts+') reached \u2014 not filled','warn');
       var res3=eid('ord-result');
-      res3.innerHTML='<span style="color:var(--wrn)">⚠ Step Fill: '+maxAttempts+' attempts, no fill. Last price tried: $'+fmt2(currentPrice)+'</span>';
+      res3.innerHTML='<span style="color:var(--wrn)">\u26a0 Step Fill: '+maxAttempts+' attempts, no fill. Last price tried: $'+fmt2(currentPrice)+'</span>';
       res3.className='ord-result show';
       res3.style.borderColor='var(--wrn)';
     }
@@ -1062,11 +1062,10 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
   bar.style.width='100%';
   setTimeout(function(){prog.classList.remove('show');},3000);
 }
-}
 
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 //  CORE ORDER FUNCTIONS
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 function buildOccSym(sym,type,strike,expRaw){
   if((type==='CALL'||type==='PUT')&&strike&&expRaw){
@@ -1097,7 +1096,7 @@ function previewOrder(){
   var acctVal=eid('ord-acct').value||'N/A';
   var stepOn=eid('step-fill-toggle').checked;
   var closing=isCloseAction(action);
-  var stepInfo=stepOn?('<br><b>'+(closing?'&#9660; STEP FILL CLOSE':'&#9650; STEP FILL OPEN')+'</b> — start: '+(eid('sf-start').value)+' | step: $'+eid('sf-step').value+' | max: '+eid('sf-max').value+' attempts | delay: '+eid('sf-delay').value+'s | direction: '+(closing?'ask→bid ▼':'bid→ask ▲')):'';  res.innerHTML='<b>PREVIEW</b><br>'
+  var stepInfo=stepOn?('<br><b>'+(closing?'&#9660; STEP FILL CLOSE':'&#9650; STEP FILL OPEN')+'</b> \u2014 start: '+(eid('sf-start').value)+' | step: $'+eid('sf-step').value+' | max: '+eid('sf-max').value+' attempts | delay: '+eid('sf-delay').value+'s | direction: '+(closing?'ask\u2192bid \u25bc':'bid\u2192ask \u25b2')):'';  res.innerHTML='<b>PREVIEW</b><br>'
     +'Contract: <b>'+occSym+'</b><br>'
     +side+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+(type==='STOCK'?' (stock)':' (option)')+'<br>'
     +'Acct: '+acctVal
@@ -1119,14 +1118,14 @@ function submitOrder(){
   var hasBadKey=key.split('').some(function(c){return c.charCodeAt(0)>255;});
   if(hasBadKey){
     var res=eid('ord-result');
-    res.innerHTML='<span style="color:var(--wrn)">API key corrupted — re-enter in API tab.</span>';
+    res.innerHTML='<span style="color:var(--wrn)">API key corrupted \u2014 re-enter in API tab.</span>';
     res.className='ord-result show';return;
   }
   var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
   var creds={key:key,mode:mode,host:host};
   var acct=eid('ord-acct').value.trim()||G.acctId||localStorage.getItem('rrjcar_acct')||'';
-  if(!acct){toast('No account ID — enter in API tab');return;}
+  if(!acct){toast('No account ID \u2014 enter in API tab');return;}
   var type=eid('ord-type').value;
   var action=eid('ord-action').value;
   var sideMap={'BUY_TO_OPEN':'buy_to_open','SELL_TO_OPEN':'sell_to_open','BUY_TO_CLOSE':'buy_to_close','SELL_TO_CLOSE':'sell_to_close','BUY':'buy','SELL':'sell'};
@@ -1139,7 +1138,7 @@ function submitOrder(){
   var occSym=buildOccSym(sym,type,strike,expRaw);
   var stepOn=eid('step-fill-toggle').checked;
 
-  // ── STEP FILL PATH ──
+  // \u2500\u2500 STEP FILL PATH \u2500\u2500
   if(stepOn&&otype==='limit'){
     var stepSize=parseFloat(eid('sf-step').value)||0.01;
     var maxAtt=parseInt(eid('sf-max').value)||10;
@@ -1154,7 +1153,7 @@ function submitOrder(){
     // Determine start and limit prices based on direction
     var startPrice, limitPrice;
     if(lmt&&lmt>0){
-      // Manual limit entered — use it as the start
+      // Manual limit entered \u2014 use it as the start
       startPrice=lmt;
       limitPrice=closing?bid:ask;
     } else if(closing){
@@ -1181,7 +1180,7 @@ function submitOrder(){
         var closing2=isCloseAction(eid('ord-action').value);
         var sp=closing2?(a||m):( (eid('sf-start').value==='mid')?(m||b):b );
         var lp=closing2?(b||sp*0.98):(a||sp*1.02);
-        if(!sp){toast('Could not determine start price — enter limit manually');return;}
+        if(!sp){toast('Could not determine start price \u2014 enter limit manually');return;}
         runStepFill(creds,acct,occSym,sym,side,qty,sp,lp,stepSize,maxAtt,delaySec,closing2?'down':'up');
       },1500);
       return;
@@ -1190,7 +1189,7 @@ function submitOrder(){
     return;
   }
 
-  // ── STANDARD SUBMIT PATH ──
+  // \u2500\u2500 STANDARD SUBMIT PATH \u2500\u2500
   var body='class=option'
     +'&symbol='+encodeURIComponent(sym)
     +'&option_symbol='+encodeURIComponent(occSym)
@@ -1245,9 +1244,9 @@ function clearOrder(){
   resetQuotePanel();
 }
 
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 //  REMAINING ORIGINAL FUNCTIONS (unchanged)
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 function simQuote(t){
   var base={AAPL:213,MSFT:415,GOOG:170,NVDA:880,META:485,ORCL:135,FTNT:75,PANW:165,CRM:290,
@@ -1468,7 +1467,7 @@ function runScan(){
   G.results.sort(function(a,b){return b.score-a.score;});
   G.filtered=G.results.slice();renderBuySig();renderScan();G.scanRunning=false;
   addAlert('SYS','Scan complete: '+G.results.length+' tickers | '+G.results.filter(function(r){return r.isGo;}).length+' GO','go');
-  toast('Scan complete — '+G.results.length+' tickers');
+  toast('Scan complete \u2014 '+G.results.length+' tickers');
 }
 
 function applyFilters(){
@@ -1489,7 +1488,7 @@ function sortTable(col){
 
 function renderScan(){
   var wrap=eid('sc-tbl-wrap');
-  if(!G.filtered.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No results — run a scan first</p></div>';return;}
+  if(!G.filtered.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No results \u2014 run a scan first</p></div>';return;}
   var cols=[{k:'ticker',l:'SYMBOL'},{k:'score',l:'SCORE'},{k:'isGo',l:'SIGNAL'},{k:'sector',l:'SECTOR'},{k:'price',l:'PRICE'},{k:'changePct',l:'CHG%'},{k:'volume',l:'VOLUME'}];
   var th='';cols.forEach(function(c){var arr=G.sortCol===c.k?(G.sortDir>0?' &#9650;':' &#9660;'):'';th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';});
   var rows='';
@@ -1589,7 +1588,7 @@ function fetchPositionsDirect(key,mode,host,acct){
   .then(function(data){
     if(!data){showPosError('No data returned.');return;}
     var pd=data.positions;
-    if(!pd||pd==='null'){renderPositionsTable([],(mode==='live'?'[TRADIER LIVE]':'[TRADIER SANDBOX]')+' — No open positions');return;}
+    if(!pd||pd==='null'){renderPositionsTable([],(mode==='live'?'[TRADIER LIVE]':'[TRADIER SANDBOX]')+' \u2014 No open positions');return;}
     var arr=pd.position;if(!Array.isArray(arr))arr=[arr];
     var pos=arr.map(function(p){var parsed=parseOccSymbol(p.symbol);return{symbol:p.symbol,underlying:parsed.underlying,type:parsed.type,strike:parsed.strike,exp:parsed.exp,qty:parseInt(p.quantity)||0,cost:parseFloat(p.cost_basis)||0,last:0,pnl:0,pnlPct:0};});
     var syms=arr.map(function(p){return p.symbol;}).join(',');
@@ -1616,7 +1615,7 @@ function renderPositionsTable(pos,srcLabel){
     var tk=p.underlying,tp=p.type,st=p.strike,ex=p.exp,qty=Math.abs(p.qty);
     var sym=p.symbol;
     var tsState=G.tsState[sym]||{status:'inactive',peak:0,peakPct:0};
-    var tsLabel={inactive:'INACTIVE',watching:'WATCHING',armed:'ARMED ▲',triggered:'TRIGGERED ✓',disabled:'DISABLED'}[tsState.status]||'--';
+    var tsLabel={inactive:'INACTIVE',watching:'WATCHING',armed:'ARMED \u25b2',triggered:'TRIGGERED \u2713',disabled:'DISABLED'}[tsState.status]||'--';
     var tsCls=tsState.status||'inactive';
     var tsInfo=tsState.status==='armed'?(' | peak: +'+fmt2(tsState.peakPct)+'%'):(tsState.status==='watching'?(' | ret: +'+fmt2(p.pnlPct)+'%'):'');
     var trailCell='<span class="ts-badge '+tsCls+'"><span class="ts-dot"></span>'+tsLabel+'</span>'+
@@ -1637,9 +1636,9 @@ function renderPositionsTable(pos,srcLabel){
   renderTsStatusRow();
 }
 
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 //  TRAILING STOP ENGINE
-// ════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 function tsLog(msg,cls){
   var log=eid('ts-log');log.classList.add('show');
@@ -1656,7 +1655,7 @@ function toggleTrailingStop(){
   eid('ts-cfg').style.display=on?'block':'none';
   if(on){
     G.tsActive=true;
-    tsLog('Trailing stop enabled — monitoring '+G.positions.length+' positions','info');
+    tsLog('Trailing stop enabled \u2014 monitoring '+G.positions.length+' positions','info');
     startTsPoller();
   } else {
     G.tsActive=false;
@@ -1750,7 +1749,7 @@ async function runTsCheck(){
       continue;
     }
 
-    // Watching → Armed
+    // Watching \u2192 Armed
     if(st.status==='inactive'||st.status==='watching'){
       if(ret>=activateAt){
         st.status='armed';
@@ -1761,16 +1760,16 @@ async function runTsCheck(){
       }
     }
 
-    // Armed → Triggered
+    // Armed \u2192 Triggered
     if(st.status==='armed'){
       var pullback=st.peakPct>0?((st.peakPct-ret)):0;
       var pullbackFromHighPct=st.peakPct>0?((pullback/st.peakPct)*100):0;
       if(pullbackFromHighPct>=pullbackPct){
         st.status='triggered';
         G.tsTriggered[sym]=true;
-        tsLog(p.underlying+': TRIGGERED — pulled back '+fmt2(pullbackFromHighPct)+'% from peak +'+fmt2(st.peakPct)+'%','triggered');
-        addAlert(p.underlying,'Trailing stop TRIGGERED — closing position','go');
-        toast('⚡ Trail Stop triggered: '+p.underlying);
+        tsLog(p.underlying+': TRIGGERED \u2014 pulled back '+fmt2(pullbackFromHighPct)+'% from peak +'+fmt2(st.peakPct)+'%','triggered');
+        addAlert(p.underlying,'Trailing stop TRIGGERED \u2014 closing position','go');
+        toast('\u26a1 Trail Stop triggered: '+p.underlying);
         executeTsClose(p,closeMode,creds);
       }
     }
@@ -1787,7 +1786,7 @@ function executeTsClose(p,closeMode,creds){
   var side=p.type==='STOCK'?'sell':'buy_to_close';
   var acct=G.acctId||localStorage.getItem('rrjcar_acct')||'';
   if(!acct||!creds){
-    tsLog(p.underlying+': cannot close — no API key or account ID','warn');return;
+    tsLog(p.underlying+': cannot close \u2014 no API key or account ID','warn');return;
   }
   if(closeMode==='market'){
     // Market close
@@ -1804,16 +1803,16 @@ function executeTsClose(p,closeMode,creds){
       headers:{Authorization:'Bearer '+creds.key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
       body:body
     }).then(function(r){return r.json();}).then(function(d){
-      if(d.order&&d.order.id){tsLog(p.underlying+': MARKET close submitted — order #'+d.order.id,'triggered');}
-      else{var e=d.errors?d.errors.error:'unknown';tsLog(p.underlying+': close error — '+e,'warn');}
-    }).catch(function(e){tsLog(p.underlying+': close error — '+e.message,'warn');});
+      if(d.order&&d.order.id){tsLog(p.underlying+': MARKET close submitted \u2014 order #'+d.order.id,'triggered');}
+      else{var e=d.errors?d.errors.error:'unknown';tsLog(p.underlying+': close error \u2014 '+e,'warn');}
+    }).catch(function(e){tsLog(p.underlying+': close error \u2014 '+e.message,'warn');});
   } else {
-    // Step fill close (ask→bid)
+    // Step fill close (ask\u2192bid)
     var bid=p.bid||p.last*0.98;var ask=p.ask||p.last*1.02;
     var stepSize=parseFloat(eid('sf-step').value)||0.01;
     var maxAtt=parseInt(eid('sf-max').value)||10;
     var delaySec=parseInt(eid('sf-delay').value)||5;
-    tsLog(p.underlying+': launching step fill close @ ask $'+fmt2(ask)+'→bid $'+fmt2(bid),'triggered');
+    tsLog(p.underlying+': launching step fill close @ ask $'+fmt2(ask)+'\u2192bid $'+fmt2(bid),'triggered');
     runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),ask,bid,stepSize,maxAtt,delaySec,'down');
     switchTab('order');
   }
@@ -1859,9 +1858,9 @@ function closePosition(symbol,type,strike,exp,qty){
   setTimeout(function(){
     eid('ord-sym').value=symbol;eid('ord-type').value=type==='STOCK'?'STOCK':(type==='PUT'?'PUT':'CALL');
     eid('ord-strike').value=strike;eid('ord-exp').value=exp;eid('ord-action').value=action;eid('ord-qty').value=qty;
-    updateStepFillMode(); // flip step fill to close mode (ask→bid)
+    updateStepFillMode(); // flip step fill to close mode (ask\u2192bid)
     var res=eid('ord-result');
-    res.innerHTML='&#9888; Close order pre-filled for <b>'+symbol+'</b> — review and submit.';
+    res.innerHTML='&#9888; Close order pre-filled for <b>'+symbol+'</b> \u2014 review and submit.';
     res.className='ord-result show';res.style.borderColor='var(--wrn)';
     toast('Close order pre-filled for '+symbol);
     fetchLiveQuote();
