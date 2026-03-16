@@ -955,70 +955,96 @@ function fetchBalances(){
 }
 
 function previewOrder(){
-  var sym=eid('ord-sym').value.trim();
+  var sym=eid('ord-sym').value.trim().toUpperCase();
   if(!sym){toast('Enter a symbol first');return;}
   var type=eid('ord-type').value;
   var action=eid('ord-action').value;
-  var qty=eid('ord-qty').value;
+  var qty=eid('ord-qty').value||1;
   var strike=eid('ord-strike').value;
-  var exp=eid('ord-exp').value;
+  var expRaw=eid('ord-exp').value;
   var otype=eid('ord-otype').value;
   var lmt=eid('ord-lmt').value;
+  var occSym=sym;
+  if((type==='CALL'||type==='PUT')&&strike&&expRaw){
+    var dateParts=expRaw.split('-');
+    if(dateParts.length===3){
+      var yy=dateParts[0].slice(2),mo=dateParts[1],dy=dateParts[2];
+      var strikeInt=Math.round(parseFloat(strike)*1000);
+      var strikePad=''+strikeInt;
+      while(strikePad.length<8)strikePad='0'+strikePad;
+      occSym=sym+yy+mo+dy+(type==='CALL'?'C':'P')+strikePad;
+    }
+  }
   var res=eid('ord-result');
-  res.innerHTML='<b>ORDER PREVIEW</b><br>'
-    +'Symbol: '+sym+' | Type: '+type+' | Action: '+action+'<br>'
-    +'Strike: $'+strike+' | Expiry: '+exp+' | Qty: '+qty+'<br>'
-    +'Order: '+otype.toUpperCase()+(lmt?' @ $'+lmt:'')+' | Account: '+(eid('ord-acct').value||'N/A')+'<br>'
-    +'<span style="color:var(--wrn)">&#9888; Confirm details before submitting</span>';
+  var acctVal=eid('ord-acct').value||'N/A';
+  res.innerHTML='<b>PREVIEW</b><br>OCC: <b>'+occSym+'</b><br>'+action+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+'<br>Acct: '+acctVal;
   res.className='ord-result show';
   res.style.borderColor='var(--amb)';
 }
 
 function submitOrder(){
-  var sym=eid('ord-sym').value.trim();
+  var sym=eid('ord-sym').value.trim().toUpperCase();
   if(!sym){toast('Enter a symbol first');return;}
   var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
   if(!key){
     var res=eid('ord-result');
-    res.innerHTML='<span style="color:var(--wrn)">&#10007; No Tradier API key — order not submitted. Add key in API tab.</span>';
+    res.innerHTML='<span style="color:var(--wrn)">No Tradier API key configured.</span>';
     res.className='ord-result show';return;
   }
   var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
-  var acct=eid('ord-acct').value||G.acctId;
-  if(!acct){toast('No account ID — refresh positions first');return;}
+  var acct=eid('ord-acct').value.trim()||G.acctId||localStorage.getItem('rrjcar_acct')||'';
+  if(!acct){toast('No account ID - enter in API tab');return;}
   var type=eid('ord-type').value;
   var action=eid('ord-action').value;
-  var qty=eid('ord-qty').value;
+  var qty=eid('ord-qty').value||1;
   var strike=eid('ord-strike').value;
-  var exp=eid('ord-exp').value;
+  var expRaw=eid('ord-exp').value;
   var otype=eid('ord-otype').value;
   var lmt=eid('ord-lmt').value;
-  var body='class=option&symbol='+encodeURIComponent(sym)+'&option_symbol='+encodeURIComponent(sym)
-    +'&side='+encodeURIComponent(action)+'&quantity='+qty+'&type='+otype+'&duration=day';
-  if(lmt)body+='&price='+lmt;
+  var occSym=sym;
+  if((type==='CALL'||type==='PUT')&&strike&&expRaw){
+    var parts=expRaw.split('-');
+    if(parts.length===3){
+      var yy=parts[0].slice(2),mm=parts[1],dd=parts[2];
+      var sp=String(Math.round(parseFloat(strike)*1000)).padStart(8,'0');
+      occSym=sym+yy+mm+dd+(type==='CALL'?'C':'P')+sp;
+    }
+  }
+  var body='class=option&symbol='+encodeURIComponent(occSym)
+    +'&option_symbol='+encodeURIComponent(occSym)
+    +'&side='+encodeURIComponent(action)
+    +'&quantity='+qty
+    +'&type='+otype
+    +'&duration=day';
+  if(otype==='limit'&&lmt)body+='&price='+lmt;
+  if(otype==='stop'&&lmt)body+='&stop='+lmt;
+  var res=eid('ord-result');
+  res.innerHTML='Submitting...';res.className='ord-result show';res.style.borderColor='var(--amb)';
   fetch(host+'/v1/accounts/'+acct+'/orders',{
     method:'POST',
     headers:{Authorization:'Bearer '+key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
     body:body
   }).then(function(r){return r.json();})
   .then(function(data){
-    var res=eid('ord-result');
     if(data.order&&data.order.id){
-      res.innerHTML='<span style="color:var(--blub)">&#10003; Order submitted! ID: '+data.order.id+' | Status: '+data.order.status+'</span>';
-      addAlert(sym,'Order submitted: '+action+' '+qty+' '+sym,'go');
+      res.innerHTML='<span style="color:var(--blub)">Order submitted! ID: '+data.order.id+' Status: '+data.order.status+'</span>';
+      res.style.borderColor='var(--blu)';
+      addAlert(sym,'Order: '+action+' x'+qty+' '+occSym,'go');
       toast('Order submitted: '+data.order.id);
-    }else{
-      res.innerHTML='<span style="color:var(--wrn)">&#10007; '+JSON.stringify(data)+'</span>';
+    } else if(data.errors){
+      var errs=data.errors.error;if(!Array.isArray(errs))errs=[errs];
+      res.innerHTML='<span style="color:var(--wrn)">Error: '+errs.join(' | ')+'</span>';
+      res.style.borderColor='var(--wrn)';
+    } else {
+      res.innerHTML='<span style="color:var(--wrn)">Response: '+JSON.stringify(data).slice(0,200)+'</span>';
+      res.style.borderColor='var(--wrn)';
     }
-    res.className='ord-result show';
   }).catch(function(e){
-    var res=eid('ord-result');
-    res.innerHTML='<span style="color:var(--wrn)">&#10007; Error: '+e.message+'</span>';
-    res.className='ord-result show';
+    res.innerHTML='<span style="color:var(--wrn)">Error: '+e.message+'</span>';
+    res.style.borderColor='var(--wrn)';
   });
 }
-
 function clearOrder(){
   ['ord-sym','ord-strike','ord-exp','ord-lmt'].forEach(function(id){eid(id).value='';});
   eid('ord-qty').value='1';
@@ -1124,9 +1150,248 @@ function loadKeys(){
   var tr=localStorage.getItem('rrjcar_tradier')||'';
   var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
   var acct=localStorage.getItem('rrjcar_acct')||'';
-  if(td){eid('api-td').value='••••••••';eid('td-status').textContent='Key loaded';eid('td-status').className='api-status ok';}
+  if(td){eid('api-td').value='';eid('td-status').textContent='Key saved (hidden)';eid('td-status').className='api-status ok';}
   else{eid('td-status').textContent='Not set';eid('td-status').className='api-status miss';}
-  if(tr){eid('api-tr').value='••••••••';eid('tr-status').textContent='Key loaded';eid('tr-status').className='api-status ok';}
+  if(tr){eid('api-tr').value='';eid('tr-status').textContent='Key saved (hidden)';eid('tr-status').className='api-status ok';}
+  else{eid('tr-status').textContent='Not set';eid('tr-status').className='api-status miss';}
+  if(acct){
+    eid('api-acct').value=acct;
+    eid('acct-status').textContent='Account loaded';
+    eid('acct-status').className='api-status ok';
+    G.acctId=acct;
+    eid('ord-acct').value=acct;
+  } else {
+    eid('acct-status').textContent='Not set — enter account number';
+    eid('acct-status').className='api-status miss';
+  }
+  eid('api-mode').value=mode;
+  var badge=eid('mode-badge');
+  badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
+  if(mode==='live'){badge.style.background='var(--wrn3)';badge.style.color='var(--wrn)';}
+}
+
+function updateClock(){
+  var now=new Date();
+  var h=now.getHours(),m=now.getMinutes(),s=now.getSeconds();
+  var ampm=h>=12?'PM':'AM';
+  h=h%12||12;
+  var ts=[h,m<10?'0'+m:m,s<10?'0'+s:s].join(':')+' '+ampm+' CST';
+  eid('clk').textContent=ts;
+  var day=now.getDay(),hr=now.getHours(),min=now.getMinutes();
+  var isWeekday=day>=1&&day<=5;
+  var mktOpen=isWeekday&&(hr>8||(hr===8&&min>=30))&&hr<15;
+  eid('mkt-status').textContent=mktOpen?'MARKET OPEN':'MARKET CLOSED';
+  eid('mkt-status').style.color=mktOpen?'var(--blu)':'var(--gry)';
+}
+
+function updateHeaderQuotes(){
+  var tickers=['SPY','QQQ','DIA','IWM','VIX'];
+  var ids=['spy','qqq','dia','iwm','vix'];
+  tickers.forEach(function(t,i){
+    var q=simQuote(t);
+    var el=eid('h-'+ids[i]);
+    if(el)el.textContent='$'+fmt2(q.price);
+    var cel=eid('h-'+ids[i]+'-c');
+    if(cel){
+      var chgStr=(q.changePct>=0?'+':'')+fmtP(q.changePct);
+      cel.textContent='('+chgStr+')';
+      cel.className='tc '+(q.changePct>=0?'up':'dn');
+    }
+  });
+}
+
+function init(){
+  loadKeys();
+  loadWL();
+  updateClock();
+  updateHeaderQuotes();
+  setInterval(updateClock,1000);
+  setInterval(updateHeaderQuotes,30000);
+  runScan();
+  refreshWL();
+  addAlert('SYS','RRJCAR Terminal v3.3 initialized','go');
+}
+
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
++lmt:'')+'<br>Acct: '+acctVal;
+  res.className='ord-result show';
+  res.style.borderColor='var(--amb)';
+}
+
+function submitOrder(){
+  var sym=eid('ord-sym').value.trim().toUpperCase();
+  if(!sym){toast('Enter a symbol first');return;}
+  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  if(!key){
+    var res=eid('ord-result');
+    res.innerHTML='<span style="color:var(--wrn)">No Tradier API key configured.</span>';
+    res.className='ord-result show';return;
+  }
+  var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+  var acct=eid('ord-acct').value.trim()||G.acctId||localStorage.getItem('rrjcar_acct')||'';
+  if(!acct){toast('No account ID - enter in API tab');return;}
+  var type=eid('ord-type').value;
+  var action=eid('ord-action').value;
+  var qty=eid('ord-qty').value||1;
+  var strike=eid('ord-strike').value;
+  var expRaw=eid('ord-exp').value;
+  var otype=eid('ord-otype').value;
+  var lmt=eid('ord-lmt').value;
+  var occSym=sym;
+  if((type==='CALL'||type==='PUT')&&strike&&expRaw){
+    var parts=expRaw.split('-');
+    if(parts.length===3){
+      var yy=parts[0].slice(2),mm=parts[1],dd=parts[2];
+      var sp=String(Math.round(parseFloat(strike)*1000)).padStart(8,'0');
+      occSym=sym+yy+mm+dd+(type==='CALL'?'C':'P')+sp;
+    }
+  }
+  var body='class=option&symbol='+encodeURIComponent(occSym)
+    +'&option_symbol='+encodeURIComponent(occSym)
+    +'&side='+encodeURIComponent(action)
+    +'&quantity='+qty
+    +'&type='+otype
+    +'&duration=day';
+  if(otype==='limit'&&lmt)body+='&price='+lmt;
+  if(otype==='stop'&&lmt)body+='&stop='+lmt;
+  var res=eid('ord-result');
+  res.innerHTML='Submitting...';res.className='ord-result show';res.style.borderColor='var(--amb)';
+  fetch(host+'/v1/accounts/'+acct+'/orders',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
+    body:body
+  }).then(function(r){return r.json();})
+  .then(function(data){
+    if(data.order&&data.order.id){
+      res.innerHTML='<span style="color:var(--blub)">Order submitted! ID: '+data.order.id+' Status: '+data.order.status+'</span>';
+      res.style.borderColor='var(--blu)';
+      addAlert(sym,'Order: '+action+' x'+qty+' '+occSym,'go');
+      toast('Order submitted: '+data.order.id);
+    } else if(data.errors){
+      var errs=data.errors.error;if(!Array.isArray(errs))errs=[errs];
+      res.innerHTML='<span style="color:var(--wrn)">Error: '+errs.join(' | ')+'</span>';
+      res.style.borderColor='var(--wrn)';
+    } else {
+      res.innerHTML='<span style="color:var(--wrn)">Response: '+JSON.stringify(data).slice(0,200)+'</span>';
+      res.style.borderColor='var(--wrn)';
+    }
+  }).catch(function(e){
+    res.innerHTML='<span style="color:var(--wrn)">Error: '+e.message+'</span>';
+    res.style.borderColor='var(--wrn)';
+  });
+}
+function clearOrder(){
+  ['ord-sym','ord-strike','ord-exp','ord-lmt'].forEach(function(id){eid(id).value='';});
+  eid('ord-qty').value='1';
+  eid('ord-result').className='ord-result';
+}
+
+function renderBreadth(){
+  var items=[
+    {l:'S&P 500 Above 200MA',v:62,c:'blu'},{l:'S&P 500 Above 50MA',v:54,c:'blu'},
+    {l:'NYSE Advance/Decline',v:58,c:'amb'},{l:'New 52W Highs',v:38,c:'amb'},
+    {l:'VIX Fear Index',v:72,c:'wrn'},{l:'Put/Call Ratio',v:45,c:'amb'}
+  ];
+  var html='';
+  items.forEach(function(item){
+    html+='<div class="meter-row">'
+      +'<div class="meter-lbl">'+item.l+'</div>'
+      +'<div class="meter-bar"><div class="meter-fill '+item.c+'" style="width:'+item.v+'%"></div></div>'
+      +'<div class="meter-val">'+item.v+'%</div></div>';
+  });
+  eid('mb-body').innerHTML=html;
+  var sects=[
+    {l:'Industrials',v:71,c:'blu'},{l:'Utilities',v:66,c:'blu'},
+    {l:'Finance',v:61,c:'blu'},{l:'Staples',v:47,c:'amb'},
+    {l:'Materials',v:46,c:'amb'},{l:'Energy',v:33,c:'wrn'},
+    {l:'Technology',v:31,c:'wrn'},{l:'Consumer',v:30,c:'wrn'}
+  ];
+  var sh='';
+  sects.forEach(function(s){
+    sh+='<div class="meter-row">'
+      +'<div class="meter-lbl">'+s.l+'</div>'
+      +'<div class="meter-bar"><div class="meter-fill '+s.c+'" style="width:'+s.v+'%"></div></div>'
+      +'<div class="meter-val">'+s.v+'</div></div>';
+  });
+  eid('sect-body').innerHTML=sh;
+}
+
+function renderAlerts(){
+  var list=eid('alerts-list');
+  if(!G.alerts.length){list.innerHTML='<div style="padding:12px;color:var(--gry);font-size:11px;">No alerts yet</div>';return;}
+  var html='';
+  G.alerts.forEach(function(a){
+    html+='<div class="alert-item">'
+      +'<div class="alert-dot '+a.type+'"></div>'
+      +'<div class="alert-tk">'+a.tk+'</div>'
+      +'<div class="alert-msg">'+a.msg+'</div>'
+      +'<div class="alert-ts">'+a.ts+'</div>'
+      +'</div>';
+  });
+  list.innerHTML=html;
+}
+
+function calcEx(){
+  var wr=+eid('ex-wr').value/100;
+  var aw=+eid('ex-aw').value;
+  var al=+eid('ex-al').value;
+  var tm=+eid('ex-tm').value;
+  var exp=wr*aw-(1-wr)*al;
+  var monthly=exp*tm;
+  var rr=(aw/al).toFixed(2);
+  var res=eid('ex-result');
+  res.innerHTML='<div style="color:var(--amb);font-size:11px;line-height:1.8;">'
+    +'<b>Expected Value per Trade:</b> <span style="color:'+(exp>=0?'var(--blu)':'var(--wrn)')+'">'+fmtD(exp)+'</span><br>'
+    +'<b>Monthly Expectancy ('+tm+' trades):</b> <span style="color:'+(monthly>=0?'var(--blu)':'var(--wrn)')+'">'+fmtD(monthly)+'</span><br>'
+    +'<b>Risk/Reward Ratio:</b> '+rr+':1<br>'
+    +'<b>Breakeven Win Rate:</b> '+(al/(aw+al)*100).toFixed(1)+'%'
+    +'</div>';
+}
+
+function saveKeys(){
+  var td=eid('api-td').value.trim();
+  var tr=eid('api-tr').value.trim();
+  var mode=eid('api-mode').value;
+  var acct=eid('api-acct').value.trim();
+  if(td)localStorage.setItem('rrjcar_td',td);
+  if(tr)localStorage.setItem('rrjcar_tradier',tr);
+  localStorage.setItem('rrjcar_mode',mode);
+  if(acct){localStorage.setItem('rrjcar_acct',acct);G.acctId=acct;eid('ord-acct').value=acct;}
+  eid('td-status').textContent=td?'Key saved':'(unchanged)';
+  eid('td-status').className='api-status '+(td?'ok':'miss');
+  eid('tr-status').textContent=tr?'Key saved':'(unchanged)';
+  eid('tr-status').className='api-status '+(tr?'ok':'miss');
+  eid('acct-status').textContent=acct?'Account saved':'(unchanged)';
+  eid('acct-status').className='api-status '+(acct?'ok':'miss');
+  var badge=eid('mode-badge');
+  badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
+  badge.style.background=mode==='live'?'var(--wrn3)':'var(--amb3)';
+  badge.style.color=mode==='live'?'var(--wrn)':'var(--ambb)';
+  toast('API settings saved');
+}
+
+function clearKeys(){
+  ['rrjcar_td','rrjcar_tradier','rrjcar_mode','rrjcar_acct'].forEach(function(k){localStorage.removeItem(k);});
+  eid('api-td').value='';eid('api-tr').value='';eid('api-acct').value='';
+  G.acctId='';eid('ord-acct').value='';
+  eid('td-status').textContent='Cleared';eid('td-status').className='api-status miss';
+  eid('tr-status').textContent='Cleared';eid('tr-status').className='api-status miss';
+  eid('acct-status').textContent='Cleared';eid('acct-status').className='api-status miss';
+  toast('API keys cleared');
+}
+
+function loadKeys(){
+  var td=localStorage.getItem('rrjcar_td')||'';
+  var tr=localStorage.getItem('rrjcar_tradier')||'';
+  var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
+  var acct=localStorage.getItem('rrjcar_acct')||'';
+  if(td){eid('api-td').value='';eid('td-status').textContent='Key saved (hidden)';eid('td-status').className='api-status ok';}
+  else{eid('td-status').textContent='Not set';eid('td-status').className='api-status miss';}
+  if(tr){eid('api-tr').value='';eid('tr-status').textContent='Key saved (hidden)';eid('tr-status').className='api-status ok';}
   else{eid('tr-status').textContent='Not set';eid('tr-status').className='api-status miss';}
   if(acct){
     eid('api-acct').value=acct;
