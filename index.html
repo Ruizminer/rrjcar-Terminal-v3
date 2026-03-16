@@ -11,7 +11,7 @@
   --blu:#3b82f6;--blub:#60a5fa;--blu3:#1e3a5f;
   --ngo:#f59e0b;--wrn:#fb923c;--wrn3:#7c2d12;
   --wht:#f0f6fc;--gry:#8b949e;--gry2:#484f58;
-  --lvb:#1a0a0a;--grn:#22c55e;
+  --lvb:#1a0a0a;--grn:#22c55e;--grn3:#14532d;
   --bdr:1px solid #30363d;--rad:4px;--ff:'Courier New',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -121,6 +121,8 @@ tr.sel-row td{background:var(--blu3);}
 .btn:hover{background:var(--amb3);}
 .btn.blu{border-color:var(--blu3);color:var(--blub);}
 .btn.blu:hover{background:var(--blu3);}
+.btn.grn{border-color:var(--grn3);color:var(--grn);}
+.btn.grn:hover{background:var(--grn3);}
 .btn.wrn{border-color:var(--wrn);color:var(--wrn);}
 .btn.wrn:hover{background:var(--wrn3);}
 .cbtn{background:var(--lvb);border:1px solid var(--wrn);border-radius:2px;color:var(--wrn);cursor:pointer;font-family:var(--ff);font-size:10px;padding:2px 6px;}
@@ -129,7 +131,7 @@ tr.sel-row td{background:var(--blu3);}
 .pos-src{color:var(--gry);font-size:10px;margin-left:auto;}
 .pnl-pos{color:var(--blu);}
 .pnl-neg{color:var(--wrn);}
-.ord-form{max-width:520px;padding:16px;}
+.ord-form{max-width:620px;padding:16px;}
 .ord-row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
 .ord-row label{color:var(--gry);font-size:10px;display:block;margin-bottom:3px;}
 .ord-row input,.ord-row select{background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:12px;padding:5px 8px;width:100%;}
@@ -137,6 +139,43 @@ tr.sel-row td{background:var(--blu3);}
 .ord-field{flex:1;min-width:100px;}
 .ord-result{background:var(--bg2);border:1px solid var(--amb3);border-radius:3px;color:var(--ambb);font-size:11px;margin-top:10px;padding:8px 10px;display:none;}
 .ord-result.show{display:block;}
+
+/* ── QUOTE PANEL ── */
+.quote-panel{display:flex;gap:0;background:var(--bg1);border:1px solid var(--amb3);border-radius:4px;margin-bottom:12px;overflow:hidden;}
+.qp-cell{flex:1;padding:8px 14px;text-align:center;border-right:var(--bdr);}
+.qp-cell:last-child{border-right:none;}
+.qp-lbl{color:var(--gry);font-size:9px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;}
+.qp-val{font-size:20px;font-weight:700;letter-spacing:.5px;font-family:var(--ff);}
+.qp-val.bid{color:var(--wrn);}
+.qp-val.ask{color:var(--blu);}
+.qp-val.mid{color:var(--ambb);}
+.qp-spread{font-size:10px;color:var(--gry);margin-top:2px;}
+.qp-loading{color:var(--gry2);font-size:11px;animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:.4;}50%{opacity:1;}}
+.qp-refresh-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.qp-ts{color:var(--gry2);font-size:10px;}
+
+/* ── STEP FILL ── */
+.step-fill-box{background:var(--bg1);border:1px solid var(--grn3);border-radius:4px;padding:12px 14px;margin-bottom:12px;}
+.step-fill-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.step-fill-hdr label{color:var(--grn);font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;}
+.step-fill-cfg{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+.step-cfg-field{display:flex;flex-direction:column;gap:3px;}
+.step-cfg-field label{color:var(--gry);font-size:9px;letter-spacing:.5px;text-transform:uppercase;}
+.step-cfg-field input{background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:12px;padding:4px 7px;width:90px;}
+.step-fill-log{background:var(--bg0);border:var(--bdr);border-radius:3px;font-size:10px;line-height:1.8;max-height:130px;overflow-y:auto;padding:6px 10px;display:none;}
+.step-fill-log.show{display:block;}
+.sfl-attempt{color:var(--gry);}
+.sfl-attempt.sent{color:var(--ambb);}
+.sfl-attempt.filled{color:var(--grn);}
+.sfl-attempt.rejected{color:var(--wrn);}
+.sfl-attempt.cancelled{color:var(--gry2);}
+.step-progress{display:flex;align-items:center;gap:8px;margin-top:6px;display:none;}
+.step-progress.show{display:flex;}
+.sp-bar-wrap{flex:1;background:var(--bg3);border-radius:2px;height:6px;overflow:hidden;}
+.sp-bar{height:100%;background:var(--grn);border-radius:2px;transition:width .3s;}
+.sp-label{color:var(--gry);font-size:10px;white-space:nowrap;}
+
 .page-wrap{overflow-y:auto;padding:12px;flex:1;}
 .card{background:var(--bg1);border:var(--bdr);border-radius:var(--rad);margin-bottom:10px;overflow:hidden;}
 .card-hdr{background:var(--bg2);border-bottom:var(--bdr);color:var(--amb);font-size:10px;font-weight:700;letter-spacing:1px;padding:7px 12px;text-transform:uppercase;}
@@ -292,36 +331,164 @@ tr.sel-row td{background:var(--blu3);}
     <div class="stat-box"><div class="stat-label">ACCOUNT VALUE</div><div class="stat-val amb" id="pos-acctval">--</div></div>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════
+     ORDER TICKET — updated with real-time quotes + step fill
+     ═══════════════════════════════════════════════════════ -->
 <div class="tab-pane" id="tab-order">
   <div class="page-wrap">
     <div class="card"><div class="card-hdr">ORDER TICKET</div>
     <div class="card-body ord-form">
+
+      <!-- SYMBOL + TYPE row -->
       <div class="ord-row">
-        <div class="ord-field"><label>SYMBOL</label><input id="ord-sym" placeholder="e.g. AAPL" oninput="this.value=this.value.toUpperCase()"></div>
-        <div class="ord-field"><label>TYPE</label><select id="ord-type"><option value="CALL">CALL</option><option value="PUT">PUT</option><option value="STOCK">STOCK</option></select></div>
+        <div class="ord-field">
+          <label>SYMBOL</label>
+          <input id="ord-sym" placeholder="e.g. AAPL"
+            oninput="this.value=this.value.toUpperCase()"
+            onchange="onSymbolChange()"
+            onblur="onSymbolChange()">
+        </div>
+        <div class="ord-field">
+          <label>TYPE</label>
+          <select id="ord-type" onchange="onSymbolChange()">
+            <option value="CALL">CALL</option>
+            <option value="PUT">PUT</option>
+            <option value="STOCK">STOCK</option>
+          </select>
+        </div>
       </div>
+
+      <!-- ── REAL-TIME QUOTE PANEL ── -->
+      <div class="qp-refresh-row">
+        <span style="color:var(--amb);font-size:10px;font-weight:700;letter-spacing:.5px;">&#9632; LIVE QUOTE</span>
+        <button class="btn blu" style="font-size:10px;padding:2px 8px;" onclick="fetchLiveQuote()">&#8635; REFRESH</button>
+        <span class="qp-ts" id="qp-ts"></span>
+      </div>
+      <div class="quote-panel" id="quote-panel">
+        <div class="qp-cell">
+          <div class="qp-lbl">BID</div>
+          <div class="qp-val bid" id="qp-bid">--</div>
+          <div class="qp-spread" id="qp-bid-sz">size --</div>
+        </div>
+        <div class="qp-cell">
+          <div class="qp-lbl">MID</div>
+          <div class="qp-val mid" id="qp-mid">--</div>
+          <div class="qp-spread" id="qp-spread">spread --</div>
+        </div>
+        <div class="qp-cell">
+          <div class="qp-lbl">ASK</div>
+          <div class="qp-val ask" id="qp-ask">--</div>
+          <div class="qp-spread" id="qp-ask-sz">size --</div>
+        </div>
+        <div class="qp-cell">
+          <div class="qp-lbl">LAST</div>
+          <div class="qp-val" style="color:var(--wht);" id="qp-last">--</div>
+          <div class="qp-spread" id="qp-chg"></div>
+        </div>
+        <div class="qp-cell">
+          <div class="qp-lbl">MARK</div>
+          <div class="qp-val" style="color:var(--grn);" id="qp-mark">--</div>
+          <div class="qp-spread" id="qp-iv">IV --</div>
+        </div>
+      </div>
+
+      <!-- STRIKE + EXPIRY -->
       <div class="ord-row">
         <div class="ord-field"><label>STRIKE</label><input id="ord-strike" type="number" placeholder="150.00"></div>
         <div class="ord-field"><label>EXPIRY (YYYY-MM-DD)</label><input id="ord-exp" type="date"></div>
       </div>
+
+      <!-- ACTION + QTY -->
       <div class="ord-row">
-        <div class="ord-field"><label>ACTION</label><select id="ord-action"><option value="BUY_TO_OPEN">BUY TO OPEN</option><option value="SELL_TO_OPEN">SELL TO OPEN</option><option value="BUY_TO_CLOSE">BUY TO CLOSE</option><option value="SELL_TO_CLOSE">SELL TO CLOSE</option><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div>
+        <div class="ord-field"><label>ACTION</label>
+          <select id="ord-action">
+            <option value="BUY_TO_OPEN">BUY TO OPEN</option>
+            <option value="SELL_TO_OPEN">SELL TO OPEN</option>
+            <option value="BUY_TO_CLOSE">BUY TO CLOSE</option>
+            <option value="SELL_TO_CLOSE">SELL TO CLOSE</option>
+            <option value="BUY">BUY</option>
+            <option value="SELL">SELL</option>
+          </select>
+        </div>
         <div class="ord-field"><label>QTY (CONTRACTS)</label><input id="ord-qty" type="number" value="1" min="1"></div>
       </div>
+
+      <!-- ORDER TYPE + LIMIT -->
       <div class="ord-row">
-        <div class="ord-field"><label>ORDER TYPE</label><select id="ord-otype"><option value="market">MARKET</option><option value="limit">LIMIT</option><option value="stop">STOP</option></select></div>
-        <div class="ord-field"><label>LIMIT PRICE</label><input id="ord-lmt" type="number" placeholder="0.00" step="0.01"></div>
+        <div class="ord-field"><label>ORDER TYPE</label>
+          <select id="ord-otype">
+            <option value="market">MARKET</option>
+            <option value="limit" selected>LIMIT</option>
+            <option value="stop">STOP</option>
+          </select>
+        </div>
+        <div class="ord-field">
+          <label>LIMIT PRICE <span id="lmt-hint" style="color:var(--grn);font-size:9px;"></span></label>
+          <input id="ord-lmt" type="number" placeholder="0.00" step="0.01">
+        </div>
+        <div class="ord-field" style="flex:0.5;display:flex;align-items:flex-end;">
+          <button class="btn" style="font-size:10px;padding:3px 8px;width:100%;" onclick="setLimitToBid()" title="Set limit price to current bid">SET BID</button>
+        </div>
+        <div class="ord-field" style="flex:0.5;display:flex;align-items:flex-end;">
+          <button class="btn" style="font-size:10px;padding:3px 8px;width:100%;" onclick="setLimitToMid()" title="Set limit price to current mid">SET MID</button>
+        </div>
       </div>
-      <div class="ord-row"><div class="ord-field" style="flex:2"><label>ACCOUNT</label><input id="ord-acct" placeholder="Auto-detected" readonly style="color:var(--gry);"></div></div>
+
+      <!-- ACCOUNT -->
+      <div class="ord-row">
+        <div class="ord-field" style="flex:2">
+          <label>ACCOUNT</label>
+          <input id="ord-acct" placeholder="Auto-detected" readonly style="color:var(--gry);">
+        </div>
+      </div>
+
+      <!-- ── STEP FILL BOX ── -->
+      <div class="step-fill-box">
+        <div class="step-fill-hdr">
+          <input type="checkbox" id="step-fill-toggle" onchange="toggleStepFill()">
+          <label for="step-fill-toggle">&#9650; STEP FILL MODE — start at bid, increment toward ask until filled</label>
+        </div>
+        <div class="step-fill-cfg" id="step-fill-cfg" style="display:none;">
+          <div class="step-cfg-field">
+            <label>Step Size ($)</label>
+            <input type="number" id="sf-step" value="0.01" step="0.01" min="0.01" placeholder="0.01">
+          </div>
+          <div class="step-cfg-field">
+            <label>Max Attempts</label>
+            <input type="number" id="sf-max" value="10" min="1" max="50" placeholder="10">
+          </div>
+          <div class="step-cfg-field">
+            <label>Delay (sec)</label>
+            <input type="number" id="sf-delay" value="5" min="1" max="60" placeholder="5">
+          </div>
+          <div class="step-cfg-field">
+            <label>Start From</label>
+            <select id="sf-start" style="background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:12px;padding:4px 7px;width:90px;">
+              <option value="bid">Bid</option>
+              <option value="mid">Mid</option>
+            </select>
+          </div>
+        </div>
+        <div class="step-progress" id="step-progress">
+          <div class="sp-bar-wrap"><div class="sp-bar" id="sp-bar" style="width:0%"></div></div>
+          <span class="sp-label" id="sp-label">0 / 0</span>
+          <button class="btn wrn" style="font-size:10px;padding:2px 8px;" onclick="cancelStepFill()">&#9632; STOP</button>
+        </div>
+        <div class="step-fill-log" id="step-fill-log"></div>
+      </div>
+
+      <!-- ACTION BUTTONS -->
       <div class="ord-row">
         <button class="btn blu" onclick="previewOrder()">PREVIEW ORDER</button>
-        <button class="btn" onclick="submitOrder()">SUBMIT ORDER</button>
+        <button class="btn grn" onclick="submitOrder()">&#9650; SUBMIT ORDER</button>
         <button class="btn" onclick="clearOrder()">CLEAR</button>
       </div>
       <div class="ord-result" id="ord-result"></div>
     </div></div>
   </div>
 </div>
+
 <div class="tab-pane" id="tab-mb">
   <div class="page-wrap">
     <div class="card"><div class="card-hdr">MARKET BREADTH</div><div class="card-body" id="mb-body"><div style="color:var(--gry);font-size:11px;">Loading...</div></div></div>
@@ -402,7 +569,8 @@ var UNIVERSE=[
   {t:'NEE',s:'Utilities'},{t:'DUK',s:'Utilities'}
 ];
 var G={results:[],filtered:[],gexData:[],wlTickers:[],positions:[],alerts:[],
-  sortCol:'score',sortDir:-1,selTicker:null,scanRunning:false,acctId:'',detailOpt:null};
+  sortCol:'score',sortDir:-1,selTicker:null,scanRunning:false,acctId:'',detailOpt:null,
+  liveQuote:null,stepFillActive:false,stepFillCancel:false,quoteRefreshTimer:null};
 
 function eid(id){return document.getElementById(id);}
 function fmt2(n){return isNaN(n)?'--':(+n).toFixed(2);}
@@ -431,7 +599,525 @@ function switchTab(id){
   if(btns[idx])btns[idx].classList.add('active');
   if(id==='mb')renderBreadth();
   if(id==='al')renderAlerts();
+  if(id==='order'){
+    // Auto-fetch quote if symbol is already filled
+    var sym=eid('ord-sym').value.trim();
+    if(sym)fetchLiveQuote();
+  }
 }
+
+// ════════════════════════════════════════════════════
+//  REAL-TIME QUOTE FUNCTIONS
+// ════════════════════════════════════════════════════
+
+// Returns {key, mode, host} or null if no key
+function getTradierCreds(){
+  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  if(!key)return null;
+  var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+  return{key:key,mode:mode,host:host};
+}
+
+function resetQuotePanel(){
+  ['qp-bid','qp-ask','qp-mid','qp-last','qp-mark'].forEach(function(id){eid(id).textContent='--';});
+  ['qp-bid-sz','qp-ask-sz','qp-spread','qp-chg','qp-iv'].forEach(function(id){eid(id).textContent='';});
+  eid('qp-ts').textContent='';
+  eid('lmt-hint').textContent='';
+  G.liveQuote=null;
+}
+
+function showQuoteLoading(){
+  ['qp-bid','qp-ask','qp-mid','qp-last','qp-mark'].forEach(function(id){
+    eid(id).innerHTML='<span class="qp-loading">...</span>';
+  });
+}
+
+function onSymbolChange(){
+  // Debounce: wait 600ms after last keystroke
+  clearTimeout(G._symTimer);
+  G._symTimer=setTimeout(function(){
+    var sym=eid('ord-sym').value.trim();
+    if(sym.length>=1)fetchLiveQuote();
+    else resetQuotePanel();
+  },600);
+}
+
+function fetchLiveQuote(){
+  var sym=eid('ord-sym').value.trim().toUpperCase();
+  if(!sym){resetQuotePanel();return;}
+  var type=eid('ord-type').value;
+  var strike=eid('ord-strike').value;
+  var expiry=eid('ord-exp').value;
+  var creds=getTradierCreds();
+
+  showQuoteLoading();
+
+  if(!creds){
+    // No API key — show simulated quote
+    setTimeout(function(){showSimQuote(sym,type);},300);
+    return;
+  }
+
+  // Determine what to quote: option contract if we have strike+exp+type, else underlying
+  if((type==='CALL'||type==='PUT')&&strike&&expiry){
+    // Build OCC symbol and fetch option quote
+    var parts=expiry.split('-');
+    if(parts.length===3){
+      var yy=parts[0].slice(2),mm=parts[1],dd=parts[2];
+      var sp=String(Math.round(parseFloat(strike)*1000)).padStart(8,'0');
+      var occSym=sym+yy+mm+dd+(type==='CALL'?'C':'P')+sp;
+      fetchOptionQuote(creds,sym,occSym);
+      return;
+    }
+  }
+  // Stock quote
+  fetchStockQuote(creds,sym);
+}
+
+function fetchStockQuote(creds,sym){
+  fetch(creds.host+'/v1/markets/quotes?symbols='+encodeURIComponent(sym),{
+    headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}
+  }).then(function(r){return r.json();})
+  .then(function(d){
+    var q=d.quotes.quote;
+    if(!q)throw new Error('No quote');
+    var bid=parseFloat(q.bid)||0,ask=parseFloat(q.ask)||0;
+    var mid=bid&&ask?(bid+ask)/2:0;
+    var last=parseFloat(q.last)||parseFloat(q.prevclose)||0;
+    var chg=parseFloat(q.change)||0;
+    var chgPct=parseFloat(q.change_percentage)||0;
+    renderQuotePanel({
+      bid:bid,ask:ask,mid:mid,last:last,mark:mid||last,
+      bidSz:q.bidsize||0,askSz:q.asksize||0,
+      spread:+(ask-bid).toFixed(2),iv:null,
+      chg:chg,chgPct:chgPct,isOption:false,sym:sym
+    });
+  }).catch(function(){showSimQuote(sym,'STOCK');});
+}
+
+function fetchOptionQuote(creds,underlying,occSym){
+  fetch(creds.host+'/v1/markets/quotes?symbols='+encodeURIComponent(occSym)+'&greeks=true',{
+    headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}
+  }).then(function(r){return r.json();})
+  .then(function(d){
+    var q=d.quotes.quote;
+    if(!q||!q.bid)throw new Error('No option quote');
+    var bid=parseFloat(q.bid)||0,ask=parseFloat(q.ask)||0;
+    var mid=bid&&ask?+((bid+ask)/2).toFixed(2):0;
+    var last=parseFloat(q.last)||mid;
+    var mark=mid||last;
+    var iv=q.greeks?q.greeks.smv_vol:null;
+    var spread=+(ask-bid).toFixed(2);
+    renderQuotePanel({
+      bid:bid,ask:ask,mid:mid,last:last,mark:mark,
+      bidSz:q.bidsize||0,askSz:q.asksize||0,
+      spread:spread,iv:iv,chg:0,chgPct:0,isOption:true,sym:occSym
+    });
+  }).catch(function(){
+    // Fallback: just quote the underlying
+    fetchStockQuote(creds,underlying);
+  });
+}
+
+function showSimQuote(sym,type){
+  // Simulated quote when no API key
+  var baseMap={AAPL:213,MSFT:415,GOOG:170,NVDA:880,META:485,SPY:540,QQQ:460,ORCL:135};
+  var base=baseMap[sym]||+(100+Math.random()*200).toFixed(2);
+  var spread=type==='STOCK'?+(base*0.0005).toFixed(2):+(base*0.015+0.05).toFixed(2);
+  var mid=type==='STOCK'?base:+(base*0.03+1).toFixed(2);
+  var bid=+(mid-spread/2).toFixed(2);
+  var ask=+(mid+spread/2).toFixed(2);
+  var chgPct=+(rnd(-2,2)).toFixed(2);
+  renderQuotePanel({
+    bid:bid,ask:ask,mid:mid,last:+(mid*(0.99+Math.random()*0.02)).toFixed(2),mark:mid,
+    bidSz:Math.floor(rnd(1,50)),askSz:Math.floor(rnd(1,50)),
+    spread:spread,iv:type!=='STOCK'?+(rnd(0.2,0.6)).toFixed(2):null,
+    chg:+(mid*chgPct/100).toFixed(2),chgPct:chgPct,isOption:type!=='STOCK',
+    sym:sym+' [SIM]'
+  });
+}
+
+function renderQuotePanel(q){
+  G.liveQuote=q;
+  eid('qp-bid').textContent='$'+fmt2(q.bid);
+  eid('qp-ask').textContent='$'+fmt2(q.ask);
+  eid('qp-mid').textContent='$'+fmt2(q.mid);
+  eid('qp-last').textContent='$'+fmt2(q.last);
+  eid('qp-mark').textContent='$'+fmt2(q.mark);
+  eid('qp-bid-sz').textContent='size '+(q.bidSz||'--');
+  eid('qp-ask-sz').textContent='size '+(q.askSz||'--');
+  eid('qp-spread').textContent='spread $'+fmt2(q.spread);
+  var chgStr=q.chg>=0?'+$'+fmt2(q.chg):'$'+fmt2(q.chg);
+  var chgPctStr=q.chgPct>=0?'(+'+fmt2(q.chgPct)+'%)'  :'('+fmt2(q.chgPct)+'%)';
+  eid('qp-chg').textContent=chgStr+' '+chgPctStr;
+  eid('qp-chg').style.color=q.chg>=0?'var(--blu)':'var(--wrn)';
+  eid('qp-iv').textContent=q.iv?'IV '+(q.iv*100).toFixed(1)+'%':'';
+  eid('qp-ts').textContent='Updated '+new Date().toLocaleTimeString();
+  // Hint on limit price input
+  if(q.bid&&q.ask){
+    eid('lmt-hint').textContent='bid $'+fmt2(q.bid)+' | ask $'+fmt2(q.ask);
+  }
+}
+
+function setLimitToBid(){
+  if(G.liveQuote&&G.liveQuote.bid){
+    eid('ord-lmt').value=G.liveQuote.bid.toFixed(2);
+    toast('Limit set to bid: $'+fmt2(G.liveQuote.bid));
+  } else {
+    toast('No live quote — click REFRESH first');
+  }
+}
+function setLimitToMid(){
+  if(G.liveQuote&&G.liveQuote.mid){
+    eid('ord-lmt').value=G.liveQuote.mid.toFixed(2);
+    toast('Limit set to mid: $'+fmt2(G.liveQuote.mid));
+  } else {
+    toast('No live quote — click REFRESH first');
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  STEP FILL ENGINE
+// ════════════════════════════════════════════════════
+
+function toggleStepFill(){
+  var on=eid('step-fill-toggle').checked;
+  eid('step-fill-cfg').style.display=on?'flex':'none';
+  if(!on){
+    eid('step-fill-log').classList.remove('show');
+    eid('step-progress').classList.remove('show');
+  }
+}
+
+function sfLog(msg,cls){
+  var log=eid('step-fill-log');
+  log.classList.add('show');
+  var line=document.createElement('div');
+  line.className='sfl-attempt '+(cls||'');
+  line.textContent='['+new Date().toLocaleTimeString()+'] '+msg;
+  log.appendChild(line);
+  log.scrollTop=log.scrollHeight;
+}
+
+function cancelStepFill(){
+  G.stepFillCancel=true;
+  G.stepFillActive=false;
+  sfLog('Step fill cancelled by user.','cancelled');
+  eid('step-progress').classList.remove('show');
+  toast('Step fill cancelled');
+}
+
+// Submits a single limit order and returns a promise with {orderId, status}
+function submitLimitAtPrice(creds,acct,occSym,sym,side,qty,otype,price){
+  var body='class=option'
+    +'&symbol='+encodeURIComponent(sym)
+    +'&option_symbol='+encodeURIComponent(occSym)
+    +'&side='+encodeURIComponent(side)
+    +'&quantity='+qty
+    +'&type=limit'
+    +'&duration=day'
+    +'&price='+price.toFixed(2);
+  if(otype==='stock'){
+    body='class=equity'
+      +'&symbol='+encodeURIComponent(sym)
+      +'&side='+encodeURIComponent(side)
+      +'&quantity='+qty
+      +'&type=limit'
+      +'&duration=day'
+      +'&price='+price.toFixed(2);
+  }
+  return fetch(creds.host+'/v1/accounts/'+acct+'/orders',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+creds.key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
+    body:body
+  }).then(function(r){return r.json();})
+  .then(function(d){
+    if(d.order&&d.order.id)return{orderId:d.order.id,status:d.order.status};
+    var errs=d.errors?d.errors.error:'Unknown error';
+    if(!Array.isArray(errs))errs=[errs];
+    throw new Error(errs.join(' | '));
+  });
+}
+
+// Polls order status
+function pollOrderStatus(creds,acct,orderId){
+  return fetch(creds.host+'/v1/accounts/'+acct+'/orders/'+orderId,{
+    headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}
+  }).then(function(r){return r.json();})
+  .then(function(d){
+    if(d.order)return d.order.status;
+    return 'unknown';
+  }).catch(function(){return 'unknown';});
+}
+
+// Cancel an open order
+function cancelOrder(creds,acct,orderId){
+  return fetch(creds.host+'/v1/accounts/'+acct+'/orders/'+orderId,{
+    method:'DELETE',
+    headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}
+  }).then(function(r){return r.json();}).catch(function(){return null;});
+}
+
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+
+async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,askPrice,stepSize,maxAttempts,delaySec){
+  G.stepFillActive=true;
+  G.stepFillCancel=false;
+  var log=eid('step-fill-log'),prog=eid('step-progress'),bar=eid('sp-bar'),lbl=eid('sp-label');
+  log.innerHTML='';log.classList.add('show');
+  prog.classList.add('show');
+  sfLog('Step Fill started — '+side+' x'+qty+' '+occSym,'sent');
+  sfLog('Start: $'+fmt2(startPrice)+' | Ask: $'+fmt2(askPrice)+' | Step: $'+fmt2(stepSize)+' | Max: '+maxAttempts+' attempts','');
+
+  var currentPrice=startPrice;
+  var filledOrderId=null;
+
+  for(var attempt=1;attempt<=maxAttempts;attempt++){
+    if(G.stepFillCancel){sfLog('Cancelled at attempt '+attempt+'.','cancelled');break;}
+
+    // Clamp price at ask — no point going above
+    if(currentPrice>askPrice){currentPrice=askPrice;}
+
+    var pct=Math.round((attempt/maxAttempts)*100);
+    bar.style.width=pct+'%';
+    lbl.textContent=attempt+' / '+maxAttempts;
+
+    sfLog('Attempt '+attempt+'/'+maxAttempts+' — submitting limit @ $'+fmt2(currentPrice)+'...','sent');
+
+    var orderId=null;
+    try{
+      var res=await submitLimitAtPrice(creds,acct,occSym,sym,side,qty,'limit',currentPrice);
+      orderId=res.orderId;
+      sfLog('Order #'+orderId+' placed (status: '+res.status+')','sent');
+    }catch(e){
+      sfLog('Order rejected: '+e.message,'rejected');
+      // If near the ask and still failing, stop
+      if(currentPrice>=askPrice){
+        sfLog('Reached ask price — stopping.','rejected');
+        break;
+      }
+      currentPrice=+(currentPrice+stepSize).toFixed(2);
+      await sleep(delaySec*1000);
+      continue;
+    }
+
+    // Wait delay then poll status
+    await sleep(delaySec*1000);
+    if(G.stepFillCancel){
+      if(orderId)await cancelOrder(creds,acct,orderId);
+      sfLog('Cancelled — open order #'+orderId+' sent cancel request.','cancelled');
+      break;
+    }
+
+    var status=await pollOrderStatus(creds,acct,orderId);
+    sfLog('Order #'+orderId+' status: '+status.toUpperCase(),'sent');
+
+    if(status==='filled'){
+      sfLog('&#10003; FILLED at $'+fmt2(currentPrice)+' on attempt '+attempt+'!','filled');
+      filledOrderId=orderId;
+      addAlert(sym,'Step Fill: FILLED x'+qty+' @ $'+fmt2(currentPrice)+' (attempt '+attempt+')','go');
+      toast('&#10003; Step Fill FILLED @ $'+fmt2(currentPrice));
+      var res2=eid('ord-result');
+      res2.innerHTML='<span style="color:var(--grn)">&#10003; STEP FILL: Filled '+qty+' x '+occSym+' @ $'+fmt2(currentPrice)+' on attempt '+attempt+'/'+maxAttempts+'</span>';
+      res2.className='ord-result show';
+      res2.style.borderColor='var(--grn)';
+      break;
+    } else if(status==='pending'||status==='open'||status==='partially_filled'){
+      // Cancel and retry at next step
+      sfLog('Not filled — cancelling #'+orderId+' and stepping up...','sent');
+      await cancelOrder(creds,acct,orderId);
+      currentPrice=+(currentPrice+stepSize).toFixed(2);
+      if(currentPrice>askPrice+stepSize){
+        sfLog('Exceeded ask price — stopping.','cancelled');
+        break;
+      }
+    } else {
+      // rejected / cancelled / expired
+      sfLog('Order ended with status: '+status+' — stepping up...','rejected');
+      currentPrice=+(currentPrice+stepSize).toFixed(2);
+    }
+
+    if(attempt===maxAttempts&&status!=='filled'){
+      sfLog('Max attempts reached without fill.','rejected');
+      addAlert(sym,'Step Fill: max attempts ('+maxAttempts+') reached — not filled','warn');
+      var res3=eid('ord-result');
+      res3.innerHTML='<span style="color:var(--wrn)">&#9888; Step Fill: '+maxAttempts+' attempts, no fill. Last price tried: $'+fmt2(currentPrice)+'</span>';
+      res3.className='ord-result show';
+      res3.style.borderColor='var(--wrn)';
+    }
+  }
+
+  G.stepFillActive=false;
+  bar.style.width='100%';
+  setTimeout(function(){prog.classList.remove('show');},3000);
+}
+
+// ════════════════════════════════════════════════════
+//  CORE ORDER FUNCTIONS
+// ════════════════════════════════════════════════════
+
+function buildOccSym(sym,type,strike,expRaw){
+  if((type==='CALL'||type==='PUT')&&strike&&expRaw){
+    var parts=expRaw.split('-');
+    if(parts.length===3){
+      var yy=parts[0].slice(2),mm=parts[1],dd=parts[2];
+      var sp=String(Math.round(parseFloat(strike)*1000)).padStart(8,'0');
+      return sym+yy+mm+dd+(type==='CALL'?'C':'P')+sp;
+    }
+  }
+  return sym;
+}
+
+function previewOrder(){
+  var sym=eid('ord-sym').value.trim().toUpperCase();
+  if(!sym){toast('Enter a symbol first');return;}
+  var type=eid('ord-type').value;
+  var action=eid('ord-action').value;
+  var qty=eid('ord-qty').value||1;
+  var strike=eid('ord-strike').value;
+  var expRaw=eid('ord-exp').value;
+  var otype=eid('ord-otype').value;
+  var lmt=eid('ord-lmt').value;
+  var occSym=buildOccSym(sym,type,strike,expRaw);
+  var sideMap={'BUY_TO_OPEN':'buy_to_open','SELL_TO_OPEN':'sell_to_open','BUY_TO_CLOSE':'buy_to_close','SELL_TO_CLOSE':'sell_to_close','BUY':'buy','SELL':'sell'};
+  var side=sideMap[action]||action.toLowerCase();
+  var res=eid('ord-result');
+  var acctVal=eid('ord-acct').value||'N/A';
+  var stepOn=eid('step-fill-toggle').checked;
+  var stepInfo=stepOn?('<br><b>&#9650; STEP FILL ON</b> — start: '+(eid('sf-start').value)+' | step: $'+eid('sf-step').value+' | max: '+eid('sf-max').value+' attempts | delay: '+eid('sf-delay').value+'s'):'';
+  res.innerHTML='<b>PREVIEW</b><br>'
+    +'Contract: <b>'+occSym+'</b><br>'
+    +side+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+(type==='STOCK'?' (stock)':' (option)')+'<br>'
+    +'Acct: '+acctVal
+    +stepInfo;
+  res.className='ord-result show';
+  res.style.borderColor='var(--amb)';
+}
+
+function submitOrder(){
+  if(G.stepFillActive){toast('Step fill already running');return;}
+  var sym=eid('ord-sym').value.trim().toUpperCase();
+  if(!sym){toast('Enter a symbol first');return;}
+  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  if(!key){
+    var res=eid('ord-result');
+    res.innerHTML='<span style="color:var(--wrn)">No Tradier API key configured.</span>';
+    res.className='ord-result show';return;
+  }
+  var hasBadKey=key.split('').some(function(c){return c.charCodeAt(0)>255;});
+  if(hasBadKey){
+    var res=eid('ord-result');
+    res.innerHTML='<span style="color:var(--wrn)">API key corrupted — re-enter in API tab.</span>';
+    res.className='ord-result show';return;
+  }
+  var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+  var creds={key:key,mode:mode,host:host};
+  var acct=eid('ord-acct').value.trim()||G.acctId||localStorage.getItem('rrjcar_acct')||'';
+  if(!acct){toast('No account ID — enter in API tab');return;}
+  var type=eid('ord-type').value;
+  var action=eid('ord-action').value;
+  var sideMap={'BUY_TO_OPEN':'buy_to_open','SELL_TO_OPEN':'sell_to_open','BUY_TO_CLOSE':'buy_to_close','SELL_TO_CLOSE':'sell_to_close','BUY':'buy','SELL':'sell'};
+  var side=sideMap[action]||action.toLowerCase();
+  var qty=eid('ord-qty').value||1;
+  var strike=eid('ord-strike').value;
+  var expRaw=eid('ord-exp').value;
+  var otype=eid('ord-otype').value;
+  var lmt=parseFloat(eid('ord-lmt').value)||0;
+  var occSym=buildOccSym(sym,type,strike,expRaw);
+  var stepOn=eid('step-fill-toggle').checked;
+
+  // ── STEP FILL PATH ──
+  if(stepOn&&otype==='limit'){
+    var stepSize=parseFloat(eid('sf-step').value)||0.01;
+    var maxAtt=parseInt(eid('sf-max').value)||10;
+    var delaySec=parseInt(eid('sf-delay').value)||5;
+    var startFrom=eid('sf-start').value;
+    var bid=G.liveQuote?G.liveQuote.bid:0;
+    var ask=G.liveQuote?G.liveQuote.ask:0;
+    var mid=G.liveQuote?G.liveQuote.mid:0;
+    // Determine start price
+    var startPrice=lmt; // use manually entered limit if set
+    if(!startPrice||startPrice<=0){
+      startPrice=startFrom==='mid'?(mid||bid||(ask*0.98)):bid;
+    }
+    if(!startPrice||!ask){
+      // No quote data — fetch first
+      toast('Fetching live quote for step fill...');
+      fetchLiveQuote();
+      setTimeout(function(){
+        var b=G.liveQuote?G.liveQuote.bid:0;
+        var a=G.liveQuote?G.liveQuote.ask:0;
+        var m=G.liveQuote?G.liveQuote.mid:0;
+        var sp=startFrom==='mid'?(m||b):b;
+        if(!sp){toast('Could not determine start price — enter limit manually');return;}
+        runStepFill(creds,acct,occSym,sym,side,qty,sp,a||sp*1.02,stepSize,maxAtt,delaySec);
+      },1500);
+      return;
+    }
+    runStepFill(creds,acct,occSym,sym,side,qty,startPrice,ask||startPrice*1.02,stepSize,maxAtt,delaySec);
+    return;
+  }
+
+  // ── STANDARD SUBMIT PATH ──
+  var body='class=option'
+    +'&symbol='+encodeURIComponent(sym)
+    +'&option_symbol='+encodeURIComponent(occSym)
+    +'&side='+encodeURIComponent(side)
+    +'&quantity='+qty
+    +'&type='+otype
+    +'&duration=day';
+  if(otype==='limit'&&lmt)body+='&price='+lmt;
+  if(otype==='stop'&&lmt)body+='&stop='+lmt;
+  var res=eid('ord-result');
+  res.innerHTML='Submitting...';res.className='ord-result show';res.style.borderColor='var(--amb)';
+  fetch(host+'/v1/accounts/'+acct+'/orders',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
+    body:body
+  }).then(function(r){var s=r.status;return r.text().then(function(t){return{s:s,t:t};});})
+  .then(function(resp){
+    try{
+      var data=JSON.parse(resp.t);
+      if(data.order&&data.order.id){
+        res.innerHTML='<span style="color:var(--blub)">Order submitted! ID: '+data.order.id+' Status: '+data.order.status+'</span>';
+        res.style.borderColor='var(--blu)';
+        addAlert(sym,'Order: '+side+' x'+qty+' '+occSym,'go');
+        toast('Order submitted: '+data.order.id);
+      } else if(data.errors){
+        var errs=data.errors.error;if(!Array.isArray(errs))errs=[errs];
+        res.innerHTML='<span style="color:var(--wrn)">Error: '+errs.join(' | ')+
+          (errs.join('').toLowerCase().includes('undefined symbol')?
+            '<br><small>Tip: The option '+occSym+' may not exist. Check the expiry date matches a standard Friday expiration.</small>':'')+'</span>';
+        res.style.borderColor='var(--wrn)';
+      } else {
+        res.innerHTML='<span style="color:var(--wrn)">Response: '+JSON.stringify(data).slice(0,200)+'</span>';
+        res.style.borderColor='var(--wrn)';
+      }
+    }catch(e){
+      res.innerHTML='<span style="color:var(--wrn)">Error (HTTP '+resp.s+'): '+resp.t.slice(0,200)+'</span>';
+      res.style.borderColor='var(--wrn)';
+    }
+  }).catch(function(e){
+    res.innerHTML='<span style="color:var(--wrn)">Error: '+e.message+'</span>';
+    res.style.borderColor='var(--wrn)';
+  });
+}
+
+function clearOrder(){
+  ['ord-sym','ord-strike','ord-exp','ord-lmt'].forEach(function(id){eid(id).value='';});
+  eid('ord-qty').value='1';
+  eid('ord-result').className='ord-result';
+  eid('step-fill-log').innerHTML='';
+  eid('step-fill-log').classList.remove('show');
+  eid('step-progress').classList.remove('show');
+  resetQuotePanel();
+}
+
+// ════════════════════════════════════════════════════
+//  REMAINING ORIGINAL FUNCTIONS (unchanged)
+// ════════════════════════════════════════════════════
 
 function simQuote(t){
   var base={AAPL:213,MSFT:415,GOOG:170,NVDA:880,META:485,ORCL:135,FTNT:75,PANW:165,CRM:290,
@@ -473,42 +1159,27 @@ function fetchOptionContract(ticker,simPrice,callback){
  if(!key){callback(null);return;}
  var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
- // Step 1: fetch real stock price + expirations in parallel
  var priceP=fetch(host+'/v1/markets/quotes?symbols='+ticker,{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
   .then(function(r){return r.json();})
   .then(function(d){
-   try{
-    var q=d.quotes.quote;
-    var p=q.last||(q.bid&&q.ask?(q.bid+q.ask)/2:0)||q.prevclose||simPrice;
-    return parseFloat(p)||simPrice;
-   }catch(e){return simPrice;}
+   try{var q=d.quotes.quote;var p=q.last||(q.bid&&q.ask?(q.bid+q.ask)/2:0)||q.prevclose||simPrice;return parseFloat(p)||simPrice;}catch(e){return simPrice;}
   }).catch(function(){return simPrice;});
  var expP=fetch(host+'/v1/markets/options/expirations?symbol='+ticker,{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
   .then(function(r){return r.json();})
-  .then(function(d){
-   var dates=[];
-   try{dates=d.expirations.date;if(!Array.isArray(dates))dates=[dates];}catch(e){}
-   return dates;
-  }).catch(function(){return [];});
+  .then(function(d){var dates=[];try{dates=d.expirations.date;if(!Array.isArray(dates))dates=[dates];}catch(e){}return dates;})
+  .catch(function(){return [];});
  Promise.all([priceP,expP]).then(function(res){
   var price=res[0],dates=res[1];
   if(!dates.length){callback(null);return;}
   var today=new Date();
   var best=null,bestDiff=999;
-  dates.forEach(function(d){
-   var dte=Math.round((new Date(d)-today)/864e5);
-   var diff=Math.abs(dte-35);
-   if(dte>=20&&dte<=70&&diff<bestDiff){bestDiff=diff;best={date:d,dte:dte};}
-  });
+  dates.forEach(function(d){var dte=Math.round((new Date(d)-today)/864e5);var diff=Math.abs(dte-35);if(dte>=20&&dte<=70&&diff<bestDiff){bestDiff=diff;best={date:d,dte:dte};}});
   if(!best){best={date:dates[0],dte:Math.round((new Date(dates[0])-today)/864e5)};}
-  // Step 2: fetch chain with greeks
   fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+best.date+'&greeks=true',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
   .then(function(r){return r.json();})
   .then(function(cdata){
-   var opts=[];
-   try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
+   var opts=[];try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
    if(!opts.length){callback(null);return;}
-   // Find call with delta closest to 0.75 (slightly ITM)
    var calls=opts.filter(function(o){return o.option_type==='call'&&o.greeks&&o.greeks.delta>0.05&&o.greeks.delta<0.99;});
    if(!calls.length)calls=opts.filter(function(o){return o.option_type==='call'&&o.greeks&&o.greeks.delta>0;});
    if(!calls.length){callback(null);return;}
@@ -520,61 +1191,29 @@ function fetchOptionContract(ticker,simPrice,callback){
    var intrinsic=Math.max(price-bo.strike,0);
    var extrinsic=Math.max(mid-intrinsic,0);
    var extPct=mid>0?((extrinsic/mid)*100):0;
-   callback({
-    strike:bo.strike,
-    spread:+(spread.toFixed(2)),
-    spreadPct:+(spreadPct.toFixed(2)),
-    delta:+(bo.greeks.delta.toFixed(2)),
-    ext:+(extPct.toFixed(1)),
-    dte:best.dte,
-    optPr:+(mid.toFixed(2)),
-    oi:bo.open_interest||0,
-    vol:bo.volume||0,
-    exp:best.date,
-    iv:bo.greeks?bo.greeks.smv_vol:0,
-    symbol:bo.symbol,
-    livePrice:price,
-    live:true
-   });
+   callback({strike:bo.strike,spread:+(spread.toFixed(2)),spreadPct:+(spreadPct.toFixed(2)),delta:+(bo.greeks.delta.toFixed(2)),ext:+(extPct.toFixed(1)),dte:best.dte,optPr:+(mid.toFixed(2)),oi:bo.open_interest||0,vol:bo.volume||0,exp:best.date,iv:bo.greeks?bo.greeks.smv_vol:0,symbol:bo.symbol,livePrice:price,live:true});
   }).catch(function(){callback(null);});
  }).catch(function(){callback(null);});
 }
 function scoreIt(ticker,ind,opt){
   var score=0,res=[];
-  var rsiOk=ind.rsi>=40&&ind.rsi<=70;
-  var macdOk=ind.macd>0;
-  var adxOk=ind.adx>25;
-  var emaOk=ind.ema20>ind.ema50;
-  var volOk=ind.vol>ind.avgVol;
-  var tfOk=ind.tf>=2;
-  var sprOk=opt.spreadPct<2;
-  var delOk=opt.delta>=0.70;
-  var extOk=opt.ext<=30;
-  var dteOk=opt.dte>=25&&opt.dte<=50;
-  var provenOk=PROVEN.indexOf(ticker)>=0;
+  var rsiOk=ind.rsi>=40&&ind.rsi<=70;var macdOk=ind.macd>0;var adxOk=ind.adx>25;var emaOk=ind.ema20>ind.ema50;
+  var volOk=ind.vol>ind.avgVol;var tfOk=ind.tf>=2;var sprOk=opt.spreadPct<2;var delOk=opt.delta>=0.70;
+  var extOk=opt.ext<=30;var dteOk=opt.dte>=25&&opt.dte<=50;var provenOk=PROVEN.indexOf(ticker)>=0;
   var avoidBad=AVOID.indexOf(ticker)>=0;
   var su=UNIVERSE.filter(function(u){return u.t===ticker;})[0];
-  var pf=su?SECTOR_PF[su.s]||0:0;
-  var sectOk=pf>2;
+  var pf=su?SECTOR_PF[su.s]||0:0;var sectOk=pf>2;
   if(avoidBad){score-=15;res.push({n:'AVOID ticker',pass:false,val:'-15pts',filter:false});}
   if(provenOk){score+=8;res.push({n:'PROVEN ticker',pass:true,val:'+8pts',filter:false});}
   var checks=[
-    {ok:rsiOk,n:'RSI 40-70',val:'RSI '+ind.rsi,filt:false,pts:8},
-    {ok:macdOk,n:'MACD Hist +',val:''+ind.macd,filt:false,pts:10},
-    {ok:adxOk,n:'ADX > 25',val:'ADX '+ind.adx,filt:false,pts:8},
-    {ok:emaOk,n:'EMA20 > EMA50',val:'$'+ind.ema20+' > $'+ind.ema50,filt:false,pts:10},
-    {ok:volOk,n:'Vol > Avg',val:fmtK(ind.vol)+' > '+fmtK(ind.avgVol),filt:false,pts:8},
-    {ok:tfOk,n:'TF Aligned 2/3',val:ind.tf+'/3',filt:false,pts:12},
-    {ok:sprOk,n:'Spread < 2%',val:fmtP(opt.spreadPct),filt:true,pts:10},
-    {ok:delOk,n:'Delta >= 0.70',val:''+opt.delta,filt:true,pts:12},
-    {ok:extOk,n:'Extrinsic <=30%',val:fmtP(opt.ext),filt:true,pts:10},
-    {ok:dteOk,n:'DTE 25-50',val:'DTE '+opt.dte,filt:true,pts:12},
+    {ok:rsiOk,n:'RSI 40-70',val:'RSI '+ind.rsi,filt:false,pts:8},{ok:macdOk,n:'MACD Hist +',val:''+ind.macd,filt:false,pts:10},
+    {ok:adxOk,n:'ADX > 25',val:'ADX '+ind.adx,filt:false,pts:8},{ok:emaOk,n:'EMA20 > EMA50',val:'$'+ind.ema20+' > $'+ind.ema50,filt:false,pts:10},
+    {ok:volOk,n:'Vol > Avg',val:fmtK(ind.vol)+' > '+fmtK(ind.avgVol),filt:false,pts:8},{ok:tfOk,n:'TF Aligned 2/3',val:ind.tf+'/3',filt:false,pts:12},
+    {ok:sprOk,n:'Spread < 2%',val:fmtP(opt.spreadPct),filt:true,pts:10},{ok:delOk,n:'Delta >= 0.70',val:''+opt.delta,filt:true,pts:12},
+    {ok:extOk,n:'Extrinsic <=30%',val:fmtP(opt.ext),filt:true,pts:10},{ok:dteOk,n:'DTE 25-50',val:'DTE '+opt.dte,filt:true,pts:12},
     {ok:sectOk,n:'Sector PF > 2',val:'PF '+pf,filt:false,pts:5}
   ];
-  checks.forEach(function(c){
-    if(c.ok)score+=c.pts;
-    res.push({n:c.n,pass:c.ok,val:c.val,filter:c.filt,pts:c.pts});
-  });
+  checks.forEach(function(c){if(c.ok)score+=c.pts;res.push({n:c.n,pass:c.ok,val:c.val,filter:c.filt,pts:c.pts});});
   var filtersPass=sprOk&&delOk&&extOk&&dteOk;
   var isGo=score>=70&&filtersPass&&!avoidBad;
   return{score:clamp(score,0,113),isGo:isGo,filtersPass:filtersPass,rules:res,passes:res.filter(function(r){return r.pass;}).length};
@@ -583,18 +1222,9 @@ function scoreIt(ticker,ind,opt){
 function renderTV(cid,ticker){
   var c=eid(cid);if(!c)return;
   c.innerHTML='';
-  var wrap=document.createElement('div');
-  wrap.style.cssText='width:100%;height:100%;';
-  c.appendChild(wrap);
-  var s=document.createElement('script');
-  s.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-  s.async=true;
-  s.innerHTML=JSON.stringify({
-    autosize:true,symbol:ticker,interval:'5',timezone:'America/New_York',
-    theme:'dark',style:'1',locale:'en',backgroundColor:'#0d1117',gridColor:'#21262d',
-    hide_top_toolbar:false,save_image:false,withdateranges:true,
-    studies:['MACD@tv-screener','RSI@tv-screener','ADX@tv-screener']
-  });
+  var wrap=document.createElement('div');wrap.style.cssText='width:100%;height:100%;';c.appendChild(wrap);
+  var s=document.createElement('script');s.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';s.async=true;
+  s.innerHTML=JSON.stringify({autosize:true,symbol:ticker,interval:'5',timezone:'America/New_York',theme:'dark',style:'1',locale:'en',backgroundColor:'#0d1117',gridColor:'#21262d',hide_top_toolbar:false,save_image:false,withdateranges:true,studies:['MACD@tv-screener','RSI@tv-screener','ADX@tv-screener']});
   wrap.appendChild(s);
 }
 
@@ -603,16 +1233,9 @@ function buildDetail(r,detId,emptyId){
   if(!r){if(emp)emp.style.display='flex';if(det)det.style.display='none';return;}
   if(emp)emp.style.display='none';
   if(det){det.style.display='flex';det.style.flexDirection='column';det.style.height='100%';det.style.overflow='hidden';}
-  var sigCls=r.isGo?'go':'nogo';
-  var sigLbl=r.isGo?'GO':'NO-GO';
-  var ind=r.ind,opt=r.opt;
+  var sigCls=r.isGo?'go':'nogo';var sigLbl=r.isGo?'GO':'NO-GO';var ind=r.ind,opt=r.opt;
   var rulesHtml='';
-  r.rules.forEach(function(ru){
-    var cls=ru.pass?'pass':(ru.filter?'filt-fail':'fail');
-    var icon=ru.pass?'&#10003;':'&#10007;';
-    rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';
-  });
-  
+  r.rules.forEach(function(ru){var cls=ru.pass?'pass':(ru.filter?'filt-fail':'fail');var icon=ru.pass?'&#10003;':'&#10007;';rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';});
   G.detailOpt={ticker:r.ticker,strike:opt.strike,exp:opt.exp};
   det.innerHTML=
     '<div class="det-hdr"><span class="det-tk">'+r.ticker+'</span>'
@@ -644,7 +1267,7 @@ function buildDetail(r,detId,emptyId){
     +'<div class="og-cell"><div class="og-lbl">Opt Price</div><div class="og-val">$'+fmt2(opt.optPr)+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">OI / Vol</div><div class="og-val">'+fmtK(opt.oi)+' / '+fmtK(opt.vol)+'</div></div>'
     +'</div>'
-        +'<div style="padding:8px 12px;border-bottom:var(--bdr);display:flex;align-items:center;gap:10px;">'
+    +'<div style="padding:8px 12px;border-bottom:var(--bdr);display:flex;align-items:center;gap:10px;">'
     +'<button class="btn blu" style="font-size:12px;padding:5px 14px;" onclick="doBuyCall()">&#9650; BUY CALL</button>'
     +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">&#9660; BUY PUT</button>'
     +'<span style="color:var(--gry);font-size:10px;">Strike: $'+fmt2(opt.strike)+'  |  Exp: '+opt.exp+'</span>'
@@ -668,7 +1291,6 @@ function viewDetail(ticker,detId,emptyId){
  if(key){
   fetchOptionContract(ticker,r.price,function(optData){
    if(!optData)return;
-   // Update with real price and options data
    if(optData.livePrice&&optData.livePrice>0){r.price=optData.livePrice;}
    r.opt=Object.assign(r.opt,optData);
    var newScore=scoreIt(ticker,r.ind,r.opt);
@@ -679,17 +1301,16 @@ function viewDetail(ticker,detId,emptyId){
   });
  }
 }
+
 function renderBuySig(){
   var goList=eid('bs-go-list'),noList=eid('bs-nogo-list');
   goList.innerHTML='';noList.innerHTML='';
   var goCount=0,noCount=0,scoreSum=0,topSect='',topPF=0;
   Object.keys(SECTOR_PF).forEach(function(sk){if(SECTOR_PF[sk]>topPF){topPF=SECTOR_PF[sk];topSect=sk;}});
   G.results.forEach(function(r){
-    if(r.isGo)goCount++;else noCount++;
-    scoreSum+=r.score;
+    if(r.isGo)goCount++;else noCount++;scoreSum+=r.score;
     var card=document.createElement('div');
-    card.className='sig-card'+(r.isGo?'':' nogo-card');
-    card.dataset.ticker=r.ticker;
+    card.className='sig-card'+(r.isGo?'':' nogo-card');card.dataset.ticker=r.ticker;
     var tk=r.ticker;
     card.innerHTML='<div class="sc-l"><div class="tk">'+tk+'</div>'
       +'<div class="sc '+(r.isGo?'go':'nogo')+'">'+r.score+'</div>'
@@ -700,35 +1321,22 @@ function renderBuySig(){
     if(r.isGo)goList.appendChild(card);else noList.appendChild(card);
   });
   var avg=G.results.length?+(scoreSum/G.results.length).toFixed(1):0;
-  eid('bs-go').textContent=goCount;
-  eid('bs-nogo').textContent=noCount;
-  eid('bs-avg').textContent=avg;
-  eid('bs-sect').textContent=topSect||'--';
-  eid('bs-pf').textContent=topPF||'--';
-  eid('bs-scan').textContent=G.results.length;
-  if(G.results.length>0&&!G.selTicker){
-    viewDetail(G.results[0].ticker,'bs-detail','bs-empty');
-  }
+  eid('bs-go').textContent=goCount;eid('bs-nogo').textContent=noCount;eid('bs-avg').textContent=avg;
+  eid('bs-sect').textContent=topSect||'--';eid('bs-pf').textContent=topPF||'--';eid('bs-scan').textContent=G.results.length;
+  if(G.results.length>0&&!G.selTicker){viewDetail(G.results[0].ticker,'bs-detail','bs-empty');}
 }
 
 function runScan(){
-  if(G.scanRunning)return;
-  G.scanRunning=true;
-  var sc=eid('sc-sect');
-  sc.innerHTML='<option value="">All</option>';
+  if(G.scanRunning)return;G.scanRunning=true;
+  var sc=eid('sc-sect');sc.innerHTML='<option value="">All</option>';
   Object.keys(SECTOR_PF).forEach(function(s){var o=document.createElement('option');o.value=s;o.textContent=s;sc.appendChild(o);});
   G.results=[];
   UNIVERSE.forEach(function(u){
     var q=simQuote(u.t),ind=simInd(u.t,q.price),opt=simOpt(q.price),sc2=scoreIt(u.t,ind,opt);
-    G.results.push({ticker:u.t,sector:u.s,price:q.price,change:q.change,changePct:q.changePct,
-      volume:q.volume,ind:ind,opt:opt,score:sc2.score,isGo:sc2.isGo,
-      filtersPass:sc2.filtersPass,rules:sc2.rules,passes:sc2.passes});
+    G.results.push({ticker:u.t,sector:u.s,price:q.price,change:q.change,changePct:q.changePct,volume:q.volume,ind:ind,opt:opt,score:sc2.score,isGo:sc2.isGo,filtersPass:sc2.filtersPass,rules:sc2.rules,passes:sc2.passes});
   });
   G.results.sort(function(a,b){return b.score-a.score;});
-  G.filtered=G.results.slice();
-  renderBuySig();
-  renderScan();
-  G.scanRunning=false;
+  G.filtered=G.results.slice();renderBuySig();renderScan();G.scanRunning=false;
   addAlert('SYS','Scan complete: '+G.results.length+' tickers | '+G.results.filter(function(r){return r.isGo;}).length+' GO','go');
   toast('Scan complete — '+G.results.length+' tickers');
 }
@@ -736,13 +1344,9 @@ function runScan(){
 function applyFilters(){
   var sect=eid('sc-sect').value,sig=eid('sc-sig').value,minsc=+eid('sc-minscore').value||0;
   G.filtered=G.results.filter(function(r){
-    if(sect&&r.sector!==sect)return false;
-    if(sig==='GO'&&!r.isGo)return false;
-    if(sig==='NO-GO'&&r.isGo)return false;
-    if(r.score<minsc)return false;
-    return true;
-  });
-  renderScan();
+    if(sect&&r.sector!==sect)return false;if(sig==='GO'&&!r.isGo)return false;
+    if(sig==='NO-GO'&&r.isGo)return false;if(r.score<minsc)return false;return true;
+  });renderScan();
 }
 
 function sortTable(col){
@@ -750,28 +1354,21 @@ function sortTable(col){
   G.filtered.sort(function(a,b){
     if(col==='ticker'||col==='sector')return G.sortDir*(a[col]<b[col]?-1:a[col]>b[col]?1:0);
     return G.sortDir*(a[col]-b[col]);
-  });
-  renderScan();
+  });renderScan();
 }
 
 function renderScan(){
   var wrap=eid('sc-tbl-wrap');
   if(!G.filtered.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No results — run a scan first</p></div>';return;}
   var cols=[{k:'ticker',l:'SYMBOL'},{k:'score',l:'SCORE'},{k:'isGo',l:'SIGNAL'},{k:'sector',l:'SECTOR'},{k:'price',l:'PRICE'},{k:'changePct',l:'CHG%'},{k:'volume',l:'VOLUME'}];
-  var th='';
-  cols.forEach(function(c){
-    var arr=G.sortCol===c.k?(G.sortDir>0?' &#9650;':' &#9660;'):'';
-    th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';
-  });
+  var th='';cols.forEach(function(c){var arr=G.sortCol===c.k?(G.sortDir>0?' &#9650;':' &#9660;'):'';th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';});
   var rows='';
   G.filtered.forEach(function(r){
     var sigBadge=r.isGo?'<span class="badge go">GO</span>':'<span class="badge nogo">NO-GO</span>';
-    var chgCls=r.changePct>=0?'pnl-pos':'pnl-neg';
-    var tk=r.ticker;
+    var chgCls=r.changePct>=0?'pnl-pos':'pnl-neg';var tk=r.ticker;
     rows+='<tr data-ticker="'+tk+'" onclick="viewDetail(this.dataset.ticker,\'sc-detail\',\'sc-det-empty\')">'
       +'<td>'+tk+'</td><td><b>'+r.score+'</b></td><td>'+sigBadge+'</td><td>'+r.sector+'</td>'
-      +'<td>$'+fmt2(r.price)+'</td>'
-      +'<td class="'+chgCls+'">'+(r.changePct>=0?'+':'')+fmtP(r.changePct)+'</td>'
+      +'<td>$'+fmt2(r.price)+'</td><td class="'+chgCls+'">'+(r.changePct>=0?'+':'')+fmtP(r.changePct)+'</td>'
       +'<td>'+fmtK(r.volume)+'</td></tr>';
   });
   wrap.innerHTML='<table><thead><tr>'+th+'</tr></thead><tbody>'+rows+'</tbody></table>';
@@ -780,15 +1377,12 @@ function renderScan(){
 
 <script>
 function runGex(){
-  var wrap=eid('gx-tbl-wrap');
-  eid('gex-ts').textContent='Updated: '+new Date().toLocaleTimeString();
+  var wrap=eid('gx-tbl-wrap');eid('gex-ts').textContent='Updated: '+new Date().toLocaleTimeString();
   var tickers=UNIVERSE.slice(0,18).map(function(u){return u.t;});
   G.gexData=tickers.map(function(t){
     var gex=(Math.random()>0.5?1:-1)*Math.floor(rnd(100,9000));
-    var flip=+(rnd(180,250)).toFixed(2);
-    var call=Math.floor(rnd(40,80));
-    return{t:t,gex:gex,flip:flip,call:call,put:100-call,
-      flow:gex>0?'CALL HEAVY':'PUT HEAVY',flowCls:gex>0?'go':'nogo'};
+    var flip=+(rnd(180,250)).toFixed(2);var call=Math.floor(rnd(40,80));
+    return{t:t,gex:gex,flip:flip,call:call,put:100-call,flow:gex>0?'CALL HEAVY':'PUT HEAVY',flowCls:gex>0?'go':'nogo'};
   });
   var html='<table><thead><tr><th>SYMBOL</th><th>GEX ($M)</th><th>FLIP LEVEL</th><th>CALL%</th><th>PUT%</th><th>FLOW</th></tr></thead><tbody>';
   G.gexData.forEach(function(r){
@@ -799,40 +1393,24 @@ function runGex(){
       +'<td class="pnl-neg">'+r.put+'%</td>'
       +'<td><span class="badge '+r.flowCls+'">'+r.flow+'</span></td></tr>';
   });
-  html+='</tbody></table>';
-  wrap.innerHTML=html;
+  html+='</tbody></table>';wrap.innerHTML=html;
   addAlert('GEX','GEX refreshed for '+G.gexData.length+' tickers','warn');
 }
 
-function loadWL(){
-  try{var s=localStorage.getItem('rrjcar_wl');if(s)G.wlTickers=JSON.parse(s);}catch(e){}
-  if(!G.wlTickers.length)G.wlTickers=['SPY','QQQ','AAPL','MSFT','NVDA'];
-}
+function loadWL(){try{var s=localStorage.getItem('rrjcar_wl');if(s)G.wlTickers=JSON.parse(s);}catch(e){}if(!G.wlTickers.length)G.wlTickers=['SPY','QQQ','AAPL','MSFT','NVDA'];}
 function saveWL(){localStorage.setItem('rrjcar_wl',JSON.stringify(G.wlTickers));}
-function addWL(){
-  var inp=eid('wl-add'),t=inp.value.trim().toUpperCase();
-  if(!t)return;
-  if(G.wlTickers.indexOf(t)<0){G.wlTickers.push(t);saveWL();}
-  inp.value='';refreshWL();
-}
-function removeWL(t){
-  G.wlTickers=G.wlTickers.filter(function(x){return x!==t;});
-  saveWL();refreshWL();
-}
+function addWL(){var inp=eid('wl-add'),t=inp.value.trim().toUpperCase();if(!t)return;if(G.wlTickers.indexOf(t)<0){G.wlTickers.push(t);saveWL();}inp.value='';refreshWL();}
+function removeWL(t){G.wlTickers=G.wlTickers.filter(function(x){return x!==t;});saveWL();refreshWL();}
 function refreshWL(){
   var wrap=eid('wl-tbl-wrap');
   if(!G.wlTickers.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Add tickers to watchlist</p></div>';return;}
   var html='<table><thead><tr><th>SYMBOL</th><th>PRICE</th><th>CHG</th><th>CHG%</th><th>VOLUME</th><th>SIGNAL</th><th></th></tr></thead><tbody>';
   G.wlTickers.forEach(function(t){
-    var q=simQuote(t);
-    var u=null;for(var i=0;i<UNIVERSE.length;i++){if(UNIVERSE[i].t===t){u=UNIVERSE[i];break;}}
-    if(!u)u={s:'--'};
+    var q=simQuote(t);var u=null;for(var i=0;i<UNIVERSE.length;i++){if(UNIVERSE[i].t===t){u=UNIVERSE[i];break;}}if(!u)u={s:'--'};
     var ind=simInd(t,q.price),opt=simOpt(q.price),sc=scoreIt(t,ind,opt);
     var existing=false;for(var i=0;i<G.results.length;i++){if(G.results[i].ticker===t){existing=true;break;}}
-    if(!existing){G.results.push({ticker:t,sector:u.s,price:q.price,change:q.change,changePct:q.changePct,
-      volume:q.volume,ind:ind,opt:opt,score:sc.score,isGo:sc.isGo,filtersPass:sc.filtersPass,rules:sc.rules,passes:sc.passes});}
-    var chgCls=q.change>=0?'pnl-pos':'pnl-neg';
-    var sigBadge=sc.isGo?'<span class="badge go">GO</span>':'<span class="badge nogo">NO-GO</span>';
+    if(!existing){G.results.push({ticker:t,sector:u.s,price:q.price,change:q.change,changePct:q.changePct,volume:q.volume,ind:ind,opt:opt,score:sc.score,isGo:sc.isGo,filtersPass:sc.filtersPass,rules:sc.rules,passes:sc.passes});}
+    var chgCls=q.change>=0?'pnl-pos':'pnl-neg';var sigBadge=sc.isGo?'<span class="badge go">GO</span>':'<span class="badge nogo">NO-GO</span>';
     html+='<tr data-ticker="'+t+'" onclick="viewDetail(this.dataset.ticker,\'wl-detail\',\'wl-det-empty\')">'
       +'<td><b>'+t+'</b></td><td>$'+fmt2(q.price)+'</td>'
       +'<td class="'+chgCls+'">'+(q.change>=0?'+':'')+fmt2(q.change)+'</td>'
@@ -841,179 +1419,104 @@ function refreshWL(){
       +'<td><button class="cbtn" onclick="event.stopPropagation();removeWL(this.parentNode.parentNode.dataset.ticker)">&#10005;</button></td>'
       +'</tr>';
   });
-  html+='</tbody></table>';
-  wrap.innerHTML=html;
+  html+='</tbody></table>';wrap.innerHTML=html;
 }
 
 function parseOccSymbol(sym){
- var m=sym.match(/^([A-Z1-9]+)(\d{6})([CP])(\d{8})$/);
- if(!m)return{underlying:sym,type:'CALL',strike:0,exp:''};
- var underlying=m[1];
- var dateStr=m[2];
- var typ=m[3]==='C'?'CALL':'PUT';
- var strike=parseInt(m[4])/1000;
- var yr='20'+dateStr.slice(0,2),mo=dateStr.slice(2,4),dy=dateStr.slice(4,6);
- return{underlying:underlying,type:typ,strike:strike,exp:yr+'-'+mo+'-'+dy};
+  var m=sym.match(/^([A-Z1-9]+)(\d{6})([CP])(\d{8})$/);
+  if(!m)return{underlying:sym,type:'CALL',strike:0,exp:''};
+  var underlying=m[1];var dateStr=m[2];var typ=m[3]==='C'?'CALL':'PUT';var strike=parseInt(m[4])/1000;
+  var yr='20'+dateStr.slice(0,2),mo=dateStr.slice(2,4),dy=dateStr.slice(4,6);
+  return{underlying:underlying,type:typ,strike:strike,exp:yr+'-'+mo+'-'+dy};
 }
 function fetchPositions(){
   var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
   var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
-  // Use saved account number if available - skip profile lookup
   var savedAcct='';try{savedAcct=localStorage.getItem('rrjcar_acct')||'';}catch(e){}
   if(savedAcct&&!G.acctId){G.acctId=savedAcct;eid('ord-acct').value=savedAcct;}
   if(!key){
     eid('pos-src').textContent='[NO API KEY]';
     eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No Tradier API key configured.<br>Go to the API tab to enter your key.</p></div>';
-    eid('pos-pnl').textContent='$0.00';eid('pos-daypnl').textContent='$0.00';
-    eid('pos-count').textContent='0';eid('pos-acctval').textContent='--';
-    return;
+    eid('pos-pnl').textContent='$0.00';eid('pos-daypnl').textContent='$0.00';eid('pos-count').textContent='0';eid('pos-acctval').textContent='--';return;
   }
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
   eid('pos-src').textContent='Loading from Tradier '+mode+'...';
   eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Fetching positions...</p></div>';
-  // If we already have an account ID saved, skip the profile lookup
-  if(G.acctId){
-    fetchPositionsDirect(key,mode,host,G.acctId);
-    return;
-  }
+  if(G.acctId){fetchPositionsDirect(key,mode,host,G.acctId);return;}
   fetch(host+'/v1/user/profile',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-  .then(function(r){
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    return r.json();
-  })
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
   .then(function(data){
     var acct='';
-    try{
-      var prof=data.profile;
-      if(prof&&prof.account){
-        if(Array.isArray(prof.account))acct=prof.account[0].account_number;
-        else acct=prof.account.account_number;
-      }
-    }catch(e){}
+    try{var prof=data.profile;if(prof&&prof.account){if(Array.isArray(prof.account))acct=prof.account[0].account_number;else acct=prof.account.account_number;}}catch(e){}
     if(!acct){showPosError('Could not read account number from Tradier response.');return;}
-    G.acctId=acct;
-    eid('ord-acct').value=acct;
-    fetchPositionsDirect(key,mode,host,acct);
-  })
-  .catch(function(e){showPosError('Tradier API error: '+e.message);});
+    G.acctId=acct;eid('ord-acct').value=acct;fetchPositionsDirect(key,mode,host,acct);
+  }).catch(function(e){showPosError('Tradier API error: '+e.message);});
 }
 
 function fetchPositionsDirect(key,mode,host,acct){
- fetch(host+'/v1/accounts/'+acct+'/positions',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
- .then(function(r){if(!r.ok)throw new Error('Positions HTTP '+r.status);return r.json();})
- .then(function(data){
-  if(!data){showPosError('No data returned.');return;}
-  var pd=data.positions;
-  if(!pd||pd==='null'){renderPositionsTable([],(mode==='live'?'[TRADIER LIVE]':'[TRADIER SANDBOX]')+' — No open positions');return;}
-  var arr=pd.position;if(!Array.isArray(arr))arr=[arr];
-  // Build position list with parsed OCC data
-  var pos=arr.map(function(p){
-   var parsed=parseOccSymbol(p.symbol);
-   return{symbol:p.symbol,underlying:parsed.underlying,type:parsed.type,
-    strike:parsed.strike,exp:parsed.exp,qty:parseInt(p.quantity)||0,
-    cost:parseFloat(p.cost_basis)||0,last:0,pnl:0,pnlPct:0};
-  });
-  // Fetch live quotes for all position symbols
-  var syms=arr.map(function(p){return p.symbol;}).join(',');
-  fetch(host+'/v1/markets/quotes?symbols='+encodeURIComponent(syms),{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-  .then(function(r){return r.json();})
-  .then(function(qdata){
-   var quotes={};
-   try{
-    var ql=qdata.quotes.quote;
-    if(!Array.isArray(ql))ql=[ql];
-    ql.forEach(function(q){quotes[q.symbol]=q;});
-   }catch(e){}
-   pos.forEach(function(p){
-    var q=quotes[p.symbol];
-    if(q){
-     var mid=q.bid&&q.ask?(q.bid+q.ask)/2:(q.last||0);
-     p.last=mid;
-     p.bid=q.bid||0;p.ask=q.ask||0;
-     var contractVal=mid*Math.abs(p.qty)*100;
-     p.pnl=contractVal-p.cost;
-     p.pnlPct=p.cost?((p.pnl/p.cost)*100):0;
-    }
-   });
-   G.positions=pos;
-   renderPositionsTable(pos,mode==='live'?'[TRADIER LIVE]':' [TRADIER SANDBOX]');
-   fetchBalances();
-  }).catch(function(){
-   // If quotes fail, still show positions with cost basis
-   G.positions=pos;
-   renderPositionsTable(pos,mode==='live'?'[TRADIER LIVE]':' [TRADIER SANDBOX]');
-   fetchBalances();
-  });
- }).catch(function(e){showPosError('Tradier API error: '+e.message);});
+  fetch(host+'/v1/accounts/'+acct+'/positions',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+  .then(function(r){if(!r.ok)throw new Error('Positions HTTP '+r.status);return r.json();})
+  .then(function(data){
+    if(!data){showPosError('No data returned.');return;}
+    var pd=data.positions;
+    if(!pd||pd==='null'){renderPositionsTable([],(mode==='live'?'[TRADIER LIVE]':'[TRADIER SANDBOX]')+' — No open positions');return;}
+    var arr=pd.position;if(!Array.isArray(arr))arr=[arr];
+    var pos=arr.map(function(p){var parsed=parseOccSymbol(p.symbol);return{symbol:p.symbol,underlying:parsed.underlying,type:parsed.type,strike:parsed.strike,exp:parsed.exp,qty:parseInt(p.quantity)||0,cost:parseFloat(p.cost_basis)||0,last:0,pnl:0,pnlPct:0};});
+    var syms=arr.map(function(p){return p.symbol;}).join(',');
+    fetch(host+'/v1/markets/quotes?symbols='+encodeURIComponent(syms),{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+    .then(function(r){return r.json();})
+    .then(function(qdata){
+      var quotes={};
+      try{var ql=qdata.quotes.quote;if(!Array.isArray(ql))ql=[ql];ql.forEach(function(q){quotes[q.symbol]=q;});}catch(e){}
+      pos.forEach(function(p){var q=quotes[p.symbol];if(q){var mid=q.bid&&q.ask?(q.bid+q.ask)/2:(q.last||0);p.last=mid;p.bid=q.bid||0;p.ask=q.ask||0;var contractVal=mid*Math.abs(p.qty)*100;p.pnl=contractVal-p.cost;p.pnlPct=p.cost?((p.pnl/p.cost)*100):0;}});
+      G.positions=pos;renderPositionsTable(pos,mode==='live'?'[TRADIER LIVE]':' [TRADIER SANDBOX]');fetchBalances();
+    }).catch(function(){G.positions=pos;renderPositionsTable(pos,mode==='live'?'[TRADIER LIVE]':' [TRADIER SANDBOX]');fetchBalances();});
+  }).catch(function(e){showPosError('Tradier API error: '+e.message);});
 }
-function showPosError(msg){
-  eid('pos-src').textContent='[ERROR]';
-  eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p style="color:var(--wrn);">'+msg+'</p><p style="color:var(--gry);margin-top:8px;">Check API key in the API tab.</p></div>';
-}
+function showPosError(msg){eid('pos-src').textContent='[ERROR]';eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p style="color:var(--wrn);">'+msg+'</p><p style="color:var(--gry);margin-top:8px;">Check API key in the API tab.</p></div>';}
 
 function renderPositionsTable(pos,srcLabel){
   eid('pos-src').textContent=srcLabel||'';
   var wrap=eid('pos-tbl-wrap');
   if(!pos.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No open positions</p></div>';return;}
-  var totalPnl=0,totalCost=0;
-  pos.forEach(function(p){totalPnl+=p.pnl;totalCost+=p.cost;});
-  var html='<table><thead><tr>'
-    +'<th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th><th>QTY</th>'
-    +'<th>AVG COST</th><th>LAST</th><th>P&L $</th><th>P&L %</th><th>STATUS</th><th>ACTION</th>'
-    +'</tr></thead><tbody>';
+  var totalPnl=0,totalCost=0;pos.forEach(function(p){totalPnl+=p.pnl;totalCost+=p.cost;});
+  var html='<table><thead><tr><th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th><th>QTY</th><th>AVG COST</th><th>LAST</th><th>P&L $</th><th>P&L %</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>';
   pos.forEach(function(p){
-    var pnlCls=p.pnl>=0?'pnl-pos':'pnl-neg';
-    var statusBadge=p.pnl>=0?'<span class="badge go">PROFIT</span>':'<span class="badge nogo">LOSS</span>';
+    var pnlCls=p.pnl>=0?'pnl-pos':'pnl-neg';var statusBadge=p.pnl>=0?'<span class="badge go">PROFIT</span>':'<span class="badge nogo">LOSS</span>';
     var tk=p.underlying,tp=p.type,st=p.strike,ex=p.exp,qty=Math.abs(p.qty);
     html+='<tr data-tk="'+tk+'" data-tp="'+tp+'" data-st="'+st+'" data-ex="'+ex+'" data-qty="'+qty+'">'
-      +'<td><b>'+p.symbol+'</b></td>'
-      +'<td>'+p.type+'</td>'
-      +'<td>$'+fmt2(p.strike)+'</td>'
-      +'<td>'+p.exp+'</td>'
-      +'<td>'+p.qty+'</td>'
-      +'<td>$'+fmt2(p.cost)+'</td>'
-      +'<td>$'+fmt2(p.last)+'</td>'
+      +'<td><b>'+p.symbol+'</b></td><td>'+p.type+'</td><td>$'+fmt2(p.strike)+'</td><td>'+p.exp+'</td><td>'+p.qty+'</td>'
+      +'<td>$'+fmt2(p.cost)+'</td><td>$'+fmt2(p.last)+'</td>'
       +'<td class="'+pnlCls+'">'+(p.pnl>=0?'+':'')+fmtD(p.pnl)+'</td>'
       +'<td class="'+pnlCls+'">'+(p.pnlPct>=0?'+':'')+fmtP(p.pnlPct)+'</td>'
       +'<td>'+statusBadge+'</td>'
       +'<td><button class="cbtn" onclick="doClose(this)">CLOSE</button></td>'
       +'</tr>';
   });
-  html+='</tbody></table>';
-  wrap.innerHTML=html;
-  var totalPnlPct=totalCost?((totalPnl/totalCost)*100):0;
-  var pnlEl=eid('pos-pnl');
-  pnlEl.textContent=fmtD(totalPnl);
-  pnlEl.className='stat-val '+(totalPnl>=0?'go':'nogo');
-  eid('pos-daypnl').textContent=fmtD(totalPnl*0.3);
-  eid('pos-count').textContent=pos.length;
+  html+='</tbody></table>';wrap.innerHTML=html;
+  var pnlEl=eid('pos-pnl');pnlEl.textContent=fmtD(totalPnl);pnlEl.className='stat-val '+(totalPnl>=0?'go':'nogo');
+  eid('pos-daypnl').textContent=fmtD(totalPnl*0.3);eid('pos-count').textContent=pos.length;
 }
 
 function clearPositions(){
   G.positions=[];
   eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Positions cleared. Click Refresh to reload.</p></div>';
-  eid('pos-pnl').textContent='$0.00';
-  eid('pos-daypnl').textContent='$0.00';
-  eid('pos-count').textContent='0';
-  eid('pos-src').textContent='[Cleared]';
-  toast('Positions cleared');
+  eid('pos-pnl').textContent='$0.00';eid('pos-daypnl').textContent='$0.00';eid('pos-count').textContent='0';
+  eid('pos-src').textContent='[Cleared]';toast('Positions cleared');
 }
 
 function buyOrder(ticker,type,strike,exp){
   switchTab('order');
   setTimeout(function(){
-    eid('ord-sym').value=ticker;
-    eid('ord-type').value=type||'CALL';
-    eid('ord-strike').value=strike;
-    eid('ord-exp').value=exp||'';
-    eid('ord-action').value='BUY_TO_OPEN';
-    eid('ord-qty').value=1;
-    eid('ord-otype').value='limit';
+    eid('ord-sym').value=ticker;eid('ord-type').value=type||'CALL';
+    eid('ord-strike').value=strike;eid('ord-exp').value=exp||'';
+    eid('ord-action').value='BUY_TO_OPEN';eid('ord-qty').value=1;eid('ord-otype').value='limit';
     var res=eid('ord-result');
     res.innerHTML='Order pre-filled: '+ticker+' '+type+' strike:'+strike+' exp:'+exp;
-    res.className='ord-result show';
-    res.style.borderColor='var(--blu)';
+    res.className='ord-result show';res.style.borderColor='var(--blu)';
     toast('Buy pre-filled: '+ticker+' '+type);
+    // Auto-fetch quote after pre-fill
+    fetchLiveQuote();
   },120);
 }
 function doBuyCall(){if(G.detailOpt)buyOrder(G.detailOpt.ticker,'CALL',G.detailOpt.strike,G.detailOpt.exp);}
@@ -1023,17 +1526,13 @@ function closePosition(symbol,type,strike,exp,qty){
   var action=type==='STOCK'?'SELL':'BUY_TO_CLOSE';
   switchTab('order');
   setTimeout(function(){
-    eid('ord-sym').value=symbol;
-    eid('ord-type').value=type==='STOCK'?'STOCK':(type==='PUT'?'PUT':'CALL');
-    eid('ord-strike').value=strike;
-    eid('ord-exp').value=exp;
-    eid('ord-action').value=action;
-    eid('ord-qty').value=qty;
+    eid('ord-sym').value=symbol;eid('ord-type').value=type==='STOCK'?'STOCK':(type==='PUT'?'PUT':'CALL');
+    eid('ord-strike').value=strike;eid('ord-exp').value=exp;eid('ord-action').value=action;eid('ord-qty').value=qty;
     var res=eid('ord-result');
     res.innerHTML='&#9888; Close order pre-filled for <b>'+symbol+'</b> — review and submit.';
-    res.className='ord-result show';
-    res.style.borderColor='var(--wrn)';
+    res.className='ord-result show';res.style.borderColor='var(--wrn)';
     toast('Close order pre-filled for '+symbol);
+    fetchLiveQuote();
   },120);
 }
 
@@ -1044,203 +1543,52 @@ function fetchBalances(){
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
   fetch(host+'/v1/accounts/'+G.acctId+'/balances',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
   .then(function(r){return r.json();})
-  .then(function(data){
-    try{var val=data.balances.total_equity;eid('pos-acctval').textContent=fmtD(val);}catch(e){}
-  }).catch(function(){});
-}
-
-function previewOrder(){
- var sym=eid('ord-sym').value.trim().toUpperCase();
- if(!sym){toast('Enter a symbol first');return;}
- var type=eid('ord-type').value;
- var action=eid('ord-action').value;
- var qty=eid('ord-qty').value||1;
- var strike=eid('ord-strike').value;
- var expRaw=eid('ord-exp').value;
- var otype=eid('ord-otype').value;
- var lmt=eid('ord-lmt').value;
- var occSym=sym;
- if((type==='CALL'||type==='PUT')&&strike&&expRaw){
-  var dateParts=expRaw.split('-');
-  if(dateParts.length===3){
-   var yy=dateParts[0].slice(2),mo=dateParts[1],dy=dateParts[2];
-   var strikeInt=Math.round(parseFloat(strike)*1000);
-   var strikePad=''+strikeInt;
-   while(strikePad.length<8)strikePad='0'+strikePad;
-   occSym=sym+yy+mo+dy+(type==='CALL'?'C':'P')+strikePad;
-  }
- }
- var sideMap={'BUY_TO_OPEN':'buy_to_open','SELL_TO_OPEN':'sell_to_open','BUY_TO_CLOSE':'buy_to_close','SELL_TO_CLOSE':'sell_to_close','BUY':'buy','SELL':'sell'};
- var side=sideMap[action]||action.toLowerCase();
- var res=eid('ord-result');
- var acctVal=eid('ord-acct').value||'N/A';
- res.innerHTML='<b>PREVIEW</b><br>'
-  +'Option: <b>'+occSym+'</b><br>'
-  +side+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+(type==='STOCK'?' (stock)':' (option)')+'<br>'
-  +'Acct: '+acctVal;
- res.className='ord-result show';
- res.style.borderColor='var(--amb)';
-}
-function submitOrder(){
- var sym=eid('ord-sym').value.trim().toUpperCase();
- if(!sym){toast('Enter a symbol first');return;}
- var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
- if(!key){var res=eid('ord-result');res.innerHTML='<span style="color:var(--wrn)">No Tradier API key configured.</span>';res.className='ord-result show';return;}
- var hasBadKey=key.split('').some(function(c){return c.charCodeAt(0)>255;});
- if(hasBadKey){var res=eid('ord-result');res.innerHTML='<span style="color:var(--wrn)">API key is corrupted — go to API tab and re-enter your key.</span>';res.className='ord-result show';return;}
- var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
- var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
- var acct=eid('ord-acct').value.trim()||G.acctId||localStorage.getItem('rrjcar_acct')||'';
- if(!acct){toast('No account ID - enter in API tab');return;}
- var type=eid('ord-type').value;
- var action=eid('ord-action').value;
- var sideMap={'BUY_TO_OPEN':'buy_to_open','SELL_TO_OPEN':'sell_to_open','BUY_TO_CLOSE':'buy_to_close','SELL_TO_CLOSE':'sell_to_close','BUY':'buy','SELL':'sell'};
- var side=sideMap[action]||action.toLowerCase();
- var qty=eid('ord-qty').value||1;
- var strike=eid('ord-strike').value;
- var expRaw=eid('ord-exp').value;
- var otype=eid('ord-otype').value;
- var lmt=eid('ord-lmt').value;
- var occSym=sym;
- if((type==='CALL'||type==='PUT')&&strike&&expRaw){
-  var parts=expRaw.split('-');
-  if(parts.length===3){
-   var yy=parts[0].slice(2),mm=parts[1],dd=parts[2];
-   var sp=String(Math.round(parseFloat(strike)*1000)).padStart(8,'0');
-   occSym=sym+yy+mm+dd+(type==='CALL'?'C':'P')+sp;
-  }
- }
- var body='class=option'
-  +'&symbol='+encodeURIComponent(sym)
-  +'&option_symbol='+encodeURIComponent(occSym)
-  +'&side='+encodeURIComponent(side)
-  +'&quantity='+qty
-  +'&type='+otype
-  +'&duration=day';
- if(otype==='limit'&&lmt)body+='&price='+lmt;
- if(otype==='stop'&&lmt)body+='&stop='+lmt;
- var res=eid('ord-result');
- res.innerHTML='Submitting...';res.className='ord-result show';res.style.borderColor='var(--amb)';
- fetch(host+'/v1/accounts/'+acct+'/orders',{
-  method:'POST',
-  headers:{Authorization:'Bearer '+key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
-  body:body
- }).then(function(r){var s=r.status;return r.text().then(function(t){return{s:s,t:t};});}).then(function(resp){
-  try{
-   var data=JSON.parse(resp.t);
-   if(data.order&&data.order.id){
-    res.innerHTML='<span style="color:var(--blub)">Order submitted! ID: '+data.order.id+' Status: '+data.order.status+'</span>';
-    res.style.borderColor='var(--blu)';
-    addAlert(sym,'Order: '+side+' x'+qty+' '+occSym,'go');
-    toast('Order submitted: '+data.order.id);
-   } else if(data.errors){
-    var errs=data.errors.error;if(!Array.isArray(errs))errs=[errs];
-    res.innerHTML='<span style="color:var(--wrn)">Error: '+errs.join(' | ')+(errs.join('').toLowerCase().includes('undefined symbol')?'<br><small>Tip: The option contract '+occSym+' may not exist. Check that the expiry date matches a standard Friday expiration available in your broker account.</small>':'')+'</span>';
-    res.style.borderColor='var(--wrn)';
-   } else {
-    res.innerHTML='<span style="color:var(--wrn)">Response: '+JSON.stringify(data).slice(0,200)+'</span>';
-    res.style.borderColor='var(--wrn)';
-   }
-  }catch(e){
-   res.innerHTML='<span style="color:var(--wrn)">Error (HTTP '+resp.s+'): '+resp.t.slice(0,200)+'</span>';
-   res.style.borderColor='var(--wrn)';
-  }
- }).catch(function(e){res.innerHTML='<span style="color:var(--wrn)">Error: '+e.message+'</span>';res.style.borderColor='var(--wrn)';});
-}
-function clearOrder(){
-  ['ord-sym','ord-strike','ord-exp','ord-lmt'].forEach(function(id){eid(id).value='';});
-  eid('ord-qty').value='1';
-  eid('ord-result').className='ord-result';
+  .then(function(data){try{var val=data.balances.total_equity;eid('pos-acctval').textContent=fmtD(val);}catch(e){}}).catch(function(){});
 }
 
 function renderBreadth(){
-  var items=[
-    {l:'S&P 500 Above 200MA',v:62,c:'blu'},{l:'S&P 500 Above 50MA',v:54,c:'blu'},
-    {l:'NYSE Advance/Decline',v:58,c:'amb'},{l:'New 52W Highs',v:38,c:'amb'},
-    {l:'VIX Fear Index',v:72,c:'wrn'},{l:'Put/Call Ratio',v:45,c:'amb'}
-  ];
-  var html='';
-  items.forEach(function(item){
-    html+='<div class="meter-row">'
-      +'<div class="meter-lbl">'+item.l+'</div>'
-      +'<div class="meter-bar"><div class="meter-fill '+item.c+'" style="width:'+item.v+'%"></div></div>'
-      +'<div class="meter-val">'+item.v+'%</div></div>';
-  });
+  var items=[{l:'S&P 500 Above 200MA',v:62,c:'blu'},{l:'S&P 500 Above 50MA',v:54,c:'blu'},{l:'NYSE Advance/Decline',v:58,c:'amb'},{l:'New 52W Highs',v:38,c:'amb'},{l:'VIX Fear Index',v:72,c:'wrn'},{l:'Put/Call Ratio',v:45,c:'amb'}];
+  var html='';items.forEach(function(item){html+='<div class="meter-row"><div class="meter-lbl">'+item.l+'</div><div class="meter-bar"><div class="meter-fill '+item.c+'" style="width:'+item.v+'%"></div></div><div class="meter-val">'+item.v+'%</div></div>';});
   eid('mb-body').innerHTML=html;
-  var sects=[
-    {l:'Industrials',v:71,c:'blu'},{l:'Utilities',v:66,c:'blu'},
-    {l:'Finance',v:61,c:'blu'},{l:'Staples',v:47,c:'amb'},
-    {l:'Materials',v:46,c:'amb'},{l:'Energy',v:33,c:'wrn'},
-    {l:'Technology',v:31,c:'wrn'},{l:'Consumer',v:30,c:'wrn'}
-  ];
-  var sh='';
-  sects.forEach(function(s){
-    sh+='<div class="meter-row">'
-      +'<div class="meter-lbl">'+s.l+'</div>'
-      +'<div class="meter-bar"><div class="meter-fill '+s.c+'" style="width:'+s.v+'%"></div></div>'
-      +'<div class="meter-val">'+s.v+'</div></div>';
-  });
+  var sects=[{l:'Industrials',v:71,c:'blu'},{l:'Utilities',v:66,c:'blu'},{l:'Finance',v:61,c:'blu'},{l:'Staples',v:47,c:'amb'},{l:'Materials',v:46,c:'amb'},{l:'Energy',v:33,c:'wrn'},{l:'Technology',v:31,c:'wrn'},{l:'Consumer',v:30,c:'wrn'}];
+  var sh='';sects.forEach(function(s){sh+='<div class="meter-row"><div class="meter-lbl">'+s.l+'</div><div class="meter-bar"><div class="meter-fill '+s.c+'" style="width:'+s.v+'%"></div></div><div class="meter-val">'+s.v+'</div></div>';});
   eid('sect-body').innerHTML=sh;
 }
 
 function renderAlerts(){
   var list=eid('alerts-list');
   if(!G.alerts.length){list.innerHTML='<div style="padding:12px;color:var(--gry);font-size:11px;">No alerts yet</div>';return;}
-  var html='';
-  G.alerts.forEach(function(a){
-    html+='<div class="alert-item">'
-      +'<div class="alert-dot '+a.type+'"></div>'
-      +'<div class="alert-tk">'+a.tk+'</div>'
-      +'<div class="alert-msg">'+a.msg+'</div>'
-      +'<div class="alert-ts">'+a.ts+'</div>'
-      +'</div>';
-  });
+  var html='';G.alerts.forEach(function(a){html+='<div class="alert-item"><div class="alert-dot '+a.type+'"></div><div class="alert-tk">'+a.tk+'</div><div class="alert-msg">'+a.msg+'</div><div class="alert-ts">'+a.ts+'</div></div>';});
   list.innerHTML=html;
 }
 
 function calcEx(){
-  var wr=+eid('ex-wr').value/100;
-  var aw=+eid('ex-aw').value;
-  var al=+eid('ex-al').value;
-  var tm=+eid('ex-tm').value;
-  var exp=wr*aw-(1-wr)*al;
-  var monthly=exp*tm;
-  var rr=(aw/al).toFixed(2);
+  var wr=+eid('ex-wr').value/100,aw=+eid('ex-aw').value,al=+eid('ex-al').value,tm=+eid('ex-tm').value;
+  var exp=wr*aw-(1-wr)*al,monthly=exp*tm,rr=(aw/al).toFixed(2);
   var res=eid('ex-result');
   res.innerHTML='<div style="color:var(--amb);font-size:11px;line-height:1.8;">'
     +'<b>Expected Value per Trade:</b> <span style="color:'+(exp>=0?'var(--blu)':'var(--wrn)')+'">'+fmtD(exp)+'</span><br>'
     +'<b>Monthly Expectancy ('+tm+' trades):</b> <span style="color:'+(monthly>=0?'var(--blu)':'var(--wrn)')+'">'+fmtD(monthly)+'</span><br>'
     +'<b>Risk/Reward Ratio:</b> '+rr+':1<br>'
-    +'<b>Breakeven Win Rate:</b> '+(al/(aw+al)*100).toFixed(1)+'%'
-    +'</div>';
+    +'<b>Breakeven Win Rate:</b> '+(al/(aw+al)*100).toFixed(1)+'%</div>';
 }
 
 function saveKeys(){
-  var td=eid('api-td').value.trim();
-  var tr=eid('api-tr').value.trim();
-  var mode=eid('api-mode').value;
-  var acct=eid('api-acct').value.trim();
-  if(td)localStorage.setItem('rrjcar_td',td);
-  if(tr)localStorage.setItem('rrjcar_tradier',tr);
+  var td=eid('api-td').value.trim(),tr=eid('api-tr').value.trim(),mode=eid('api-mode').value,acct=eid('api-acct').value.trim();
+  if(td)localStorage.setItem('rrjcar_td',td);if(tr)localStorage.setItem('rrjcar_tradier',tr);
   localStorage.setItem('rrjcar_mode',mode);
   if(acct){localStorage.setItem('rrjcar_acct',acct);G.acctId=acct;eid('ord-acct').value=acct;}
-  eid('td-status').textContent=td?'Key saved':'(unchanged)';
-  eid('td-status').className='api-status '+(td?'ok':'miss');
-  eid('tr-status').textContent=tr?'Key saved':'(unchanged)';
-  eid('tr-status').className='api-status '+(tr?'ok':'miss');
-  eid('acct-status').textContent=acct?'Account saved':'(unchanged)';
-  eid('acct-status').className='api-status '+(acct?'ok':'miss');
-  var badge=eid('mode-badge');
-  badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
-  badge.style.background=mode==='live'?'var(--wrn3)':'var(--amb3)';
-  badge.style.color=mode==='live'?'var(--wrn)':'var(--ambb)';
+  eid('td-status').textContent=td?'Key saved':'(unchanged)';eid('td-status').className='api-status '+(td?'ok':'miss');
+  eid('tr-status').textContent=tr?'Key saved':'(unchanged)';eid('tr-status').className='api-status '+(tr?'ok':'miss');
+  eid('acct-status').textContent=acct?'Account saved':'(unchanged)';eid('acct-status').className='api-status '+(acct?'ok':'miss');
+  var badge=eid('mode-badge');badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
+  badge.style.background=mode==='live'?'var(--wrn3)':'var(--amb3)';badge.style.color=mode==='live'?'var(--wrn)':'var(--ambb)';
   toast('API settings saved');
 }
 
 function clearKeys(){
   ['rrjcar_td','rrjcar_tradier','rrjcar_mode','rrjcar_acct'].forEach(function(k){localStorage.removeItem(k);});
-  eid('api-td').value='';eid('api-tr').value='';eid('api-acct').value='';
-  G.acctId='';eid('ord-acct').value='';
+  eid('api-td').value='';eid('api-tr').value='';eid('api-acct').value='';G.acctId='';eid('ord-acct').value='';
   eid('td-status').textContent='Cleared';eid('td-status').className='api-status miss';
   eid('tr-status').textContent='Cleared';eid('tr-status').className='api-status miss';
   eid('acct-status').textContent='Cleared';eid('acct-status').className='api-status miss';
@@ -1248,71 +1596,46 @@ function clearKeys(){
 }
 
 function loadKeys(){
- var _trRaw=localStorage.getItem('rrjcar_tradier')||'';
- var _tdRaw=localStorage.getItem('rrjcar_td')||'';
- var _hasBadTr=_trRaw.length>0&&_trRaw.split('').some(function(c){return c.charCodeAt(0)>255;});
- var _hasBadTd=_tdRaw.length>0&&_tdRaw.split('').some(function(c){return c.charCodeAt(0)>255;});
- if(_hasBadTr){localStorage.removeItem('rrjcar_tradier');}
- if(_hasBadTd){localStorage.removeItem('rrjcar_td');}
- var td=localStorage.getItem('rrjcar_td')||'';
- var tr=localStorage.getItem('rrjcar_tradier')||'';
- var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
- var acct=localStorage.getItem('rrjcar_acct')||'';
- if(td&&!_hasBadTd){eid('api-td').value='';eid('td-status').textContent='Key saved (hidden)';eid('td-status').className='api-status ok';}
- else if(_hasBadTd){eid('td-status').textContent='Key corrupted - please re-enter';eid('td-status').className='api-status miss';}
- else{eid('td-status').textContent='Not set';eid('td-status').className='api-status miss';}
- if(tr&&!_hasBadTr){eid('api-tr').value='';eid('tr-status').textContent='Key saved (hidden)';eid('tr-status').className='api-status ok';}
- else if(_hasBadTr){eid('tr-status').textContent='Key corrupted - please re-enter your Tradier API key';eid('tr-status').className='api-status miss';}
- else{eid('tr-status').textContent='Not set';eid('tr-status').className='api-status miss';}
- if(acct){eid('api-acct').value=acct;eid('acct-status').textContent='Account loaded';eid('acct-status').className='api-status ok';G.acctId=acct;eid('ord-acct').value=acct;}
- else{eid('acct-status').textContent='Not set - enter account number';eid('acct-status').className='api-status miss';}
- eid('api-mode').value=mode;
- var badge=eid('mode-badge');
- badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
- if(mode==='live'){badge.style.background='var(--wrn3)';badge.style.color='var(--wrn)';}
+  var _trRaw=localStorage.getItem('rrjcar_tradier')||'',_tdRaw=localStorage.getItem('rrjcar_td')||'';
+  var _hasBadTr=_trRaw.length>0&&_trRaw.split('').some(function(c){return c.charCodeAt(0)>255;});
+  var _hasBadTd=_tdRaw.length>0&&_tdRaw.split('').some(function(c){return c.charCodeAt(0)>255;});
+  if(_hasBadTr)localStorage.removeItem('rrjcar_tradier');if(_hasBadTd)localStorage.removeItem('rrjcar_td');
+  var td=localStorage.getItem('rrjcar_td')||'',tr=localStorage.getItem('rrjcar_tradier')||'',mode=localStorage.getItem('rrjcar_mode')||'sandbox',acct=localStorage.getItem('rrjcar_acct')||'';
+  if(td&&!_hasBadTd){eid('api-td').value='';eid('td-status').textContent='Key saved (hidden)';eid('td-status').className='api-status ok';}
+  else if(_hasBadTd){eid('td-status').textContent='Key corrupted - please re-enter';eid('td-status').className='api-status miss';}
+  else{eid('td-status').textContent='Not set';eid('td-status').className='api-status miss';}
+  if(tr&&!_hasBadTr){eid('api-tr').value='';eid('tr-status').textContent='Key saved (hidden)';eid('tr-status').className='api-status ok';}
+  else if(_hasBadTr){eid('tr-status').textContent='Key corrupted - please re-enter your Tradier API key';eid('tr-status').className='api-status miss';}
+  else{eid('tr-status').textContent='Not set';eid('tr-status').className='api-status miss';}
+  if(acct){eid('api-acct').value=acct;eid('acct-status').textContent='Account loaded';eid('acct-status').className='api-status ok';G.acctId=acct;eid('ord-acct').value=acct;}
+  else{eid('acct-status').textContent='Not set - enter account number';eid('acct-status').className='api-status miss';}
+  eid('api-mode').value=mode;
+  var badge=eid('mode-badge');badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
+  if(mode==='live'){badge.style.background='var(--wrn3)';badge.style.color='var(--wrn)';}
 }
 function updateClock(){
-  var now=new Date();
-  var h=now.getHours(),m=now.getMinutes(),s=now.getSeconds();
-  var ampm=h>=12?'PM':'AM';
-  h=h%12||12;
-  var ts=[h,m<10?'0'+m:m,s<10?'0'+s:s].join(':')+' '+ampm+' CST';
-  eid('clk').textContent=ts;
+  var now=new Date();var h=now.getHours(),m=now.getMinutes(),s=now.getSeconds();
+  var ampm=h>=12?'PM':'AM';h=h%12||12;
+  var ts=[h,m<10?'0'+m:m,s<10?'0'+s:s].join(':')+' '+ampm+' CST';eid('clk').textContent=ts;
   var day=now.getDay(),hr=now.getHours(),min=now.getMinutes();
-  var isWeekday=day>=1&&day<=5;
-  var mktOpen=isWeekday&&(hr>8||(hr===8&&min>=30))&&hr<15;
+  var isWeekday=day>=1&&day<=5;var mktOpen=isWeekday&&(hr>8||(hr===8&&min>=30))&&hr<15;
   eid('mkt-status').textContent=mktOpen?'MARKET OPEN':'MARKET CLOSED';
   eid('mkt-status').style.color=mktOpen?'var(--blu)':'var(--gry)';
 }
-
 function updateHeaderQuotes(){
-  var tickers=['SPY','QQQ','DIA','IWM','VIX'];
-  var ids=['spy','qqq','dia','iwm','vix'];
+  var tickers=['SPY','QQQ','DIA','IWM','VIX'],ids=['spy','qqq','dia','iwm','vix'];
   tickers.forEach(function(t,i){
-    var q=simQuote(t);
-    var el=eid('h-'+ids[i]);
-    if(el)el.textContent='$'+fmt2(q.price);
+    var q=simQuote(t);var el=eid('h-'+ids[i]);if(el)el.textContent='$'+fmt2(q.price);
     var cel=eid('h-'+ids[i]+'-c');
-    if(cel){
-      var chgStr=(q.changePct>=0?'+':'')+fmtP(q.changePct);
-      cel.textContent='('+chgStr+')';
-      cel.className='tc '+(q.changePct>=0?'up':'dn');
-    }
+    if(cel){var chgStr=(q.changePct>=0?'+':'')+fmtP(q.changePct);cel.textContent='('+chgStr+')';cel.className='tc '+(q.changePct>=0?'up':'dn');}
   });
 }
-
 function init(){
-  loadKeys();
-  loadWL();
-  updateClock();
-  updateHeaderQuotes();
-  setInterval(updateClock,1000);
-  setInterval(updateHeaderQuotes,30000);
-  runScan();
-  refreshWL();
+  loadKeys();loadWL();updateClock();updateHeaderQuotes();
+  setInterval(updateClock,1000);setInterval(updateHeaderQuotes,30000);
+  runScan();refreshWL();
   addAlert('SYS','RRJCAR Terminal v3.3 initialized','go');
 }
-
 window.addEventListener('DOMContentLoaded',init);
 </script>
 </body>
