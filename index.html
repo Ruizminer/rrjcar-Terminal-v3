@@ -761,61 +761,75 @@ function parseOccSymbol(sym){
 }
 
 function fetchPositions(){
-  var key='';
-  try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
-  var mode='sandbox';
-  try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
-  if(!key){renderSimPositions();return;}
+  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+  if(!key){
+    eid('pos-src').textContent='[NO API KEY]';
+    eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No Tradier API key configured.<br>Go to the API tab to enter your key.</p></div>';
+    eid('pos-pnl').textContent='$0.00';eid('pos-daypnl').textContent='$0.00';
+    eid('pos-count').textContent='0';eid('pos-acctval').textContent='--';
+    return;
+  }
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
   eid('pos-src').textContent='Loading from Tradier '+mode+'...';
+  eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Fetching positions...</p></div>';
   fetch(host+'/v1/user/profile',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-  .then(function(r){return r.json();})
+  .then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  })
   .then(function(data){
     var acct='';
     try{
       var prof=data.profile;
-      if(prof.account&&prof.account.account_number)acct=prof.account.account_number;
-      else if(Array.isArray(prof.account))acct=prof.account[0].account_number;
+      if(prof&&prof.account){
+        if(Array.isArray(prof.account))acct=prof.account[0].account_number;
+        else acct=prof.account.account_number;
+      }
     }catch(e){}
-    if(!acct){renderSimPositions();return;}
+    if(!acct){showPosError('Could not read account number from Tradier response.');return;}
     G.acctId=acct;
     eid('ord-acct').value=acct;
     return fetch(host+'/v1/accounts/'+acct+'/positions',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}});
   })
-  .then(function(r){return r?r.json():null;})
+  .then(function(r){
+    if(!r)return null;
+    if(!r.ok)throw new Error('Positions HTTP '+r.status);
+    return r.json();
+  })
   .then(function(data){
-    if(!data){renderSimPositions();return;}
+    if(!data){showPosError('No data returned from Tradier.');return;}
     var pos=[];
     try{
       var pd=data.positions;
-      if(pd==='null'||!pd){renderSimPositions();return;}
+      if(!pd||pd==='null'){
+        renderPositionsTable([],'['+mode.toUpperCase()+' — No open positions]');
+        return;
+      }
       var arr=pd.position;
       if(!Array.isArray(arr))arr=[arr];
       arr.forEach(function(p){
         var parsed=parseOccSymbol(p.symbol);
+        var last=parseFloat(p.last_price)||0;
+        var cost=parseFloat(p.cost_basis)||0;
+        var qty=parseInt(p.quantity)||0;
+        var pnl=last*Math.abs(qty)*100-cost;
+        var pnlPct=cost?((pnl/cost)*100):0;
         pos.push({symbol:p.symbol,underlying:parsed.underlying,type:parsed.type,
-          strike:parsed.strike,exp:parsed.exp,qty:p.quantity,
-          cost:p.cost_basis,last:p.last_price||0,
-          pnl:(p.last_price||0)*p.quantity*100-p.cost_basis,
-          pnlPct:p.cost_basis?((((p.last_price||0)*p.quantity*100-p.cost_basis)/p.cost_basis)*100):0});
+          strike:parsed.strike,exp:parsed.exp,qty:qty,cost:cost,last:last,
+          pnl:pnl,pnlPct:pnlPct});
       });
-    }catch(e){renderSimPositions();return;}
+    }catch(e){showPosError('Error parsing positions: '+e.message);return;}
     G.positions=pos;
-    renderPositionsTable(pos,'[LIVE '+mode.toUpperCase()+']');
+    renderPositionsTable(pos,'[TRADIER '+mode.toUpperCase()+']');
+    fetchBalances();
   })
-  .catch(function(){renderSimPositions();});
+  .catch(function(e){showPosError('Tradier API error: '+e.message);});
 }
 
-function renderSimPositions(){
-  var pos=[
-    {symbol:'AAPL240119C00150000',underlying:'AAPL',type:'CALL',strike:150,exp:'2024-01-19',qty:2,cost:1250,last:8.40,pnl:430,pnlPct:34.4},
-    {symbol:'MSFT240119C00380000',underlying:'MSFT',type:'CALL',strike:380,exp:'2024-01-19',qty:1,cost:820,last:11.20,pnl:300,pnlPct:36.6},
-    {symbol:'JPM240216C00180000',underlying:'JPM',type:'CALL',strike:180,exp:'2024-02-16',qty:3,cost:2100,last:6.80,pnl:-60,pnlPct:-2.9},
-    {symbol:'NVDA240216C00600000',underlying:'NVDA',type:'CALL',strike:600,exp:'2024-02-16',qty:1,cost:1500,last:18.50,pnl:350,pnlPct:23.3},
-    {symbol:'GS240315C00400000',underlying:'GS',type:'CALL',strike:400,exp:'2024-03-15',qty:2,cost:1800,last:9.20,pnl:40,pnlPct:2.2}
-  ];
-  G.positions=pos;
-  renderPositionsTable(pos,'[SIMULATED]');
+function showPosError(msg){
+  eid('pos-src').textContent='[ERROR]';
+  eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p style="color:var(--wrn);">'+msg+'</p><p style="color:var(--gry);margin-top:8px;">Check API key in the API tab.</p></div>';
 }
 
 function renderPositionsTable(pos,srcLabel){
