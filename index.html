@@ -153,6 +153,19 @@ tr.sel-row td{background:var(--blu3);}
 .ts-log-line.triggered{color:var(--grn);}
 .ts-log-line.warn{color:var(--wrn);}
 .ts-log-line.info{color:var(--gry);}
+/* ── PER-ROW TRAILING STOP ── */
+.ts-row-cfg{background:var(--bg0);border-top:1px solid var(--amb3);padding:6px 10px;display:none;}
+.ts-row-cfg.open{display:table-row;}
+.ts-row-cfg td{padding:6px 10px!important;background:var(--bg0)!important;}
+.ts-inline{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+.ts-inline-field{display:flex;flex-direction:column;gap:2px;}
+.ts-inline-field label{color:var(--gry);font-size:9px;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;}
+.ts-inline-field input{background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:11px;padding:3px 6px;width:60px;}
+.ts-inline-field input:focus{border-color:var(--amb);outline:none;}
+.ts-inline-field select{background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:11px;padding:3px 5px;width:100px;}
+.ts-inline-sep{width:1px;background:var(--gry2);align-self:stretch;margin:0 2px;}
+.ts-enable-btn{font-size:10px;padding:3px 8px;white-space:nowrap;}
+.ts-armed-indicator{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:3px;vertical-align:middle;}
 .pos-src{color:var(--gry);font-size:10px;margin-left:auto;}
 .pnl-pos{color:var(--blu);}
 .pnl-neg{color:var(--wrn);}
@@ -352,42 +365,11 @@ tr.sel-row td{background:var(--blu3);}
     <div class="ts-panel-hdr">
       <input type="checkbox" id="ts-toggle" onchange="toggleTrailingStop()">
       <label for="ts-toggle">&#9652; TRAILING STOP</label>
-      <span style="color:var(--gry);font-size:10px;">Monitor all open positions — auto-close on pullback from peak</span>
+      <span style="color:var(--gry);font-size:10px;">Enable per-position trailing stops using the settings in each row below</span>
       <span id="ts-poll-status" style="color:var(--gry2);font-size:10px;margin-left:auto;"></span>
     </div>
     <div id="ts-cfg" style="display:none;">
       <div class="ts-cfg">
-        <div class="ts-field">
-          <label>Activate at</label>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <input type="number" id="ts-activate" value="50" min="0" step="1" placeholder="50">
-            <span style="color:var(--gry);font-size:10px;">% return</span>
-          </div>
-        </div>
-        <div class="ts-field">
-          <label>Close on</label>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <input type="number" id="ts-pullback" value="15" min="1" step="1" placeholder="15">
-            <span style="color:var(--gry);font-size:10px;">% pullback from high</span>
-          </div>
-        </div>
-        <div class="ts-divider"></div>
-        <div style="color:var(--gry);font-size:9px;font-weight:700;letter-spacing:.5px;align-self:flex-end;padding-bottom:4px;">DISABLE IF... <span style="color:var(--gry2);font-weight:400;">(optional)</span></div>
-        <div class="ts-field">
-          <label>Return % less than</label>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <input type="number" id="ts-dis-ret" placeholder="--" min="0" step="1">
-            <span style="color:var(--gry);font-size:10px;">%</span>
-          </div>
-        </div>
-        <div class="ts-field">
-          <label>Pullback more than</label>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <input type="number" id="ts-dis-pull" placeholder="--" min="0" step="1">
-            <span style="color:var(--gry);font-size:10px;">% from high</span>
-          </div>
-        </div>
-        <div class="ts-divider"></div>
         <div class="ts-field">
           <label>Poll interval</label>
           <div style="display:flex;align-items:center;gap:4px;">
@@ -396,14 +378,16 @@ tr.sel-row td{background:var(--blu3);}
           </div>
         </div>
         <div class="ts-field" style="align-self:flex-end;">
-          <label>Close via</label>
+          <label>Default close via</label>
           <select id="ts-close-mode" style="background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:11px;padding:4px 6px;width:110px;">
             <option value="step">Step Fill</option>
             <option value="market">Market Order</option>
           </select>
         </div>
+        <div class="ts-field" style="align-self:flex-end;">
+          <button class="btn" style="font-size:10px;padding:3px 10px;" onclick="resetTsState()">&#8635; RESET STATE</button>
+        </div>
       </div>
-      <div class="ts-status-row" id="ts-status-row"></div>
       <div class="ts-log" id="ts-log"></div>
     </div>
   </div>
@@ -659,7 +643,7 @@ var UNIVERSE=[
 var G={results:[],filtered:[],gexData:[],wlTickers:[],positions:[],alerts:[],
   sortCol:'score',sortDir:-1,selTicker:null,scanRunning:false,acctId:'',detailOpt:null,
   liveQuote:null,stepFillActive:false,stepFillCancel:false,quoteRefreshTimer:null,
-  tsActive:false,tsTimer:null,tsState:{},tsTriggered:{}};
+  tsActive:false,tsTimer:null,tsState:{},tsTriggered:{},tsConfig:{}};
 
 function eid(id){return document.getElementById(id);}
 function fmt2(n){return isNaN(n)?'--':(+n).toFixed(2);}
@@ -1604,36 +1588,183 @@ function fetchPositionsDirect(key,mode,host,acct){
 }
 function showPosError(msg){eid('pos-src').textContent='[ERROR]';eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p style="color:var(--wrn);">'+msg+'</p><p style="color:var(--gry);margin-top:8px;">Check API key in the API tab.</p></div>';}
 
+function getTsConfig(sym){
+  // Return per-position config, falling back to sensible defaults
+  return G.tsConfig[sym] || {
+    enabled: false,
+    activate: 50,
+    pullback: 15,
+    disRet: '',
+    disPull: '',
+    closeMode: 'step'
+  };
+}
+
+function saveTsConfig(sym){
+  var cfg = G.tsConfig[sym] || {};
+  var row = document.querySelector('tr[data-sym="'+sym+'"]');
+  if(!row) return;
+  // Read values from the inline config row that follows this row
+  var cfgRow = document.getElementById('tscfg-'+sym);
+  if(!cfgRow) return;
+  cfg.enabled  = cfgRow.querySelector('.tsc-enabled').checked;
+  cfg.activate = parseFloat(cfgRow.querySelector('.tsc-activate').value) || 50;
+  cfg.pullback = parseFloat(cfgRow.querySelector('.tsc-pullback').value) || 15;
+  cfg.disRet   = parseFloat(cfgRow.querySelector('.tsc-disret').value)  || '';
+  cfg.disPull  = parseFloat(cfgRow.querySelector('.tsc-dispull').value) || '';
+  cfg.closeMode= cfgRow.querySelector('.tsc-closemode').value;
+  G.tsConfig[sym] = cfg;
+  // Reset state if re-configuring
+  if(G.tsState[sym] && G.tsState[sym].status !== 'triggered'){
+    delete G.tsState[sym];
+    delete G.tsTriggered[sym];
+  }
+  tsLog(sym+': config saved (activate '+cfg.activate+'%, pullback '+cfg.pullback+'%, close: '+cfg.closeMode+')', 'info');
+  toast('Trail stop saved for '+sym);
+}
+
+function toggleTsRow(sym){
+  var cfgRow = document.getElementById('tscfg-'+sym);
+  if(!cfgRow) return;
+  var isOpen = cfgRow.classList.contains('open');
+  // Close all other open rows first
+  document.querySelectorAll('.ts-row-cfg.open').forEach(function(r){ r.classList.remove('open'); });
+  if(!isOpen) cfgRow.classList.add('open');
+}
+
 function renderPositionsTable(pos,srcLabel){
   eid('pos-src').textContent=srcLabel||'';
   var wrap=eid('pos-tbl-wrap');
   if(!pos.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No open positions</p></div>';return;}
   var totalPnl=0,totalCost=0;pos.forEach(function(p){totalPnl+=p.pnl;totalCost+=p.cost;});
-  var html='<table><thead><tr><th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th><th>QTY</th><th>AVG COST</th><th>LAST</th><th>P&L $</th><th>P&L %</th><th>TRAIL STOP</th><th>STATUS</th><th>ACTION</th></tr></thead><tbody>';
+  var colCount = 13; // total columns
+  var html='<table><thead><tr>'
+    +'<th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th><th>QTY</th>'
+    +'<th>AVG COST</th><th>LAST</th><th>P&L $</th><th>P&L %</th>'
+    +'<th>TRAIL STOP</th><th>STATUS</th><th>ACTION</th><th></th>'
+    +'</tr></thead><tbody>';
+
   pos.forEach(function(p){
-    var pnlCls=p.pnl>=0?'pnl-pos':'pnl-neg';var statusBadge=p.pnl>=0?'<span class="badge go">PROFIT</span>':'<span class="badge nogo">LOSS</span>';
-    var tk=p.underlying,tp=p.type,st=p.strike,ex=p.exp,qty=Math.abs(p.qty);
+    var pnlCls  = p.pnl>=0?'pnl-pos':'pnl-neg';
+    var statusBadge = p.pnl>=0?'<span class="badge go">PROFIT</span>':'<span class="badge nogo">LOSS</span>';
+    var tk=p.underlying, tp=p.type, st=p.strike, ex=p.exp, qty=Math.abs(p.qty);
     var sym=p.symbol;
-    var tsState=G.tsState[sym]||{status:'inactive',peak:0,peakPct:0};
-    var tsLabel={inactive:'INACTIVE',watching:'WATCHING',armed:'ARMED \u25b2',triggered:'TRIGGERED \u2713',disabled:'DISABLED'}[tsState.status]||'--';
-    var tsCls=tsState.status||'inactive';
-    var tsInfo=tsState.status==='armed'?(' | peak: +'+fmt2(tsState.peakPct)+'%'):(tsState.status==='watching'?(' | ret: +'+fmt2(p.pnlPct)+'%'):'');
-    var trailCell='<span class="ts-badge '+tsCls+'"><span class="ts-dot"></span>'+tsLabel+'</span>'+
-      (tsInfo?'<span style="color:var(--gry);font-size:9px;margin-left:4px;">'+tsInfo+'</span>':'');
-    html+='<tr data-tk="'+tk+'" data-tp="'+tp+'" data-st="'+st+'" data-ex="'+ex+'" data-qty="'+qty+'" data-sym="'+sym+'">'
-      +'<td><b>'+sym+'</b></td><td>'+p.type+'</td><td>$'+fmt2(p.strike)+'</td><td>'+p.exp+'</td><td>'+p.qty+'</td>'
-      +'<td>$'+fmt2(p.cost)+'</td><td>$'+fmt2(p.last)+'</td>'
+    var tsState = G.tsState[sym]||{status:'inactive',peak:0,peakPct:0};
+    var cfg = getTsConfig(sym);
+
+    // Trail stop badge
+    var tsLabel = {inactive:'INACTIVE',watching:'WATCHING',armed:'ARMED \u25b2',triggered:'TRIGGERED \u2713',disabled:'DISABLED'}[tsState.status]||'--';
+    var tsCls   = tsState.status||'inactive';
+    // If config not enabled, override to show OFF
+    if(!cfg.enabled && tsState.status==='inactive') { tsLabel='OFF'; tsCls='inactive'; }
+    var tsInfo  = tsState.status==='armed'?(' peak: +'+fmt2(tsState.peakPct)+'%')
+                : tsState.status==='watching'?(' +'+fmt2(p.pnlPct)+'%')
+                : cfg.enabled&&tsState.status==='inactive'?' (activate: '+cfg.activate+'%)' : '';
+    var trailBadge = '<span class="ts-badge '+tsCls+'">'
+      +'<span class="ts-dot"></span>'+tsLabel+'</span>'
+      +(tsInfo?'<span style="color:var(--gry);font-size:9px;margin-left:4px;">'+tsInfo+'</span>':'');
+
+    // Per-row cfg: preserve existing values if already configured
+    var cfgActivate  = cfg.activate  || 50;
+    var cfgPullback  = cfg.pullback  || 15;
+    var cfgDisRet    = cfg.disRet    || '';
+    var cfgDisPull   = cfg.disPull   || '';
+    var cfgCloseMode = cfg.closeMode || 'step';
+    var cfgEnabled   = cfg.enabled   || false;
+
+    html += '<tr data-tk="'+tk+'" data-tp="'+tp+'" data-st="'+st+'" data-ex="'+ex+'" data-qty="'+qty+'" data-sym="'+sym+'">'
+      +'<td><b>'+sym+'</b></td>'
+      +'<td>'+p.type+'</td>'
+      +'<td>$'+fmt2(p.strike)+'</td>'
+      +'<td>'+p.exp+'</td>'
+      +'<td>'+p.qty+'</td>'
+      +'<td>$'+fmt2(p.cost)+'</td>'
+      +'<td>$'+fmt2(p.last)+'</td>'
       +'<td class="'+pnlCls+'">'+(p.pnl>=0?'+':'')+fmtD(p.pnl)+'</td>'
       +'<td class="'+pnlCls+'">'+(p.pnlPct>=0?'+':'')+fmtP(p.pnlPct)+'</td>'
-      +'<td>'+trailCell+'</td>'
+      +'<td>'+trailBadge+'</td>'
       +'<td>'+statusBadge+'</td>'
       +'<td><button class="cbtn" onclick="doClose(this)">CLOSE</button></td>'
+      +'<td><button class="btn ts-enable-btn" style="'+(cfgEnabled?'border-color:var(--grn);color:var(--grn);':'')+'" '
+        +'onclick="toggleTsRow(\''+sym+'\')">&#9652; TRAIL</button></td>'
       +'</tr>';
+
+    // Inline config expansion row
+    html += '<tr id="tscfg-'+sym+'" class="ts-row-cfg">'
+      +'<td colspan="'+colCount+'">'
+      +'<div class="ts-inline">'
+
+      // Enable toggle
+      +'<div class="ts-inline-field" style="justify-content:flex-end;">'
+      +'<label>Enable</label>'
+      +'<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">'
+      +'<input type="checkbox" class="tsc-enabled" '+(cfgEnabled?'checked':'')+' style="width:auto;">'
+      +'<span style="color:var(--gry);font-size:10px;">Active</span>'
+      +'</div></div>'
+
+      +'<div class="ts-inline-sep"></div>'
+
+      // Activate at
+      +'<div class="ts-inline-field">'
+      +'<label>Activate at</label>'
+      +'<div style="display:flex;align-items:center;gap:4px;">'
+      +'<input type="number" class="tsc-activate" value="'+cfgActivate+'" min="0" step="1">'
+      +'<span style="color:var(--gry);font-size:10px;">% return</span>'
+      +'</div></div>'
+
+      // Pullback
+      +'<div class="ts-inline-field">'
+      +'<label>Close on</label>'
+      +'<div style="display:flex;align-items:center;gap:4px;">'
+      +'<input type="number" class="tsc-pullback" value="'+cfgPullback+'" min="1" step="1">'
+      +'<span style="color:var(--gry);font-size:10px;">% pullback</span>'
+      +'</div></div>'
+
+      +'<div class="ts-inline-sep"></div>'
+      +'<span style="color:var(--gry);font-size:9px;font-weight:700;letter-spacing:.5px;align-self:center;">DISABLE IF</span>'
+
+      // Disable if return <
+      +'<div class="ts-inline-field">'
+      +'<label>Return &lt;</label>'
+      +'<div style="display:flex;align-items:center;gap:4px;">'
+      +'<input type="number" class="tsc-disret" value="'+cfgDisRet+'" placeholder="--" min="0" step="1">'
+      +'<span style="color:var(--gry);font-size:10px;">%</span>'
+      +'</div></div>'
+
+      // Disable if pullback >
+      +'<div class="ts-inline-field">'
+      +'<label>Pullback &gt;</label>'
+      +'<div style="display:flex;align-items:center;gap:4px;">'
+      +'<input type="number" class="tsc-dispull" value="'+cfgDisPull+'" placeholder="--" min="0" step="1">'
+      +'<span style="color:var(--gry);font-size:10px;">% from high</span>'
+      +'</div></div>'
+
+      +'<div class="ts-inline-sep"></div>'
+
+      // Close via
+      +'<div class="ts-inline-field">'
+      +'<label>Close via</label>'
+      +'<select class="tsc-closemode">'
+      +'<option value="step"'+(cfgCloseMode==='step'?' selected':'')+'>Step Fill</option>'
+      +'<option value="market"'+(cfgCloseMode==='market'?' selected':'')+'>Market</option>'
+      +'</select></div>'
+
+      // Save + Reset buttons
+      +'<div class="ts-inline-field" style="justify-content:flex-end;">'
+      +'<label>&nbsp;</label>'
+      +'<div style="display:flex;gap:6px;">'
+      +'<button class="btn grn" style="font-size:10px;padding:3px 10px;" onclick="saveTsConfig(\''+sym+'\')">SAVE</button>'
+      +'<button class="btn wrn" style="font-size:10px;padding:3px 8px;" onclick="resetOneTsState(\''+sym+'\')">RESET</button>'
+      +'</div></div>'
+
+      +'</div>'  // .ts-inline
+      +'</td></tr>';
   });
-  html+='</tbody></table>';wrap.innerHTML=html;
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
   var pnlEl=eid('pos-pnl');pnlEl.textContent=fmtD(totalPnl);pnlEl.className='stat-val '+(totalPnl>=0?'go':'nogo');
   eid('pos-daypnl').textContent=fmtD(totalPnl*0.3);eid('pos-count').textContent=pos.length;
-  renderTsStatusRow();
 }
 
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
@@ -1695,20 +1826,25 @@ function renderTsStatusRow(){
 
 async function runTsCheck(){
   if(!G.tsActive||!G.positions.length){stopTsPoller();return;}
-  var activateAt=parseFloat(eid('ts-activate').value)||50;
-  var pullbackPct=parseFloat(eid('ts-pullback').value)||15;
-  var disRet=parseFloat(eid('ts-dis-ret').value)||null;
-  var disPull=parseFloat(eid('ts-dis-pull').value)||null;
-  var closeMode=eid('ts-close-mode').value||'step';
-
+  var defaultCloseMode=eid('ts-close-mode').value||'step';
   eid('ts-poll-status').textContent='Checking... '+new Date().toLocaleTimeString();
 
-  // Fetch fresh quotes for all positions
   var creds=getTradierCreds();
   for(var i=0;i<G.positions.length;i++){
     var p=G.positions[i];
     var sym=p.symbol;
-    if(G.tsTriggered[sym])continue; // already fired
+
+    // Skip if this position has no trailing stop enabled
+    var cfg=getTsConfig(sym);
+    if(!cfg.enabled)continue;
+    if(G.tsTriggered[sym])continue;
+
+    // Per-position settings
+    var activateAt  = cfg.activate  || 50;
+    var pullbackPct = cfg.pullback  || 15;
+    var disRet      = cfg.disRet    || null;
+    var disPull     = cfg.disPull   || null;
+    var closeMode   = cfg.closeMode || defaultCloseMode;
 
     // Refresh quote
     if(creds){
@@ -1727,7 +1863,6 @@ async function runTsCheck(){
 
     var ret=p.pnlPct;
     if(!G.tsState[sym])G.tsState[sym]={status:'inactive',peak:p.pnl,peakPct:ret};
-
     var st=G.tsState[sym];
 
     // Update peak
@@ -1736,20 +1871,19 @@ async function runTsCheck(){
       if(st.status==='armed')tsLog(p.underlying+': new peak +'+fmt2(ret)+'%','armed');
     }
 
-    // Check disable guards first
+    // Disable guards
     var disabledByRet=disRet&&ret<disRet;
     var pullFromHigh=st.peakPct>0?((st.peakPct-ret)/st.peakPct*100):0;
     var disabledByPull=disPull&&pullFromHigh>disPull;
-
     if(disabledByRet||disabledByPull){
       if(st.status!=='disabled'){
         st.status='disabled';
-        tsLog(p.underlying+': trailing stop DISABLED ('+(disabledByRet?'ret '+fmt2(ret)+'% < '+disRet+'%':'')+(disabledByPull?'pullback '+fmt2(pullFromHigh)+'% > '+disPull+'%':'')+')','warn');
+        tsLog(p.underlying+': DISABLED ('+(disabledByRet?'ret '+fmt2(ret)+'% < '+disRet+'%':'')+(disabledByPull?'pullback '+fmt2(pullFromHigh)+'% > '+disPull+'%':'')+')','warn');
       }
       continue;
     }
 
-    // Watching \u2192 Armed
+    // Watching -> Armed
     if(st.status==='inactive'||st.status==='watching'){
       if(ret>=activateAt){
         st.status='armed';
@@ -1760,9 +1894,9 @@ async function runTsCheck(){
       }
     }
 
-    // Armed \u2192 Triggered
+    // Armed -> Triggered
     if(st.status==='armed'){
-      var pullback=st.peakPct>0?((st.peakPct-ret)):0;
+      var pullback=st.peakPct>0?(st.peakPct-ret):0;
       var pullbackFromHighPct=st.peakPct>0?((pullback/st.peakPct)*100):0;
       if(pullbackFromHighPct>=pullbackPct){
         st.status='triggered';
@@ -1775,10 +1909,17 @@ async function runTsCheck(){
     }
   }
 
-  // Re-render table with updated states
   if(G.positions.length)renderPositionsTable(G.positions,eid('pos-src').textContent);
   var sec=parseInt(eid('ts-interval').value)||30;
   eid('ts-poll-status').textContent='Last check: '+new Date().toLocaleTimeString()+' | next in '+sec+'s';
+}
+
+function resetOneTsState(sym){
+  delete G.tsState[sym];
+  delete G.tsTriggered[sym];
+  tsLog(sym+': state reset','info');
+  toast('Trail stop reset for '+sym);
+  if(G.positions.length)renderPositionsTable(G.positions,eid('pos-src').textContent);
 }
 
 function executeTsClose(p,closeMode,creds){
@@ -1820,13 +1961,13 @@ function executeTsClose(p,closeMode,creds){
 
 function resetTsState(){
   G.tsState={};G.tsTriggered={};
-  renderTsStatusRow();
-  tsLog('Trailing stop state reset','info');
+  tsLog('All trailing stop states reset','info');
+  if(G.positions.length)renderPositionsTable(G.positions,eid('pos-src').textContent);
 }
 
 function clearPositions(){
   G.positions=[];
-  stopTsPoller();G.tsState={};G.tsTriggered={};
+  stopTsPoller();G.tsState={};G.tsTriggered={};G.tsConfig={};
   if(eid('ts-toggle'))eid('ts-toggle').checked=false;
   if(eid('ts-cfg'))eid('ts-cfg').style.display='none';
   G.tsActive=false;
