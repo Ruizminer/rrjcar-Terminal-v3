@@ -195,6 +195,26 @@ tr.sel-row td{background:var(--blu3);}
 
 /* ── STEP FILL ── */
 .step-fill-box{background:var(--bg1);border:1px solid var(--grn3);border-radius:4px;padding:12px 14px;margin-bottom:12px;}
+/* ── P&L PAYOFF CHART ── */
+.pnl-chart-wrap{background:var(--bg1);border:1px solid var(--amb3);border-radius:4px;padding:10px 12px;margin-top:10px;}
+.pnl-chart-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;}
+.pnl-chart-title{color:var(--amb);font-size:10px;font-weight:700;letter-spacing:.5px;}
+.pnl-chart-stats{display:flex;gap:14px;flex-wrap:wrap;}
+.pnl-stat{text-align:center;}
+.pnl-stat-lbl{color:var(--gry);font-size:9px;letter-spacing:.5px;text-transform:uppercase;}
+.pnl-stat-val{font-size:13px;font-weight:700;margin-top:1px;}
+.pnl-stat-val.pos{color:var(--grn);}
+.pnl-stat-val.neg{color:var(--wrn);}
+.pnl-stat-val.neu{color:var(--ambb);}
+.pnl-canvas-wrap{position:relative;width:100%;}
+.pnl-canvas-wrap canvas{display:block;width:100%;border-radius:3px;}
+.pnl-tooltip{position:absolute;background:var(--bg2);border:1px solid var(--amb3);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:10px;padding:4px 8px;pointer-events:none;display:none;white-space:nowrap;z-index:10;}
+.pnl-chart-empty{color:var(--gry2);font-size:10px;text-align:center;padding:20px 0;}
+/* Position chart row */
+.pos-chart-row{display:none;}
+.pos-chart-row.open{display:table-row;}
+.pos-chart-row td{background:var(--bg0)!important;padding:10px 14px!important;}
+.pos-chart-inner{max-width:700px;}
 .step-fill-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
 .step-fill-hdr label{color:var(--grn);font-size:11px;font-weight:700;letter-spacing:.5px;cursor:pointer;}
 .step-fill-cfg{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
@@ -466,14 +486,14 @@ tr.sel-row td{background:var(--blu3);}
 
       <!-- STRIKE + EXPIRY -->
       <div class="ord-row">
-        <div class="ord-field"><label>STRIKE</label><input id="ord-strike" type="number" placeholder="150.00"></div>
-        <div class="ord-field"><label>EXPIRY (YYYY-MM-DD)</label><input id="ord-exp" type="date"></div>
+        <div class="ord-field"><label>STRIKE</label><input id="ord-strike" type="number" placeholder="150.00" onchange="updateOrdChart()" oninput="updateOrdChart()"></div>
+        <div class="ord-field"><label>EXPIRY (YYYY-MM-DD)</label><input id="ord-exp" type="date" onchange="updateOrdChart()"></div>
       </div>
 
       <!-- ACTION + QTY -->
       <div class="ord-row">
         <div class="ord-field"><label>ACTION</label>
-          <select id="ord-action" onchange="updateStepFillMode()">
+          <select id="ord-action" onchange="updateStepFillMode();updateOrdChart()">
             <option value="BUY_TO_OPEN">BUY TO OPEN</option>
             <option value="SELL_TO_OPEN">SELL TO OPEN</option>
             <option value="BUY_TO_CLOSE">BUY TO CLOSE</option>
@@ -482,7 +502,7 @@ tr.sel-row td{background:var(--blu3);}
             <option value="SELL">SELL</option>
           </select>
         </div>
-        <div class="ord-field"><label>QTY (CONTRACTS)</label><input id="ord-qty" type="number" value="1" min="1"></div>
+        <div class="ord-field"><label>QTY (CONTRACTS)</label><input id="ord-qty" type="number" value="1" min="1" onchange="updateOrdChart()" oninput="updateOrdChart()"></div>
       </div>
 
       <!-- ORDER TYPE + LIMIT -->
@@ -496,7 +516,7 @@ tr.sel-row td{background:var(--blu3);}
         </div>
         <div class="ord-field">
           <label>LIMIT PRICE <span id="lmt-hint" style="color:var(--grn);font-size:9px;"></span></label>
-          <input id="ord-lmt" type="number" placeholder="0.00" step="0.01">
+          <input id="ord-lmt" type="number" placeholder="0.00" step="0.01" onchange="updateOrdChart()" oninput="updateOrdChart()">
         </div>
         <div class="ord-field" style="flex:0.5;display:flex;align-items:flex-end;">
           <button class="btn" style="font-size:10px;padding:3px 8px;width:100%;" onclick="setLimitToBid()" title="Set limit price to current bid">SET BID</button>
@@ -558,6 +578,28 @@ tr.sel-row td{background:var(--blu3);}
       </div>
       <div class="ord-result" id="ord-result"></div>
     </div></div>
+
+    <!-- ── P&L PAYOFF CHART ── -->
+    <div class="card" id="ord-pnl-card" style="display:none;">
+      <div class="card-hdr">&#9652; P&amp;L PAYOFF DIAGRAM</div>
+      <div class="card-body" style="padding:10px 12px;">
+        <div class="pnl-chart-hdr">
+          <span class="pnl-chart-title" id="ord-chart-title">--</span>
+          <div class="pnl-chart-stats">
+            <div class="pnl-stat"><div class="pnl-stat-lbl">Breakeven</div><div class="pnl-stat-val neu" id="ord-be">--</div></div>
+            <div class="pnl-stat"><div class="pnl-stat-lbl">Max Loss</div><div class="pnl-stat-val neg" id="ord-maxloss">--</div></div>
+            <div class="pnl-stat"><div class="pnl-stat-lbl">+10% Target</div><div class="pnl-stat-val pos" id="ord-tgt10">--</div></div>
+            <div class="pnl-stat"><div class="pnl-stat-lbl">+20% Target</div><div class="pnl-stat-val pos" id="ord-tgt20">--</div></div>
+            <div class="pnl-stat"><div class="pnl-stat-lbl">Current P&amp;L</div><div class="pnl-stat-val" id="ord-curpnl">--</div></div>
+          </div>
+        </div>
+        <div class="pnl-canvas-wrap" id="ord-canvas-wrap">
+          <canvas id="ord-pnl-canvas" height="180"></canvas>
+          <div class="pnl-tooltip" id="ord-tooltip"></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -831,6 +873,8 @@ function renderQuotePanel(q){
   if(q.bid&&q.ask){
     eid('lmt-hint').textContent='bid $'+fmt2(q.bid)+' | ask $'+fmt2(q.ask);
   }
+  // Update P&L chart with new quote data
+  updateOrdChart();
 }
 
 function setLimitToBid(){
@@ -1637,11 +1681,11 @@ function renderPositionsTable(pos,srcLabel){
   var wrap=eid('pos-tbl-wrap');
   if(!pos.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No open positions</p></div>';return;}
   var totalPnl=0,totalCost=0;pos.forEach(function(p){totalPnl+=p.pnl;totalCost+=p.cost;});
-  var colCount = 13; // total columns
+  var colCount = 14; // total columns
   var html='<table><thead><tr>'
     +'<th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th><th>QTY</th>'
     +'<th>AVG COST</th><th>LAST</th><th>P&L $</th><th>P&L %</th>'
-    +'<th>TRAIL STOP</th><th>STATUS</th><th>ACTION</th><th></th>'
+    +'<th>TRAIL STOP</th><th>STATUS</th><th>ACTION</th><th></th><th></th>'
     +'</tr></thead><tbody>';
 
   pos.forEach(function(p){
@@ -1687,77 +1731,74 @@ function renderPositionsTable(pos,srcLabel){
       +'<td><button class="cbtn" onclick="doClose(this)">CLOSE</button></td>'
       +'<td><button class="btn ts-enable-btn" style="'+(cfgEnabled?'border-color:var(--grn);color:var(--grn);':'')+'" '
         +'onclick="toggleTsRow(\''+sym+'\')">&#9652; TRAIL</button></td>'
+      +'<td><button class="btn" style="font-size:10px;padding:3px 8px;border-color:var(--blu3);color:var(--blub);" '
+        +'onclick="togglePosChart(\''+sym+'\')">&#9650; P&amp;L</button></td>'
       +'</tr>';
 
-    // Inline config expansion row
+    // Inline trailing stop config row
     html += '<tr id="tscfg-'+sym+'" class="ts-row-cfg">'
       +'<td colspan="'+colCount+'">'
       +'<div class="ts-inline">'
-
-      // Enable toggle
       +'<div class="ts-inline-field" style="justify-content:flex-end;">'
       +'<label>Enable</label>'
       +'<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">'
       +'<input type="checkbox" class="tsc-enabled" '+(cfgEnabled?'checked':'')+' style="width:auto;">'
       +'<span style="color:var(--gry);font-size:10px;">Active</span>'
       +'</div></div>'
-
       +'<div class="ts-inline-sep"></div>'
-
-      // Activate at
-      +'<div class="ts-inline-field">'
-      +'<label>Activate at</label>'
+      +'<div class="ts-inline-field"><label>Activate at</label>'
       +'<div style="display:flex;align-items:center;gap:4px;">'
       +'<input type="number" class="tsc-activate" value="'+cfgActivate+'" min="0" step="1">'
       +'<span style="color:var(--gry);font-size:10px;">% return</span>'
       +'</div></div>'
-
-      // Pullback
-      +'<div class="ts-inline-field">'
-      +'<label>Close on</label>'
+      +'<div class="ts-inline-field"><label>Close on</label>'
       +'<div style="display:flex;align-items:center;gap:4px;">'
       +'<input type="number" class="tsc-pullback" value="'+cfgPullback+'" min="1" step="1">'
       +'<span style="color:var(--gry);font-size:10px;">% pullback</span>'
       +'</div></div>'
-
       +'<div class="ts-inline-sep"></div>'
       +'<span style="color:var(--gry);font-size:9px;font-weight:700;letter-spacing:.5px;align-self:center;">DISABLE IF</span>'
-
-      // Disable if return <
-      +'<div class="ts-inline-field">'
-      +'<label>Return &lt;</label>'
+      +'<div class="ts-inline-field"><label>Return &lt;</label>'
       +'<div style="display:flex;align-items:center;gap:4px;">'
       +'<input type="number" class="tsc-disret" value="'+cfgDisRet+'" placeholder="--" min="0" step="1">'
       +'<span style="color:var(--gry);font-size:10px;">%</span>'
       +'</div></div>'
-
-      // Disable if pullback >
-      +'<div class="ts-inline-field">'
-      +'<label>Pullback &gt;</label>'
+      +'<div class="ts-inline-field"><label>Pullback &gt;</label>'
       +'<div style="display:flex;align-items:center;gap:4px;">'
       +'<input type="number" class="tsc-dispull" value="'+cfgDisPull+'" placeholder="--" min="0" step="1">'
       +'<span style="color:var(--gry);font-size:10px;">% from high</span>'
       +'</div></div>'
-
       +'<div class="ts-inline-sep"></div>'
-
-      // Close via
-      +'<div class="ts-inline-field">'
-      +'<label>Close via</label>'
+      +'<div class="ts-inline-field"><label>Close via</label>'
       +'<select class="tsc-closemode">'
       +'<option value="step"'+(cfgCloseMode==='step'?' selected':'')+'>Step Fill</option>'
       +'<option value="market"'+(cfgCloseMode==='market'?' selected':'')+'>Market</option>'
       +'</select></div>'
-
-      // Save + Reset buttons
-      +'<div class="ts-inline-field" style="justify-content:flex-end;">'
-      +'<label>&nbsp;</label>'
+      +'<div class="ts-inline-field" style="justify-content:flex-end;"><label>&nbsp;</label>'
       +'<div style="display:flex;gap:6px;">'
       +'<button class="btn grn" style="font-size:10px;padding:3px 10px;" onclick="saveTsConfig(\''+sym+'\')">SAVE</button>'
       +'<button class="btn wrn" style="font-size:10px;padding:3px 8px;" onclick="resetOneTsState(\''+sym+'\')">RESET</button>'
       +'</div></div>'
+      +'</div></td></tr>';
 
-      +'</div>'  // .ts-inline
+    // P&L chart expansion row
+    html += '<tr id="poschart-'+sym+'" class="pos-chart-row">'
+      +'<td colspan="'+colCount+'">'
+      +'<div class="pos-chart-inner">'
+      +'<div class="pnl-chart-hdr">'
+      +'<span class="pnl-chart-title" id="pchart-title-'+sym+'">P&amp;L PAYOFF \u2014 '+sym+'</span>'
+      +'<div class="pnl-chart-stats">'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Breakeven</div><div class="pnl-stat-val neu" id="pbe-'+sym+'">--</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Max Loss</div><div class="pnl-stat-val neg" id="pml-'+sym+'">--</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">+10% Target</div><div class="pnl-stat-val pos" id="pt10-'+sym+'">--</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">+20% Target</div><div class="pnl-stat-val pos" id="pt20-'+sym+'">--</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Current P&amp;L</div><div class="pnl-stat-val" id="pcur-'+sym+'">--</div></div>'
+      +'</div></div>'
+      +'<div class="pnl-canvas-wrap">'
+      +'<canvas id="pcanvas-'+sym+'" height="160"></canvas>'
+      +'<div class="pnl-tooltip" id="ptooltip-'+sym+'"></div>'
+      +'</div>'
+      +'</div>'
       +'</td></tr>';
   });
 
@@ -1957,6 +1998,349 @@ function executeTsClose(p,closeMode,creds){
     runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),ask,bid,stepSize,maxAtt,delaySec,'down');
     switchTab('order');
   }
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+//  P&L PAYOFF CHART ENGINE
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+function calcPnlAtPrice(underlyingPrice, strike, optionType, premium, qty, action){
+  // premium = price paid per share (mid/limit price of the option)
+  // cost basis per contract = premium * 100
+  var contracts = Math.abs(qty);
+  var costPerContract = premium * 100;
+  var totalCost = costPerContract * contracts;
+  var pnl = 0;
+  var isBuy = (action==='BUY_TO_OPEN'||action==='BUY');
+  if(optionType==='CALL'){
+    var intrinsic = Math.max(underlyingPrice - strike, 0);
+    if(isBuy){
+      pnl = (intrinsic - premium) * 100 * contracts;
+    } else {
+      pnl = (premium - intrinsic) * 100 * contracts;
+    }
+  } else if(optionType==='PUT'){
+    var intrinsic2 = Math.max(strike - underlyingPrice, 0);
+    if(isBuy){
+      pnl = (intrinsic2 - premium) * 100 * contracts;
+    } else {
+      pnl = (premium - intrinsic2) * 100 * contracts;
+    }
+  } else {
+    // Stock
+    if(isBuy){
+      pnl = (underlyingPrice - strike) * contracts * 100;
+    } else {
+      pnl = (strike - underlyingPrice) * contracts * 100;
+    }
+  }
+  return pnl;
+}
+
+function calcBreakeven(strike, premium, optionType, action){
+  var isBuy = (action==='BUY_TO_OPEN'||action==='BUY');
+  if(optionType==='CALL'){
+    return isBuy ? strike + premium : null;
+  } else if(optionType==='PUT'){
+    return isBuy ? strike - premium : null;
+  }
+  return strike;
+}
+
+function drawPnlChart(canvasId, tooltipId, params){
+  // params: {strike, premium, optionType, action, qty, currentPrice, spotMin, spotMax}
+  var canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  var tooltip = document.getElementById(tooltipId);
+  var ctx = canvas.getContext('2d');
+
+  // Sizing
+  var W = canvas.parentElement.offsetWidth || 600;
+  canvas.width = W;
+  var H = parseInt(canvas.getAttribute('height')) || 180;
+  canvas.height = H;
+
+  var PAD = {top:20, right:20, bottom:30, left:62};
+  var plotW = W - PAD.left - PAD.right;
+  var plotH = H - PAD.top - PAD.bottom;
+
+  var strike      = params.strike;
+  var premium     = params.premium;
+  var optionType  = params.optionType;
+  var action      = params.action;
+  var qty         = params.qty;
+  var currentPrice= params.currentPrice || strike;
+  var breakeven   = calcBreakeven(strike, premium, optionType, action);
+
+  // Price range: 20% either side of strike
+  var range = strike * 0.25;
+  var spotMin = params.spotMin || Math.max(0.01, strike - range);
+  var spotMax = params.spotMax || strike + range;
+
+  // Build data points
+  var N = 120;
+  var points = [];
+  for(var i=0;i<=N;i++){
+    var price = spotMin + (spotMax - spotMin) * (i/N);
+    var pnl   = calcPnlAtPrice(price, strike, optionType, premium, qty, action);
+    points.push({price:price, pnl:pnl});
+  }
+
+  var pnlMin = Math.min.apply(null, points.map(function(p){return p.pnl;}));
+  var pnlMax = Math.max.apply(null, points.map(function(p){return p.pnl;}));
+  // Add some vertical padding
+  var pad = Math.max(Math.abs(pnlMax - pnlMin) * 0.15, 50);
+  pnlMin -= pad; pnlMax += pad;
+
+  // Helpers
+  function xOf(price){ return PAD.left + (price - spotMin)/(spotMax - spotMin) * plotW; }
+  function yOf(pnl)  { return PAD.top  + (1 - (pnl - pnlMin)/(pnlMax - pnlMin)) * plotH; }
+  var y0 = yOf(0); // zero line y
+
+  // \u2500\u2500 Background
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0,0,W,H);
+
+  // \u2500\u2500 Grid lines
+  ctx.strokeStyle = '#21262d';
+  ctx.lineWidth = 1;
+  for(var gi=0;gi<=4;gi++){
+    var gy = PAD.top + (plotH/4)*gi;
+    ctx.beginPath(); ctx.moveTo(PAD.left, gy); ctx.lineTo(PAD.left+plotW, gy); ctx.stroke();
+  }
+  for(var gx=0;gx<=4;gx++){
+    var gxp = PAD.left + (plotW/4)*gx;
+    ctx.beginPath(); ctx.moveTo(gxp, PAD.top); ctx.lineTo(gxp, PAD.top+plotH); ctx.stroke();
+  }
+
+  // \u2500\u2500 Zero line
+  ctx.strokeStyle = '#484f58';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(PAD.left, y0); ctx.lineTo(PAD.left+plotW, y0); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // \u2500\u2500 Loss fill (below zero)
+  ctx.beginPath();
+  ctx.moveTo(xOf(spotMin), y0);
+  for(var i=0;i<=N;i++){
+    var px=points[i]; var xp=xOf(px.price); var yp=yOf(px.pnl);
+    if(px.pnl<0) ctx.lineTo(xp, yp);
+    else ctx.lineTo(xp, y0);
+  }
+  ctx.lineTo(xOf(spotMax), y0);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(127,29,29,0.35)';
+  ctx.fill();
+
+  // \u2500\u2500 Profit fill (above zero)
+  ctx.beginPath();
+  ctx.moveTo(xOf(spotMin), y0);
+  for(var i=0;i<=N;i++){
+    var px=points[i]; var xp=xOf(px.price); var yp=yOf(px.pnl);
+    if(px.pnl>0) ctx.lineTo(xp, yp);
+    else ctx.lineTo(xp, y0);
+  }
+  ctx.lineTo(xOf(spotMax), y0);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(20,83,45,0.35)';
+  ctx.fill();
+
+  // \u2500\u2500 P&L line (red below BE, green above)
+  for(var seg=0;seg<2;seg++){
+    // seg 0 = loss segment, seg 1 = profit segment
+    ctx.beginPath();
+    var started = false;
+    for(var i=0;i<=N;i++){
+      var px=points[i]; var xp=xOf(px.price); var yp=yOf(px.pnl);
+      var inSeg = seg===0 ? px.pnl<=0 : px.pnl>=0;
+      if(inSeg){
+        if(!started){ ctx.moveTo(xp,yp); started=true; }
+        else ctx.lineTo(xp,yp);
+      } else if(started && seg===0) {
+        // interpolate to zero crossing
+        ctx.lineTo(xOf(breakeven||strike+premium), yOf(0));
+      }
+    }
+    ctx.strokeStyle = seg===0 ? '#f87171' : '#4ade80';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+
+  // \u2500\u2500 Y-axis labels
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '10px Courier New';
+  ctx.textAlign = 'right';
+  for(var gi=0;gi<=4;gi++){
+    var pnlVal = pnlMax - (pnlMax-pnlMin)*(gi/4);
+    var ly = PAD.top + (plotH/4)*gi;
+    var label = pnlVal>=0 ? '+$'+Math.round(pnlVal) : '-$'+Math.round(Math.abs(pnlVal));
+    ctx.fillStyle = pnlVal>=0 ? '#4ade80' : '#f87171';
+    ctx.fillText(label, PAD.left-4, ly+3);
+  }
+
+  // \u2500\u2500 X-axis labels
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '10px Courier New';
+  ctx.textAlign = 'center';
+  for(var gx=0;gx<=4;gx++){
+    var priceVal = spotMin + (spotMax-spotMin)*(gx/4);
+    var lx = PAD.left + (plotW/4)*gx;
+    ctx.fillStyle = '#8b949e';
+    ctx.fillText('$'+priceVal.toFixed(0), lx, H-8);
+  }
+
+  // \u2500\u2500 Breakeven vertical dashed line
+  if(breakeven && breakeven>=spotMin && breakeven<=spotMax){
+    var beX = xOf(breakeven);
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(beX, PAD.top); ctx.lineTo(beX, PAD.top+plotH); ctx.stroke();
+    ctx.setLineDash([]);
+    // Label box
+    var beLabel = '$'+fmt2(breakeven);
+    var lw = ctx.measureText(beLabel).width + 12;
+    var lx2 = Math.min(Math.max(beX-lw/2, PAD.left), PAD.left+plotW-lw);
+    ctx.fillStyle = '#1e3a5f';
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(lx2, PAD.top-2, lw, 16, 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#60a5fa';
+    ctx.font = 'bold 10px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(beLabel, lx2+lw/2, PAD.top+10);
+  }
+
+  // \u2500\u2500 Current price vertical dashed line
+  if(currentPrice>=spotMin && currentPrice<=spotMax){
+    var cpX = xOf(currentPrice);
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(cpX, PAD.top); ctx.lineTo(cpX, PAD.top+plotH); ctx.stroke();
+    ctx.setLineDash([]);
+    // Label
+    var cpLabel = '$'+fmt2(currentPrice);
+    var lw2 = ctx.measureText(cpLabel).width + 10;
+    var ly2 = PAD.top + plotH - 18;
+    var lx3 = Math.min(Math.max(cpX-lw2/2, PAD.left), PAD.left+plotW-lw2);
+    ctx.fillStyle = '#78350f';
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(lx3, ly2, lw2, 16, 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = '10px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(cpLabel, lx3+lw2/2, ly2+11);
+  }
+
+  // \u2500\u2500 Hover tooltip
+  if(tooltip){
+    canvas.onmousemove = function(e){
+      var rect = canvas.getBoundingClientRect();
+      var mx = (e.clientX - rect.left) * (W / rect.width);
+      var hoverPrice = spotMin + ((mx - PAD.left)/plotW)*(spotMax-spotMin);
+      if(hoverPrice < spotMin || hoverPrice > spotMax){ tooltip.style.display='none'; return; }
+      var hoverPnl = calcPnlAtPrice(hoverPrice, strike, optionType, premium, qty, action);
+      tooltip.style.display = 'block';
+      tooltip.style.left = Math.min(mx+8, W-110)+'px';
+      tooltip.style.top  = '8px';
+      tooltip.innerHTML = 'Price: <b>$'+fmt2(hoverPrice)+'</b> &nbsp; P&amp;L: <b style="color:'+(hoverPnl>=0?'#4ade80':'#f87171')+'">'+(hoverPnl>=0?'+':'')+fmtD(hoverPnl)+'</b>';
+    };
+    canvas.onmouseleave = function(){ tooltip.style.display='none'; };
+  }
+}
+
+function updateOrdChart(){
+  var sym    = eid('ord-sym').value.trim().toUpperCase();
+  var type   = eid('ord-type').value;
+  var strike = parseFloat(eid('ord-strike').value);
+  var expRaw = eid('ord-exp').value;
+  var qty    = parseInt(eid('ord-qty').value)||1;
+  var action = eid('ord-action').value;
+  var lmt    = parseFloat(eid('ord-lmt').value)||0;
+  var mid    = G.liveQuote ? G.liveQuote.mid : 0;
+  var currentPrice = G.liveQuote ? (G.liveQuote.livePrice||G.liveQuote.last||0) : 0;
+  var premium = lmt || mid;
+
+  var card = eid('ord-pnl-card');
+  if(!sym || !strike || !premium || type==='STOCK'){
+    if(card) card.style.display='none';
+    return;
+  }
+  if(card) card.style.display='block';
+
+  var breakeven = calcBreakeven(strike, premium, type, action);
+  var maxLoss   = -(premium * 100 * qty);
+  var tgt10Price= type==='CALL' ? strike*1.10 : strike*0.90;
+  var tgt20Price= type==='CALL' ? strike*1.20 : strike*0.80;
+  var tgt10Pnl  = calcPnlAtPrice(tgt10Price, strike, type, premium, qty, action);
+  var tgt20Pnl  = calcPnlAtPrice(tgt20Price, strike, type, premium, qty, action);
+  var curPnl    = currentPrice ? calcPnlAtPrice(currentPrice, strike, type, premium, qty, action) : 0;
+
+  var isBuy = action==='BUY_TO_OPEN'||action==='BUY';
+  var title = (isBuy?'BUY':'SELL')+' '+qty+'x '+sym+' $'+strike+' '+type+(expRaw?' exp:'+expRaw:'')+' @ $'+fmt2(premium);
+  eid('ord-chart-title').textContent = title;
+  eid('ord-be').textContent   = breakeven ? '$'+fmt2(breakeven) : 'N/A';
+  eid('ord-maxloss').textContent = isBuy ? fmtD(maxLoss) : 'Unlimited';
+  eid('ord-tgt10').textContent = fmtD(tgt10Pnl);
+  eid('ord-tgt20').textContent = fmtD(tgt20Pnl);
+  var cpEl = eid('ord-curpnl');
+  cpEl.textContent = currentPrice ? fmtD(curPnl) : '--';
+  cpEl.className = 'pnl-stat-val '+(curPnl>=0?'pos':'neg');
+
+  setTimeout(function(){
+    drawPnlChart('ord-pnl-canvas','ord-tooltip',{
+      strike:strike, premium:premium, optionType:type, action:action,
+      qty:qty, currentPrice:currentPrice
+    });
+  }, 50);
+}
+
+function togglePosChart(sym){
+  var row = document.getElementById('poschart-'+sym);
+  if(!row) return;
+  var isOpen = row.classList.contains('open');
+  // Close all other chart rows
+  document.querySelectorAll('.pos-chart-row.open').forEach(function(r){ r.classList.remove('open'); });
+  if(!isOpen){
+    row.classList.add('open');
+    // Find the position data
+    var p = null;
+    for(var i=0;i<G.positions.length;i++){ if(G.positions[i].symbol===sym){p=G.positions[i];break;} }
+    if(p) setTimeout(function(){ renderPosChart(p); }, 60);
+  }
+}
+
+function renderPosChart(p){
+  var sym = p.symbol;
+  // Derive premium from cost basis (cost / qty / 100)
+  var qty = Math.abs(p.qty);
+  var premium = qty>0 ? p.cost/(qty*100) : 0;
+  var strike  = p.strike;
+  var type    = p.type; // 'CALL' or 'PUT'
+  var action  = 'BUY_TO_OPEN'; // positions are buys
+  var currentPrice = p.last || strike;
+  var breakeven = calcBreakeven(strike, premium, type, action);
+  var maxLoss   = -(premium * 100 * qty);
+  var tgt10Price= type==='CALL'?strike*1.10:strike*0.90;
+  var tgt20Price= type==='CALL'?strike*1.20:strike*0.80;
+  var tgt10Pnl  = calcPnlAtPrice(tgt10Price, strike, type, premium, qty, action);
+  var tgt20Pnl  = calcPnlAtPrice(tgt20Price, strike, type, premium, qty, action);
+  var curPnl    = p.pnl || calcPnlAtPrice(currentPrice, strike, type, premium, qty, action);
+
+  if(eid('pbe-'+sym))  eid('pbe-'+sym).textContent  = breakeven?'$'+fmt2(breakeven):'N/A';
+  if(eid('pml-'+sym))  eid('pml-'+sym).textContent  = fmtD(maxLoss);
+  if(eid('pt10-'+sym)) eid('pt10-'+sym).textContent = fmtD(tgt10Pnl);
+  if(eid('pt20-'+sym)) eid('pt20-'+sym).textContent = fmtD(tgt20Pnl);
+  var cpEl2 = eid('pcur-'+sym);
+  if(cpEl2){ cpEl2.textContent=fmtD(curPnl); cpEl2.className='pnl-stat-val '+(curPnl>=0?'pos':'neg'); }
+
+  drawPnlChart('pcanvas-'+sym,'ptooltip-'+sym,{
+    strike:strike, premium:premium, optionType:type, action:action,
+    qty:qty, currentPrice:currentPrice
+  });
 }
 
 function resetTsState(){
