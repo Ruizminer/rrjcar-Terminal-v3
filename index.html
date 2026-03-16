@@ -468,6 +468,65 @@ function simOpt(price){
   var exp=expDate.toISOString().slice(0,10);
   return{strike:strike,spread:spread,spreadPct:spreadPct,delta:delta,ext:ext,dte:dte,optPr:optPr,oi:oi,vol:vol2,exp:exp};
 }
+function fetchOptionContract(ticker,price,callback){
+ var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+ if(!key){callback(null);return;}
+ var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
+ var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+ // Step 1: fetch expirations
+ fetch(host+'/v1/markets/options/expirations?symbol='+ticker,{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+ .then(function(r){return r.json();})
+ .then(function(data){
+  var dates=[];
+  try{dates=data.expirations.date;if(!Array.isArray(dates))dates=[dates];}catch(e){}
+  if(!dates.length){callback(null);return;}
+  var today=new Date();
+  // Pick expiry with DTE closest to 35 days (target), between 20-60
+  var best=null,bestDiff=999;
+  dates.forEach(function(d){
+   var dte=Math.round((new Date(d)-today)/864e5);
+   var diff=Math.abs(dte-35);
+   if(dte>=20&&dte<=70&&diff<bestDiff){bestDiff=diff;best={date:d,dte:dte};}
+  });
+  if(!best){best={date:dates[0],dte:Math.round((new Date(dates[0])-today)/864e5)};}
+  // Step 2: fetch chain with greeks
+  fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+best.date+'&greeks=true',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+  .then(function(r){return r.json();})
+  .then(function(cdata){
+   var opts=[];
+   try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
+   if(!opts.length){callback(null);return;}
+   // Find call with delta closest to 0.75 (slightly ITM)
+   var calls=opts.filter(function(o){return o.option_type==='call'&&o.greeks&&o.greeks.delta>0;});
+   if(!calls.length){callback(null);return;}
+   calls.sort(function(a,b){return Math.abs(a.greeks.delta-0.75)-Math.abs(b.greeks.delta-0.75);});
+   var best_opt=calls[0];
+   var mid=(best_opt.bid+best_opt.ask)/2;
+   var spread=best_opt.ask-best_opt.bid;
+   var spreadPct=price>0?((spread/price)*100):0;
+   // Intrinsic = max(price - strike, 0) for call
+   var intrinsic=Math.max(price-best_opt.strike,0);
+   var extrinsic=Math.max(mid-intrinsic,0);
+   var extPct=mid>0?((extrinsic/mid)*100):0;
+   callback({
+    strike:best_opt.strike,
+    spread:+(spread.toFixed(2)),
+    spreadPct:+(spreadPct.toFixed(2)),
+    delta:+(best_opt.greeks.delta.toFixed(2)),
+    ext:+(extPct.toFixed(1)),
+    dte:best.dte,
+    optPr:+(mid.toFixed(2)),
+    oi:best_opt.open_interest||0,
+    vol:best_opt.volume||0,
+    exp:best.date,
+    iv:best_opt.greeks.smv_vol||0,
+    symbol:best_opt.symbol,
+    live:true
+   });
+  }).catch(function(){callback(null);});
+ }).catch(function(){callback(null);});
+}
+
 function scoreIt(ticker,ind,opt){
   var score=0,res=[];
   var rsiOk=ind.rsi>=40&&ind.rsi<=70;
@@ -585,16 +644,31 @@ function buildDetail(r,detId,emptyId){
 }
 
 function viewDetail(ticker,detId,emptyId){
-  var r=null;
-  for(var i=0;i<G.results.length;i++){if(G.results[i].ticker===ticker){r=G.results[i];break;}}
-  if(!r)return;
-  G.selTicker=ticker;
-  document.querySelectorAll('.sig-card').forEach(function(c){c.classList.toggle('sel',c.dataset.ticker===ticker);});
-  document.querySelectorAll('tr.sel-row').forEach(function(row){row.classList.remove('sel-row');});
-  document.querySelectorAll('tr[data-ticker="'+ticker+'"]').forEach(function(row){row.classList.add('sel-row');});
-  buildDetail(r,detId,emptyId);
+ var r=null;
+ for(var i=0;i<G.results.length;i++){if(G.results[i].ticker===ticker){r=G.results[i];break;}}
+ if(!r)return;
+ G.selTicker=ticker;
+ document.querySelectorAll('.sig-card').forEach(function(c){c.classList.toggle('sel',c.dataset.ticker===ticker);});
+ document.querySelectorAll('tr.sel-row').forEach(function(row){row.classList.remove('sel-row');});
+ document.querySelectorAll('tr[data-ticker="'+ticker+'"]').forEach(function(row){row.classList.add('sel-row');});
+ buildDetail(r,detId,emptyId);
+ // Fetch real option contract data if Tradier key available
+ var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+ if(key){
+  fetchOptionContract(ticker,r.price,function(optData){
+   if(!optData)return;
+   // Update the result with real option data
+   r.opt=Object.assign(r.opt,optData);
+   // Re-score with new opt data
+   var newScore=scoreIt(ticker,r.ind,r.opt);
+   r.score=newScore.score;r.isGo=newScore.isGo;r.filtersPass=newScore.filtersPass;
+   r.rules=newScore.rules;r.passes=newScore.passes;
+   G.detailOpt={ticker:ticker,strike:optData.strike,exp:optData.exp};
+   // Rebuild detail with real data
+   buildDetail(r,detId,emptyId);
+  });
+ }
 }
-
 function renderBuySig(){
   var goList=eid('bs-go-list'),noList=eid('bs-nogo-list');
   goList.innerHTML='';noList.innerHTML='';
@@ -762,16 +836,15 @@ function refreshWL(){
 }
 
 function parseOccSymbol(sym){
-  var m=sym.match(/^([A-Z]+)(d{6})([CP])(d{8})$/);
-  if(!m)return{underlying:sym,type:'CALL',strike:0,exp:''};
-  var underlying=m[1];
-  var dateStr=m[2];
-  var typ=m[3]==='C'?'CALL':'PUT';
-  var strike=parseInt(m[4])/1000;
-  var yr='20'+dateStr.slice(0,2),mo=dateStr.slice(2,4),dy=dateStr.slice(4,6);
-  return{underlying:underlying,type:typ,strike:strike,exp:yr+'-'+mo+'-'+dy};
+ var m=sym.match(/^([A-Z1-9]+)(\d{6})([CP])(\d{8})$/);
+ if(!m)return{underlying:sym,type:'CALL',strike:0,exp:''};
+ var underlying=m[1];
+ var dateStr=m[2];
+ var typ=m[3]==='C'?'CALL':'PUT';
+ var strike=parseInt(m[4])/1000;
+ var yr='20'+dateStr.slice(0,2),mo=dateStr.slice(2,4),dy=dateStr.slice(4,6);
+ return{underlying:underlying,type:typ,strike:strike,exp:yr+'-'+mo+'-'+dy};
 }
-
 function fetchPositions(){
   var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
   var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
@@ -816,41 +889,53 @@ function fetchPositions(){
 }
 
 function fetchPositionsDirect(key,mode,host,acct){
-  fetch(host+'/v1/accounts/'+acct+'/positions',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-  .then(function(r){
-    if(!r.ok)throw new Error('Positions HTTP '+r.status);
-    return r.json();
-  })
-  .then(function(data){
-    if(!data){showPosError('No data returned from Tradier.');return;}
-    var pos=[];
-    try{
-      var pd=data.positions;
-      if(!pd||pd==='null'){
-        renderPositionsTable([],'['+mode.toUpperCase()+' — No open positions]');
-        return;
-      }
-      var arr=pd.position;
-      if(!Array.isArray(arr))arr=[arr];
-      arr.forEach(function(p){
-        var parsed=parseOccSymbol(p.symbol);
-        var last=parseFloat(p.last_price)||0;
-        var cost=parseFloat(p.cost_basis)||0;
-        var qty=parseInt(p.quantity)||0;
-        var pnl=last*Math.abs(qty)*100-cost;
-        var pnlPct=cost?((pnl/cost)*100):0;
-        pos.push({symbol:p.symbol,underlying:parsed.underlying,type:parsed.type,
-          strike:parsed.strike,exp:parsed.exp,qty:qty,cost:cost,last:last,
-          pnl:pnl,pnlPct:pnlPct});
-      });
-    }catch(e){showPosError('Error parsing positions: '+e.message);return;}
-    G.positions=pos;
-    renderPositionsTable(pos,'[TRADIER '+mode.toUpperCase()+']');
-    fetchBalances();
-  })
-  .catch(function(e){showPosError('Tradier API error: '+e.message);});
+ fetch(host+'/v1/accounts/'+acct+'/positions',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+ .then(function(r){if(!r.ok)throw new Error('Positions HTTP '+r.status);return r.json();})
+ .then(function(data){
+  if(!data){showPosError('No data returned.');return;}
+  var pd=data.positions;
+  if(!pd||pd==='null'){renderPositionsTable([],(mode==='live'?'[TRADIER LIVE]':'[TRADIER SANDBOX]')+' — No open positions');return;}
+  var arr=pd.position;if(!Array.isArray(arr))arr=[arr];
+  // Build position list with parsed OCC data
+  var pos=arr.map(function(p){
+   var parsed=parseOccSymbol(p.symbol);
+   return{symbol:p.symbol,underlying:parsed.underlying,type:parsed.type,
+    strike:parsed.strike,exp:parsed.exp,qty:parseInt(p.quantity)||0,
+    cost:parseFloat(p.cost_basis)||0,last:0,pnl:0,pnlPct:0};
+  });
+  // Fetch live quotes for all position symbols
+  var syms=arr.map(function(p){return p.symbol;}).join(',');
+  fetch(host+'/v1/markets/quotes?symbols='+encodeURIComponent(syms),{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+  .then(function(r){return r.json();})
+  .then(function(qdata){
+   var quotes={};
+   try{
+    var ql=qdata.quotes.quote;
+    if(!Array.isArray(ql))ql=[ql];
+    ql.forEach(function(q){quotes[q.symbol]=q;});
+   }catch(e){}
+   pos.forEach(function(p){
+    var q=quotes[p.symbol];
+    if(q){
+     var mid=q.bid&&q.ask?(q.bid+q.ask)/2:(q.last||0);
+     p.last=mid;
+     p.bid=q.bid||0;p.ask=q.ask||0;
+     var contractVal=mid*Math.abs(p.qty)*100;
+     p.pnl=contractVal-p.cost;
+     p.pnlPct=p.cost?((p.pnl/p.cost)*100):0;
+    }
+   });
+   G.positions=pos;
+   renderPositionsTable(pos,mode==='live'?'[TRADIER LIVE]':' [TRADIER SANDBOX]');
+   fetchBalances();
+  }).catch(function(){
+   // If quotes fail, still show positions with cost basis
+   G.positions=pos;
+   renderPositionsTable(pos,mode==='live'?'[TRADIER LIVE]':' [TRADIER SANDBOX]');
+   fetchBalances();
+  });
+ }).catch(function(e){showPosError('Tradier API error: '+e.message);});
 }
-
 function showPosError(msg){
   eid('pos-src').textContent='[ERROR]';
   eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p style="color:var(--wrn);">'+msg+'</p><p style="color:var(--gry);margin-top:8px;">Check API key in the API tab.</p></div>';
