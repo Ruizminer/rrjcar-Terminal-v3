@@ -665,14 +665,14 @@ function renderScan(){
   var th='';
   cols.forEach(function(c){
     var arr=G.sortCol===c.k?(G.sortDir>0?' &#9650;':' &#9660;'):'';
-    th+='<th onclick="sortTable(''+c.k+'')">'+c.l+arr+'</th>';
+    th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';
   });
   var rows='';
   G.filtered.forEach(function(r){
     var sigBadge=r.isGo?'<span class="badge go">GO</span>':'<span class="badge nogo">NO-GO</span>';
     var chgCls=r.changePct>=0?'pnl-pos':'pnl-neg';
     var tk=r.ticker;
-    rows+='<tr data-ticker="'+tk+'" onclick="viewDetail(''+tk+'','sc-detail','sc-det-empty')">'
+    rows+='<tr data-ticker="'+tk+'" onclick="viewDetail(this.dataset.ticker,\'sc-detail\',\'sc-det-empty\')">'
       +'<td>'+tk+'</td><td><b>'+r.score+'</b></td><td>'+sigBadge+'</td><td>'+r.sector+'</td>'
       +'<td>$'+fmt2(r.price)+'</td>'
       +'<td class="'+chgCls+'">'+(r.changePct>=0?'+':'')+fmtP(r.changePct)+'</td>'
@@ -697,7 +697,7 @@ function runGex(){
   var html='<table><thead><tr><th>SYMBOL</th><th>GEX ($M)</th><th>FLIP LEVEL</th><th>CALL%</th><th>PUT%</th><th>FLOW</th></tr></thead><tbody>';
   G.gexData.forEach(function(r){
     var gexCls=r.gex>0?'pnl-pos':'pnl-neg';
-    html+='<tr data-ticker="'+r.t+'" onclick="viewDetail(''+r.t+'','gx-detail','gx-det-empty')">'
+    html+='<tr data-ticker="'+r.t+'" onclick="viewDetail(this.dataset.ticker,\'gx-detail\',\'gx-det-empty\')">'
       +'<td><b>'+r.t+'</b></td><td class="'+gexCls+'">'+(r.gex>0?'+':'')+r.gex+'M</td>'
       +'<td>$'+fmt2(r.flip)+'</td><td class="pnl-pos">'+r.call+'%</td>'
       +'<td class="pnl-neg">'+r.put+'%</td>'
@@ -737,12 +737,12 @@ function refreshWL(){
       volume:q.volume,ind:ind,opt:opt,score:sc.score,isGo:sc.isGo,filtersPass:sc.filtersPass,rules:sc.rules,passes:sc.passes});}
     var chgCls=q.change>=0?'pnl-pos':'pnl-neg';
     var sigBadge=sc.isGo?'<span class="badge go">GO</span>':'<span class="badge nogo">NO-GO</span>';
-    html+='<tr data-ticker="'+t+'" onclick="viewDetail(''+t+'','wl-detail','wl-det-empty')">'
+    html+='<tr data-ticker="'+t+'" onclick="viewDetail(this.dataset.ticker,\'wl-detail\',\'wl-det-empty\')">'
       +'<td><b>'+t+'</b></td><td>$'+fmt2(q.price)+'</td>'
       +'<td class="'+chgCls+'">'+(q.change>=0?'+':'')+fmt2(q.change)+'</td>'
       +'<td class="'+chgCls+'">'+(q.changePct>=0?'+':'')+fmtP(q.changePct)+'</td>'
       +'<td>'+fmtK(q.volume)+'</td><td>'+sigBadge+'</td>'
-      +'<td><button class="cbtn" onclick="event.stopPropagation();removeWL(''+t+'')">&#10005;</button></td>'
+      +'<td><button class="cbtn" onclick="event.stopPropagation();removeWL(this.parentNode.parentNode.dataset.ticker)">&#10005;</button></td>'
       +'</tr>';
   });
   html+='</tbody></table>';
@@ -832,7 +832,7 @@ function renderPositionsTable(pos,srcLabel){
     var pnlCls=p.pnl>=0?'pnl-pos':'pnl-neg';
     var statusBadge=p.pnl>=0?'<span class="badge go">PROFIT</span>':'<span class="badge nogo">LOSS</span>';
     var tk=p.underlying,tp=p.type,st=p.strike,ex=p.exp,qty=Math.abs(p.qty);
-    html+='<tr>'
+    html+='<tr data-tk="'+tk+'" data-tp="'+tp+'" data-st="'+st+'" data-ex="'+ex+'" data-qty="'+qty+'">'
       +'<td><b>'+p.symbol+'</b></td>'
       +'<td>'+p.type+'</td>'
       +'<td>$'+fmt2(p.strike)+'</td>'
@@ -843,7 +843,7 @@ function renderPositionsTable(pos,srcLabel){
       +'<td class="'+pnlCls+'">'+(p.pnl>=0?'+':'')+fmtD(p.pnl)+'</td>'
       +'<td class="'+pnlCls+'">'+(p.pnlPct>=0?'+':'')+fmtP(p.pnlPct)+'</td>'
       +'<td>'+statusBadge+'</td>'
-      +'<td><button class="cbtn" onclick="closePosition(''+tk+'',''+tp+'','+st+',''+ex+'','+qty+')">CLOSE</button></td>'
+      +'<td><button class="cbtn" onclick="doClose(this)">CLOSE</button></td>'
       +'</tr>';
   });
   html+='</tbody></table>';
@@ -866,6 +866,7 @@ function clearPositions(){
   toast('Positions cleared');
 }
 
+function doClose(btn){var tr=btn.closest('tr');closePosition(tr.dataset.tk,tr.dataset.tp,+tr.dataset.st,tr.dataset.ex,+tr.dataset.qty);}
 function closePosition(symbol,type,strike,exp,qty){
   var action=type==='STOCK'?'SELL':'BUY_TO_CLOSE';
   switchTab('order');
