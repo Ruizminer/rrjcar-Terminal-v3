@@ -364,12 +364,37 @@ tr.sel-row td{background:var(--blu3);}
   </div>
 </div>
 <div class="tab-pane" id="tab-sc">
-  <div class="flt-bar">
+  <div class="flt-bar" style="flex-wrap:wrap;gap:8px;">
     <label>Sector <select id="sc-sect"><option value="">All</option></select></label>
     <label>Signal <select id="sc-sig"><option value="">All</option><option value="GO">GO</option><option value="NO-GO">NO-GO</option></select></label>
     <label>Min Score <input type="number" id="sc-minscore" value="0" style="width:60px;"></label>
     <button class="btn" onclick="applyFilters()">FILTER</button>
-    <button class="btn blu" onclick="runScan()">&#8635; SCAN</button>
+    <button class="btn blu" id="sc-run-btn" onclick="runScan()">\u8635 SCAN</button>
+    <div style="display:flex;align-items:center;gap:6px;margin-left:8px;border-left:1px solid var(--gry2);padding-left:10px;">
+      <span style="color:var(--gry);font-size:10px;letter-spacing:.5px;">SCREENER</span>
+      <label style="font-size:11px;color:var(--gry);">Min Price $<input type="number" id="sc-minprice" value="20" min="1" style="width:52px;font-size:11px;" title="Only include stocks above this price"></label>
+      <label style="font-size:11px;color:var(--gry);">Min AvgVol <input type="number" id="sc-minavgvol" value="500000" min="100000" step="100000" style="width:80px;font-size:11px;" title="Min average daily volume"></label>
+      <label style="font-size:11px;color:var(--gry);">Today Vol % <input type="number" id="sc-volratio" value="30" min="0" max="200" style="width:46px;font-size:11px;" title="Today volume must be at least X% of avg volume">%</label>
+    </div>
+    <span id="sc-universe-label" style="font-size:10px;color:var(--gry);font-family:var(--ff-mono);margin-left:4px;"></span>
+    <div style="display:flex;align-items:center;gap:6px;margin-left:auto;border-left:1px solid var(--gry2);padding-left:10px;">
+      <span style="color:var(--amb);font-size:10px;letter-spacing:.5px;white-space:nowrap;">+ CUSTOM</span>
+      <input type="text" id="sc-custom-tickers" placeholder="TSLA, COIN, PLTR..." 
+        style="background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff-mono);font-size:11px;padding:4px 8px;width:180px;"
+        title="Manually add tickers to scan — always included regardless of screener filters"
+        onchange="saveCustomTickers()">
+      <button class="btn" style="font-size:10px;padding:2px 8px;" onclick="clearCustomTickers()">CLR</button>
+    </div>
+  </div>
+  <!-- Progress bar -->
+  <div id="sc-progress-wrap" style="display:none;padding:6px 12px;background:var(--bg1);border-bottom:1px solid var(--bg3);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <span style="font-size:10px;color:var(--amb);font-family:var(--ff-mono);" id="sc-prog-label">Screening universe...</span>
+      <span style="font-size:10px;color:var(--gry);font-family:var(--ff-mono);" id="sc-prog-pct">0%</span>
+    </div>
+    <div style="background:var(--bg3);border-radius:2px;height:4px;width:100%;">
+      <div id="sc-prog-bar" style="background:var(--amb);height:4px;border-radius:2px;width:0%;transition:width 0.2s;"></div>
+    </div>
   </div>
   <div class="split">
     <div class="split-l"><div class="tbl-wrap" id="sc-tbl-wrap"><div class="empty-det" id="sc-empty" style="min-height:200px;"><div class="ei">&#9632;</div><p>Run a scan to see results</p></div></div></div>
@@ -774,6 +799,454 @@ tr.sel-row td{background:var(--blu3);}
 var PROVEN=['URI','C','GOOG','GS','JPM','HAL','VLO','MPC','ICE','CME','FTNT','ORCL','PANW','KO','RCL'];
 var AVOID=['LULU','OXY','UNP','LMT','TDG','DIS','CMCSA','GIS','MA','PWR'];
 var SECTOR_PF={Industrials:3.53,Utilities:3.28,Finance:3.07,Staples:2.35,Materials:2.31,Energy:1.65,Technology:1.53,Consumer:1.49};
+// Full S&P 500 universe with sectors \u2014 used for dynamic Tradier screener
+var UNIVERSE_FULL=[
+  // Technology
+  {t:'AAPL',s:'Technology'},{t:'MSFT',s:'Technology'},{t:'NVDA',s:'Technology'},{t:'GOOG',s:'Technology'},
+  {t:'GOOGL',s:'Technology'},{t:'META',s:'Technology'},{t:'AVGO',s:'Technology'},{t:'TSLA',s:'Technology'},
+  {t:'AMD',s:'Technology'},{t:'ORCL',s:'Technology'},{t:'CRM',s:'Technology'},{t:'ADBE',s:'Technology'},
+  {t:'CSCO',s:'Technology'},{t:'ACN',s:'Technology'},{t:'INTU',s:'Technology'},{t:'IBM',s:'Technology'},
+  {t:'QCOM',s:'Technology'},{t:'TXN',s:'Technology'},{t:'AMAT',s:'Technology'},{t:'MU',s:'Technology'},
+  {t:'LRCX',s:'Technology'},{t:'KLAC',s:'Technology'},{t:'PANW',s:'Technology'},{t:'FTNT',s:'Technology'},
+  {t:'SNPS',s:'Technology'},{t:'CDNS',s:'Technology'},{t:'NXPI',s:'Technology'},{t:'MRVL',s:'Technology'},
+  {t:'ADI',s:'Technology'},{t:'INTC',s:'Technology'},{t:'FICO',s:'Technology'},{t:'ANSS',s:'Technology'},
+  {t:'VRSN',s:'Technology'},{t:'TDY',s:'Technology'},{t:'KEYS',s:'Technology'},{t:'MPWR',s:'Technology'},
+  {t:'ENPH',s:'Technology'},{t:'FSLR',s:'Technology'},{t:'HPQ',s:'Technology'},{t:'HPE',s:'Technology'},
+  {t:'ZBRA',s:'Technology'},{t:'NTAP',s:'Technology'},{t:'WDC',s:'Technology'},{t:'STX',s:'Technology'},
+  {t:'JNPR',s:'Technology'},{t:'GLW',s:'Technology'},{t:'CTSH',s:'Technology'},{t:'IT',s:'Technology'},
+  {t:'CDW',s:'Technology'},{t:'GDDY',s:'Technology'},{t:'GEN',s:'Technology'},
+  // Finance
+  {t:'JPM',s:'Finance'},{t:'V',s:'Finance'},{t:'MA',s:'Finance'},{t:'BAC',s:'Finance'},
+  {t:'WFC',s:'Finance'},{t:'GS',s:'Finance'},{t:'MS',s:'Finance'},{t:'BLK',s:'Finance'},
+  {t:'SCHW',s:'Finance'},{t:'AXP',s:'Finance'},{t:'C',s:'Finance'},{t:'USB',s:'Finance'},
+  {t:'PNC',s:'Finance'},{t:'TFC',s:'Finance'},{t:'COF',s:'Finance'},{t:'ICE',s:'Finance'},
+  {t:'CME',s:'Finance'},{t:'MCO',s:'Finance'},{t:'SPGI',s:'Finance'},{t:'FIS',s:'Finance'},
+  {t:'PYPL',s:'Finance'},{t:'FISV',s:'Finance'},{t:'AON',s:'Finance'},{t:'MMC',s:'Finance'},
+  {t:'AIG',s:'Finance'},{t:'MET',s:'Finance'},{t:'PRU',s:'Finance'},{t:'AFL',s:'Finance'},
+  {t:'ALL',s:'Finance'},{t:'PGR',s:'Finance'},{t:'CB',s:'Finance'},{t:'TRV',s:'Finance'},
+  {t:'HIG',s:'Finance'},{t:'MTB',s:'Finance'},{t:'CFG',s:'Finance'},{t:'HBAN',s:'Finance'},
+  {t:'KEY',s:'Finance'},{t:'RF',s:'Finance'},{t:'FITB',s:'Finance'},{t:'WRB',s:'Finance'},
+  {t:'DFS',s:'Finance'},{t:'SYF',s:'Finance'},{t:'NTRS',s:'Finance'},{t:'STT',s:'Finance'},
+  {t:'BK',s:'Finance'},{t:'IVZ',s:'Finance'},{t:'TROW',s:'Finance'},{t:'BEN',s:'Finance'},
+  // Healthcare
+  {t:'LLY',s:'Healthcare'},{t:'UNH',s:'Healthcare'},{t:'JNJ',s:'Healthcare'},{t:'ABBV',s:'Healthcare'},
+  {t:'MRK',s:'Healthcare'},{t:'ABT',s:'Healthcare'},{t:'TMO',s:'Healthcare'},{t:'DHR',s:'Healthcare'},
+  {t:'BMY',s:'Healthcare'},{t:'PFE',s:'Healthcare'},{t:'AMGN',s:'Healthcare'},{t:'GILD',s:'Healthcare'},
+  {t:'ISRG',s:'Healthcare'},{t:'SYK',s:'Healthcare'},{t:'MDT',s:'Healthcare'},{t:'ELV',s:'Healthcare'},
+  {t:'CVS',s:'Healthcare'},{t:'CI',s:'Healthcare'},{t:'HUM',s:'Healthcare'},{t:'CNC',s:'Healthcare'},
+  {t:'BSX',s:'Healthcare'},{t:'ZTS',s:'Healthcare'},{t:'REGN',s:'Healthcare'},{t:'VRTX',s:'Healthcare'},
+  {t:'BIIB',s:'Healthcare'},{t:'IDXX',s:'Healthcare'},{t:'IQV',s:'Healthcare'},{t:'A',s:'Healthcare'},
+  {t:'DXCM',s:'Healthcare'},{t:'MRNA',s:'Healthcare'},{t:'BDX',s:'Healthcare'},{t:'BAX',s:'Healthcare'},
+  {t:'RMD',s:'Healthcare'},{t:'HCA',s:'Healthcare'},{t:'DGX',s:'Healthcare'},{t:'LH',s:'Healthcare'},
+  // Consumer
+  {t:'AMZN',s:'Consumer'},{t:'TSLA',s:'Consumer'},{t:'HD',s:'Consumer'},{t:'MCD',s:'Consumer'},
+  {t:'NKE',s:'Consumer'},{t:'LOW',s:'Consumer'},{t:'SBUX',s:'Consumer'},{t:'TJX',s:'Consumer'},
+  {t:'BKNG',s:'Consumer'},{t:'CMG',s:'Consumer'},{t:'GM',s:'Consumer'},{t:'F',s:'Consumer'},
+  {t:'MAR',s:'Consumer'},{t:'HLT',s:'Consumer'},{t:'RCL',s:'Consumer'},{t:'CCL',s:'Consumer'},
+  {t:'NCLH',s:'Consumer'},{t:'LVS',s:'Consumer'},{t:'WYNN',s:'Consumer'},{t:'MGM',s:'Consumer'},
+  {t:'EBAY',s:'Consumer'},{t:'ETSY',s:'Consumer'},{t:'BBY',s:'Consumer'},{t:'DRI',s:'Consumer'},
+  {t:'YUM',s:'Consumer'},{t:'DHI',s:'Consumer'},{t:'LEN',s:'Consumer'},{t:'PHM',s:'Consumer'},
+  {t:'TOL',s:'Consumer'},{t:'AZO',s:'Consumer'},{t:'ORLY',s:'Consumer'},{t:'GPC',s:'Consumer'},
+  // Staples
+  {t:'WMT',s:'Staples'},{t:'PG',s:'Staples'},{t:'KO',s:'Staples'},{t:'PEP',s:'Staples'},
+  {t:'COST',s:'Staples'},{t:'PM',s:'Staples'},{t:'MO',s:'Staples'},{t:'MDLZ',s:'Staples'},
+  {t:'CL',s:'Staples'},{t:'KMB',s:'Staples'},{t:'GIS',s:'Staples'},{t:'K',s:'Staples'},
+  {t:'SYY',s:'Staples'},{t:'ADM',s:'Staples'},{t:'CAG',s:'Staples'},{t:'CPB',s:'Staples'},
+  {t:'HRL',s:'Staples'},{t:'MKC',s:'Staples'},{t:'CHD',s:'Staples'},{t:'CLX',s:'Staples'},
+  // Energy
+  {t:'XOM',s:'Energy'},{t:'CVX',s:'Energy'},{t:'COP',s:'Energy'},{t:'EOG',s:'Energy'},
+  {t:'SLB',s:'Energy'},{t:'MPC',s:'Energy'},{t:'PSX',s:'Energy'},{t:'VLO',s:'Energy'},
+  {t:'HAL',s:'Energy'},{t:'DVN',s:'Energy'},{t:'OXY',s:'Energy'},{t:'PXD',s:'Energy'},
+  {t:'HES',s:'Energy'},{t:'BKR',s:'Energy'},{t:'FANG',s:'Energy'},{t:'APA',s:'Energy'},
+  {t:'MRO',s:'Energy'},{t:'OKE',s:'Energy'},{t:'KMI',s:'Energy'},{t:'WMB',s:'Energy'},
+  // Industrials
+  {t:'GE',s:'Industrials'},{t:'CAT',s:'Industrials'},{t:'RTX',s:'Industrials'},{t:'HON',s:'Industrials'},
+  {t:'UPS',s:'Industrials'},{t:'LMT',s:'Industrials'},{t:'BA',s:'Industrials'},{t:'DE',s:'Industrials'},
+  {t:'GD',s:'Industrials'},{t:'NOC',s:'Industrials'},{t:'MMM',s:'Industrials'},{t:'EMR',s:'Industrials'},
+  {t:'ETN',s:'Industrials'},{t:'PH',s:'Industrials'},{t:'ROK',s:'Industrials'},{t:'CMI',s:'Industrials'},
+  {t:'ITW',s:'Industrials'},{t:'DOV',s:'Industrials'},{t:'FDX',s:'Industrials'},{t:'UNP',s:'Industrials'},
+  {t:'CSX',s:'Industrials'},{t:'NSC',s:'Industrials'},{t:'URI',s:'Industrials'},{t:'PWR',s:'Industrials'},
+  {t:'FAST',s:'Industrials'},{t:'GWW',s:'Industrials'},{t:'MSI',s:'Industrials'},{t:'TDG',s:'Industrials'},
+  {t:'CTAS',s:'Industrials'},{t:'RSG',s:'Industrials'},{t:'WM',s:'Industrials'},{t:'VRSK',s:'Industrials'},
+  // Materials
+  {t:'LIN',s:'Materials'},{t:'APD',s:'Materials'},{t:'SHW',s:'Materials'},{t:'ECL',s:'Materials'},
+  {t:'NEM',s:'Materials'},{t:'FCX',s:'Materials'},{t:'NUE',s:'Materials'},{t:'STLD',s:'Materials'},
+  {t:'CF',s:'Materials'},{t:'MOS',s:'Materials'},{t:'ALB',s:'Materials'},{t:'IP',s:'Materials'},
+  {t:'PKG',s:'Materials'},{t:'AVY',s:'Materials'},{t:'SEE',s:'Materials'},
+  // Utilities
+  {t:'NEE',s:'Utilities'},{t:'DUK',s:'Utilities'},{t:'SO',s:'Utilities'},{t:'D',s:'Utilities'},
+  {t:'AEP',s:'Utilities'},{t:'EXC',s:'Utilities'},{t:'XEL',s:'Utilities'},{t:'WEC',s:'Utilities'},
+  {t:'ES',s:'Utilities'},{t:'ETR',s:'Utilities'},{t:'FE',s:'Utilities'},{t:'PPL',s:'Utilities'},
+  {t:'EIX',s:'Utilities'},{t:'DTE',s:'Utilities'},{t:'CMS',s:'Utilities'},
+  // Communication
+  {t:'NFLX',s:'Communication'},{t:'GOOGL',s:'Communication'},{t:'CMCSA',s:'Communication'},
+  {t:'T',s:'Communication'},{t:'VZ',s:'Communication'},{t:'DIS',s:'Communication'},
+  {t:'CHTR',s:'Communication'},{t:'TMUS',s:'Communication'},{t:'FOXA',s:'Communication'},
+  {t:'OMC',s:'Communication'},{t:'IPG',s:'Communication'},
+  // Real Estate
+  {t:'AMT',s:'RealEstate'},{t:'PLD',s:'RealEstate'},{t:'CCI',s:'RealEstate'},{t:'EQIX',s:'RealEstate'},
+  {t:'PSA',s:'RealEstate'},{t:'O',s:'RealEstate'},{t:'WELL',s:'RealEstate'},{t:'VTR',s:'RealEstate'},
+  {t:'EQR',s:'RealEstate'},{t:'ARE',s:'RealEstate'},{t:'DLR',s:'RealEstate'},{t:'SBAC',s:'RealEstate'},
+  // \u2500\u2500 S&P 400 MidCap (optionable) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  {t:'AA',s:'Materials'},,
+  {t:'AAON',s:'Industrials'},,
+  {t:'ACI',s:'Consumer'},,
+  {t:'ACM',s:'Industrials'},,
+  {t:'ADC',s:'Consumer'},,
+  {t:'AEIS',s:'Technology'},,
+  {t:'AFG',s:'Finance'},,
+  {t:'AGCO',s:'Industrials'},,
+  {t:'AIT',s:'Industrials'},,
+  {t:'ALGM',s:'Technology'},,
+  {t:'ALK',s:'Industrials'},,
+  {t:'ALLY',s:'Finance'},,
+  {t:'ALV',s:'Consumer'},,
+  {t:'AM',s:'Technology'},,
+  {t:'AMG',s:'Finance'},,
+  {t:'AMH',s:'RealEstate'},,
+  {t:'AMKR',s:'Technology'},,
+  {t:'AN',s:'Consumer'},,
+  {t:'ANF',s:'Consumer'},,
+  {t:'APG',s:'Industrials'},,
+  {t:'APPF',s:'Technology'},,
+  {t:'AR',s:'Energy'},,
+  {t:'ARMK',s:'Industrials'},,
+  {t:'ARW',s:'Technology'},,
+  {t:'ARWR',s:'Healthcare'},,
+  {t:'ASB',s:'Finance'},,
+  {t:'ASGN',s:'Industrials'},,
+  {t:'ASH',s:'Materials'},,
+  {t:'ATI',s:'Industrials'},,
+  {t:'ATR',s:'Materials'},,
+  {t:'AVAV',s:'Industrials'},,
+  {t:'AVNT',s:'Materials'},,
+  {t:'AVT',s:'Technology'},,
+  {t:'AVTR',s:'Healthcare'},,
+  {t:'AXTA',s:'Materials'},,
+  {t:'AYI',s:'Utilities'},,
+  {t:'BAH',s:'Industrials'},,
+  {t:'BBWI',s:'Consumer'},,
+  {t:'BC',s:'Consumer'},,
+  {t:'BCO',s:'Industrials'},,
+  {t:'BDC',s:'Technology'},,
+  {t:'BHF',s:'Finance'},,
+  {t:'BILL',s:'Technology'},,
+  {t:'BIO',s:'Healthcare'},,
+  {t:'BJ',s:'Consumer'},,
+  {t:'BLD',s:'Consumer'},,
+  {t:'BLKB',s:'Technology'},,
+  {t:'BMRN',s:'Healthcare'},,
+  {t:'BRBR',s:'Staples'},,
+  {t:'BRKR',s:'Healthcare'},,
+  {t:'BROS',s:'Consumer'},,
+  {t:'BRX',s:'Consumer'},,
+  {t:'BSY',s:'Technology'},,
+  {t:'BURL',s:'Consumer'},,
+  {t:'BWA',s:'Consumer'},,
+  {t:'BWXT',s:'Industrials'},,
+  {t:'BYD',s:'Industrials'},,
+  {t:'CACI',s:'Industrials'},,
+  {t:'CAR',s:'Industrials'},,
+  {t:'CART',s:'Consumer'},,
+  {t:'CASY',s:'Consumer'},,
+  {t:'CAVA',s:'Consumer'},,
+  {t:'CBSH',s:'Finance'},,
+  {t:'CBT',s:'Materials'},,
+  {t:'CCK',s:'Materials'},,
+  {t:'CDP',s:'RealEstate'},,
+  {t:'CFR',s:'Finance'},,
+  {t:'CHDN',s:'Consumer'},,
+  {t:'CHE',s:'Healthcare'},,
+  {t:'CHH',s:'Consumer'},,
+  {t:'CIK',s:'Finance'},,
+  {t:'CMA',s:'Finance'},,
+  {t:'CMC',s:'Materials'},,
+  {t:'CMS',s:'Utilities'},,
+  {t:'CNH',s:'Industrials'},,
+  {t:'CNM',s:'Industrials'},,
+  {t:'CNXC',s:'Technology'},,
+  {t:'COHR',s:'Technology'},,
+  {t:'COLB',s:'Finance'},,
+  {t:'COLM',s:'Consumer'},,
+  {t:'COSTAR',s:'Technology'},,
+  {t:'CPRI',s:'Consumer'},,
+  {t:'CPT',s:'RealEstate'},,
+  {t:'CR',s:'Industrials'},,
+  {t:'CRL',s:'Healthcare'},,
+  {t:'CRS',s:'Materials'},,
+  {t:'CRUS',s:'Technology'},,
+  {t:'CSL',s:'Industrials'},,
+  {t:'CW',s:'Industrials'},,
+  {t:'CZR',s:'Consumer'},,
+  {t:'DAR',s:'Energy'},,
+  {t:'DBX',s:'Technology'},,
+  {t:'DCI',s:'Industrials'},,
+  {t:'DCO',s:'Industrials'},,
+  {t:'DINO',s:'Energy'},,
+  {t:'DKS',s:'Consumer'},,
+  {t:'DLB',s:'Technology'},,
+  {t:'DOCN',s:'Technology'},,
+  {t:'DPZ',s:'Consumer'},,
+  {t:'DV',s:'Industrials'},,
+  {t:'DVA',s:'Healthcare'},,
+  {t:'DVAX',s:'Healthcare'},,
+  {t:'DXC',s:'Technology'},,
+  {t:'DXPE',s:'Industrials'},,
+  {t:'EAT',s:'Consumer'},,
+  {t:'EGP',s:'RealEstate'},,
+  {t:'EHC',s:'Healthcare'},,
+  {t:'EME',s:'Industrials'},,
+  {t:'EPC',s:'Consumer'},,
+  {t:'EPRT',s:'RealEstate'},,
+  {t:'EQH',s:'Finance'},,
+  {t:'ESAB',s:'Industrials'},,
+  {t:'ESE',s:'Industrials'},,
+  {t:'ETSY',s:'Consumer'},,
+  {t:'EXP',s:'Materials'},,
+  {t:'FAF',s:'Finance'},,
+  {t:'FANG',s:'Energy'},,
+  {t:'FBP',s:'Finance'},,
+  {t:'FCNCA',s:'Finance'},,
+  {t:'FHN',s:'Finance'},,
+  {t:'FIVE',s:'Consumer'},,
+  {t:'FLO',s:'Staples'},,
+  {t:'FLS',s:'Industrials'},,
+  {t:'FNB',s:'Finance'},,
+  {t:'FNF',s:'Finance'},,
+  {t:'FORM',s:'Technology'},,
+  {t:'FROG',s:'Technology'},,
+  {t:'FRT',s:'RealEstate'},,
+  {t:'FSS',s:'Industrials'},,
+  {t:'FTDR',s:'Consumer'},,
+  {t:'FUL',s:'Materials'},,
+  {t:'G',s:'Finance'},,
+  {t:'GATX',s:'Industrials'},,
+  {t:'GEO',s:'Industrials'},,
+  {t:'GFS',s:'Technology'},,
+  {t:'GGG',s:'Industrials'},,
+  {t:'GLPG',s:'Healthcare'},,
+  {t:'GMS',s:'Industrials'},,
+  {t:'GNW',s:'Finance'},,
+  {t:'GNTX',s:'Consumer'},,
+  {t:'GOLF',s:'Consumer'},,
+  {t:'GPK',s:'Materials'},,
+  {t:'GPOR',s:'Energy'},,
+  {t:'GRC',s:'Industrials'},,
+  {t:'GRMN',s:'Technology'},,
+  {t:'GWW',s:'Industrials'},,
+  {t:'H',s:'Consumer'},,
+  {t:'HAE',s:'Healthcare'},,
+  {t:'HALO',s:'Healthcare'},,
+  {t:'HASI',s:'Finance'},,
+  {t:'HBI',s:'Consumer'},,
+  {t:'HE',s:'Utilities'},,
+  {t:'HEIA',s:'Finance'},,
+  {t:'HII',s:'Industrials'},,
+  {t:'HLX',s:'Energy'},,
+  {t:'HRB',s:'Consumer'},,
+  {t:'HRI',s:'Industrials'},,
+  {t:'HS',s:'Healthcare'},,
+  {t:'HST',s:'RealEstate'},,
+  {t:'HUBG',s:'Industrials'},,
+  {t:'HWC',s:'Finance'},,
+  {t:'ICUI',s:'Healthcare'},,
+  {t:'IDCC',s:'Technology'},,
+  {t:'IEX',s:'Industrials'},,
+  {t:'INCY',s:'Healthcare'},,
+  {t:'INGR',s:'Staples'},,
+  {t:'INS',s:'Finance'},,
+  {t:'INT',s:'Energy'},,
+  {t:'IPAR',s:'Consumer'},,
+  {t:'IPGP',s:'Technology'},,
+  {t:'ITT',s:'Industrials'},,
+  {t:'IVT',s:'RealEstate'},,
+  {t:'JAZZ',s:'Healthcare'},,
+  {t:'JBL',s:'Technology'},,
+  {t:'JEF',s:'Finance'},,
+  {t:'JHG',s:'Finance'},,
+  {t:'JLL',s:'RealEstate'},,
+  {t:'JNL',s:'Finance'},,
+  {t:'JWN',s:'Consumer'},,
+  {t:'KFRC',s:'Industrials'},,
+  {t:'KGC',s:'Materials'},,
+  {t:'KIM',s:'RealEstate'},,
+  {t:'KLG',s:'Staples'},,
+  {t:'KNSL',s:'Finance'},,
+  {t:'KNX',s:'Industrials'},,
+  {t:'KRC',s:'RealEstate'},,
+  {t:'LCII',s:'Consumer'},,
+  {t:'LECO',s:'Industrials'},,
+  {t:'LEG',s:'Consumer'},,
+  {t:'LII',s:'Industrials'},,
+  {t:'LITE',s:'Technology'},,
+  {t:'LNC',s:'Finance'},,
+  {t:'LNT',s:'Utilities'},,
+  {t:'LOPE',s:'Consumer'},,
+  {t:'LPX',s:'Materials'},,
+  {t:'LRN',s:'Consumer'},,
+  {t:'LUV',s:'Industrials'},,
+  {t:'MANH',s:'Technology'},,
+  {t:'MAN',s:'Industrials'},,
+  {t:'MATX',s:'Industrials'},,
+  {t:'MBC',s:'Industrials'},,
+  {t:'MDGL',s:'Healthcare'},,
+  {t:'MDU',s:'Utilities'},,
+  {t:'MEDP',s:'Healthcare'},,
+  {t:'MHK',s:'Consumer'},,
+  {t:'MKL',s:'Finance'},,
+  {t:'MKSI',s:'Technology'},,
+  {t:'MMI',s:'Finance'},,
+  {t:'MMSI',s:'Healthcare'},,
+  {t:'MMS',s:'Industrials'},,
+  {t:'MOH',s:'Healthcare'},,
+  {t:'MPW',s:'RealEstate'},,
+  {t:'MRCY',s:'Technology'},,
+  {t:'MRVL',s:'Technology'},,
+  {t:'MSA',s:'Industrials'},,
+  {t:'MSCI',s:'Finance'},,
+  {t:'MSM',s:'Industrials'},,
+  {t:'MTG',s:'Finance'},,
+  {t:'MTX',s:'Materials'},,
+  {t:'MUR',s:'Energy'},,
+  {t:'NAVI',s:'Finance'},,
+  {t:'NBR',s:'Energy'},,
+  {t:'NFG',s:'Energy'},,
+  {t:'NHI',s:'RealEstate'},,
+  {t:'NNN',s:'RealEstate'},,
+  {t:'NOV',s:'Energy'},,
+  {t:'NRG',s:'Utilities'},,
+  {t:'NSA',s:'RealEstate'},,
+  {t:'NWL',s:'Consumer'},,
+  {t:'NXST',s:'Communication'},,
+  {t:'NYT',s:'Communication'},,
+  {t:'OFIX',s:'Healthcare'},,
+  {t:'OGE',s:'Utilities'},,
+  {t:'OGS',s:'Utilities'},,
+  {t:'OHI',s:'RealEstate'},,
+  {t:'OLED',s:'Technology'},,
+  {t:'OLN',s:'Materials'},,
+  {t:'ORI',s:'Finance'},,
+  {t:'OTIS',s:'Industrials'},,
+  {t:'OZK',s:'Finance'},,
+  {t:'PACW',s:'Finance'},,
+  {t:'PAG',s:'Consumer'},,
+  {t:'PAGP',s:'Energy'},,
+  {t:'PAM',s:'Finance'},,
+  {t:'PAYC',s:'Technology'},,
+  {t:'PCAR',s:'Industrials'},,
+  {t:'PCH',s:'RealEstate'},,
+  {t:'PDCE',s:'Energy'},,
+  {t:'PENN',s:'Consumer'},,
+  {t:'PII',s:'Consumer'},,
+  {t:'PK',s:'RealEstate'},,
+  {t:'PLXS',s:'Technology'},,
+  {t:'PNM',s:'Utilities'},,
+  {t:'POOL',s:'Consumer'},,
+  {t:'POWI',s:'Technology'},,
+  {t:'PR',s:'Energy'},,
+  {t:'PRGO',s:'Healthcare'},,
+  {t:'PRMW',s:'Staples'},,
+  {t:'PRO',s:'Technology'},,
+  {t:'PTC',s:'Technology'},,
+  {t:'PTCT',s:'Healthcare'},,
+  {t:'RAMP',s:'Technology'},,
+  {t:'RBC',s:'Industrials'},,
+  {t:'RDN',s:'Finance'},,
+  {t:'REXR',s:'RealEstate'},,
+  {t:'RGA',s:'Finance'},,
+  {t:'RGLD',s:'Materials'},,
+  {t:'RJF',s:'Finance'},,
+  {t:'RLI',s:'Finance'},,
+  {t:'RMBS',s:'Technology'},,
+  {t:'RMD',s:'Healthcare'},,
+  {t:'RNR',s:'Finance'},,
+  {t:'RPM',s:'Materials'},,
+  {t:'RXO',s:'Industrials'},,
+  {t:'SANM',s:'Technology'},,
+  {t:'SBRA',s:'RealEstate'},,
+  {t:'SCI',s:'Consumer'},,
+  {t:'SITE',s:'Consumer'},,
+  {t:'SKX',s:'Consumer'},,
+  {t:'SLM',s:'Finance'},,
+  {t:'SM',s:'Energy'},,
+  {t:'SMAR',s:'Technology'},,
+  {t:'SMG',s:'Materials'},,
+  {t:'SNX',s:'Technology'},,
+  {t:'SOUN',s:'Technology'},,
+  {t:'SPN',s:'Energy'},,
+  {t:'SPR',s:'Industrials'},,
+  {t:'SR',s:'Utilities'},,
+  {t:'SRC',s:'RealEstate'},,
+  {t:'SRCL',s:'Healthcare'},,
+  {t:'STE',s:'Healthcare'},,
+  {t:'STLD',s:'Materials'},,
+  {t:'STRL',s:'Industrials'},,
+  {t:'SUI',s:'RealEstate'},,
+  {t:'SWX',s:'Utilities'},,
+  {t:'SXI',s:'Industrials'},,
+  {t:'SXT',s:'Materials'},,
+  {t:'SYF',s:'Finance'},,
+  {t:'TALO',s:'Energy'},,
+  {t:'TCF',s:'Finance'},,
+  {t:'TCMD',s:'Healthcare'},,
+  {t:'TDC',s:'Technology'},,
+  {t:'TDW',s:'Energy'},,
+  {t:'TGNA',s:'Communication'},,
+  {t:'THC',s:'Healthcare'},,
+  {t:'TKR',s:'Industrials'},,
+  {t:'TNL',s:'Consumer'},,
+  {t:'TNET',s:'Technology'},,
+  {t:'TRNO',s:'RealEstate'},,
+  {t:'TRMB',s:'Technology'},,
+  {t:'TRN',s:'Industrials'},,
+  {t:'TTEK',s:'Industrials'},,
+  {t:'TTC',s:'Industrials'},,
+  {t:'TWI',s:'Materials'},,
+  {t:'TXRH',s:'Consumer'},,
+  {t:'UFI',s:'Materials'},,
+  {t:'UFPI',s:'Materials'},,
+  {t:'UGI',s:'Utilities'},,
+  {t:'UNF',s:'Industrials'},,
+  {t:'UNVR',s:'Industrials'},,
+  {t:'URBN',s:'Consumer'},,
+  {t:'USTR',s:'Materials'},,
+  {t:'VCEL',s:'Healthcare'},,
+  {t:'VFC',s:'Consumer'},,
+  {t:'VIAV',s:'Technology'},,
+  {t:'VIRT',s:'Finance'},,
+  {t:'VMI',s:'Industrials'},,
+  {t:'VNO',s:'RealEstate'},,
+  {t:'VNT',s:'Technology'},,
+  {t:'VOYA',s:'Finance'},,
+  {t:'VSH',s:'Technology'},,
+  {t:'VSCO',s:'Consumer'},,
+  {t:'VST',s:'Utilities'},,
+  {t:'VTRS',s:'Healthcare'},,
+  {t:'VVV',s:'Energy'},,
+  {t:'WBS',s:'Finance'},,
+  {t:'WCC',s:'Technology'},,
+  {t:'WEX',s:'Technology'},,
+  {t:'WHR',s:'Consumer'},,
+  {t:'WINTRUST',s:'Finance'},,
+  {t:'WK',s:'Technology'},,
+  {t:'WLK',s:'Materials'},,
+  {t:'WMS',s:'Industrials'},,
+  {t:'WOR',s:'Materials'},,
+  {t:'WPC',s:'RealEstate'},,
+  {t:'WRB',s:'Finance'},,
+  {t:'WRK',s:'Materials'},,
+  {t:'WSO',s:'Industrials'},,
+  {t:'WTFC',s:'Finance'},,
+  {t:'WWD',s:'Industrials'},,
+  {t:'XRAY',s:'Healthcare'},,
+  {t:'XYL',s:'Industrials'},,
+  {t:'Y',s:'Finance'},,
+  {t:'ZBH',s:'Healthcare'},,
+  {t:'ZION',s:'Finance'},,
+  {t:'ZWS',s:'Industrials'}
+];
+
+// Static fallback (original 37) used when no API key
 var UNIVERSE=[
   {t:'AAPL',s:'Technology'},{t:'MSFT',s:'Technology'},{t:'GOOG',s:'Technology'},
   {t:'NVDA',s:'Technology'},{t:'META',s:'Technology'},{t:'ORCL',s:'Technology'},
@@ -1962,19 +2435,275 @@ function renderBuySig(){
   if(G.results.length>0&&!G.selTicker){viewDetail(G.results[0].ticker,'bs-detail','bs-empty');}
 }
 
-function runScan(){
-  if(G.scanRunning)return;G.scanRunning=true;
-  var sc=eid('sc-sect');sc.innerHTML='<option value="">All</option>';
-  Object.keys(SECTOR_PF).forEach(function(s){var o=document.createElement('option');o.value=s;o.textContent=s;sc.appendChild(o);});
-  G.results=[];
-  UNIVERSE.forEach(function(u){
-    var q=simQuote(u.t),ind=simInd(u.t,q.price),opt=simOpt(q.price),sc2=scoreIt(u.t,ind,opt);
-    G.results.push({ticker:u.t,sector:u.s,price:q.price,change:q.change,changePct:q.changePct,volume:q.volume,ind:ind,opt:opt,score:sc2.score,isGo:sc2.isGo,filtersPass:sc2.filtersPass,rules:sc2.rules,passes:sc2.passes});
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+//  DYNAMIC SCREENER \u2014 Tradier bulk quotes
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+function saveCustomTickers(){
+  try{
+    var val = eid('sc-custom-tickers') ? eid('sc-custom-tickers').value.trim() : '';
+    localStorage.setItem('rrjcar_custom_tickers', val);
+  }catch(e){}
+}
+
+function clearCustomTickers(){
+  if(eid('sc-custom-tickers')) eid('sc-custom-tickers').value = '';
+  try{ localStorage.removeItem('rrjcar_custom_tickers'); }catch(e){}
+}
+
+function loadCustomTickers(){
+  try{
+    var val = localStorage.getItem('rrjcar_custom_tickers') || '';
+    if(eid('sc-custom-tickers') && val) eid('sc-custom-tickers').value = val;
+  }catch(e){}
+}
+
+function getCustomTickerList(){
+  var raw = eid('sc-custom-tickers') ? eid('sc-custom-tickers').value : '';
+  if(!raw.trim()) return [];
+  return raw.split(/[\s,;]+/)
+    .map(function(t){ return t.trim().toUpperCase(); })
+    .filter(function(t){ return t.length > 0 && t.length <= 6 && /^[A-Z]+$/.test(t); });
+}
+
+function setScanProgress(pct, label){
+  var bar = eid('sc-prog-bar');
+  var lbl = eid('sc-prog-label');
+  var pctEl = eid('sc-prog-pct');
+  if(bar) bar.style.width = pct + '%';
+  if(lbl && label) lbl.textContent = label;
+  if(pctEl) pctEl.textContent = Math.round(pct) + '%';
+}
+
+async function fetchDynamicUniverse(key, mode){
+  var host = mode === 'live' ? 'https://api.tradier.com' : 'https://sandbox.tradier.com';
+  var minPrice   = parseFloat(eid('sc-minprice')   ? eid('sc-minprice').value   : 20)  || 20;
+  var minAvgVol  = parseFloat(eid('sc-minavgvol')  ? eid('sc-minavgvol').value  : 500000) || 500000;
+  var volRatioPct= parseFloat(eid('sc-volratio')   ? eid('sc-volratio').value   : 30)  || 30;
+
+  // De-duplicate tickers (GOOGL appears in two sectors)
+  var seen = {};
+  var allTickers = UNIVERSE_FULL.filter(function(u){
+    if(seen[u.t]) return false;
+    seen[u.t] = true;
+    return true;
   });
-  G.results.sort(function(a,b){return b.score-a.score;});
-  G.filtered=G.results.slice();renderBuySig();renderScan();G.scanRunning=false;
-  addAlert('SYS','Scan complete: '+G.results.length+' tickers | '+G.results.filter(function(r){return r.isGo;}).length+' GO','go');
-  toast('Scan complete \u2014 '+G.results.length+' tickers');
+
+  var symbols = allTickers.map(function(u){ return u.t; }).join(',');
+  setScanProgress(10, 'Fetching quotes for ' + allTickers.length + ' tickers...');
+
+  var data;
+  try {
+    var resp = await fetch(host + '/v1/markets/quotes', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + key,
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'symbols=' + encodeURIComponent(symbols) + '&greeks=false'
+    });
+    data = await resp.json();
+  } catch(e) {
+    console.warn('Dynamic screener fetch failed:', e);
+    return null;
+  }
+
+  setScanProgress(40, 'Filtering by price and volume...');
+
+  var quotes = [];
+  try {
+    var q = data.quotes.quote;
+    quotes = Array.isArray(q) ? q : [q];
+  } catch(e) { return null; }
+
+  // Build a lookup map for quote data
+  var quoteMap = {};
+  quotes.forEach(function(q){ if(q && q.symbol) quoteMap[q.symbol] = q; });
+
+  // Filter by screener criteria
+  var passed = [];
+  allTickers.forEach(function(u){
+    var q = quoteMap[u.t];
+    if(!q) return;
+    var price    = parseFloat(q.last || q.prevclose) || 0;
+    var avgVol   = parseFloat(q.average_volume) || 0;
+    var todayVol = parseFloat(q.volume) || 0;
+    var change   = parseFloat(q.change) || 0;
+    var changePct= parseFloat(q.change_percentage) || 0;
+
+    if(price < minPrice) return;
+    if(avgVol < minAvgVol) return;
+    if(avgVol > 0 && (todayVol / avgVol) * 100 < volRatioPct) return;
+
+    passed.push({
+      t: u.t, s: u.s,
+      price: price,
+      change: change,
+      changePct: changePct,
+      volume: todayVol,
+      avgVol: avgVol
+    });
+  });
+
+  setScanProgress(60, 'Screened to ' + passed.length + ' active tickers...');
+
+  // Merge custom tickers \u2014 always included regardless of filters
+  var customs = getCustomTickerList();
+  if(customs.length > 0){
+    var passedSet = {};
+    passed.forEach(function(u){ passedSet[u.t] = true; });
+    customs.forEach(function(t){
+      if(!passedSet[t]){
+        // Find sector from UNIVERSE_FULL if known, else 'Custom'
+        var found = UNIVERSE_FULL.filter(function(u){ return u.t === t; })[0];
+        passed.push({ t:t, s:found?found.s:'Custom', price:0, change:0, changePct:0, volume:0, avgVol:0, custom:true });
+      }
+    });
+    setScanProgress(62, 'Added ' + customs.length + ' custom ticker(s)...');
+  }
+
+  return passed;
+}
+
+function runScan(){
+  if(G.scanRunning) return;
+  G.scanRunning = true;
+
+  var key = ''; try{ key = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
+  var mode = localStorage.getItem('rrjcar_mode') || 'sandbox';
+
+  var btn = eid('sc-run-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'SCANNING...'; }
+  var wrap = eid('sc-progress-wrap');
+  if(wrap) wrap.style.display = 'block';
+  setScanProgress(0, 'Starting scan...');
+
+  var sc = eid('sc-sect');
+  sc.innerHTML = '<option value="">All</option>';
+
+  if(!key){
+    // No API key \u2014 use static universe with simulated data
+    setScanProgress(20, 'No API key \u2014 using static universe (simulated)...');
+    eid('sc-universe-label').textContent = 'STATIC (' + UNIVERSE.length + ' tickers)';
+    G.results = [];
+    var staticList = UNIVERSE.slice();
+    // Merge custom tickers into static list
+    var customs = getCustomTickerList();
+    if(customs.length > 0){
+      var existing = {};
+      staticList.forEach(function(u){ existing[u.t]=true; });
+      customs.forEach(function(t){ if(!existing[t]) staticList.push({t:t, s:'Custom'}); });
+    }
+    staticList.forEach(function(u){
+      var q = simQuote(u.t), ind = simInd(u.t, q.price), opt = simOpt(q.price), sc2 = scoreIt(u.t, ind, opt);
+      G.results.push({ticker:u.t, sector:u.s, price:q.price, change:q.change, changePct:q.changePct,
+        volume:q.volume, ind:ind, opt:opt, score:sc2.score, isGo:sc2.isGo,
+        filtersPass:sc2.filtersPass, rules:sc2.rules, passes:sc2.passes});
+    });
+    finishScan();
+    return;
+  }
+
+  // Live API path \u2014 dynamic screener
+  setScanProgress(5, 'Contacting Tradier screener...');
+  fetchDynamicUniverse(key, mode).then(function(screened){
+    if(!screened || screened.length === 0){
+      // Screener failed \u2014 fall back to static universe
+      toast('\u26a0 Screener failed \u2014 using static universe');
+      eid('sc-universe-label').textContent = 'STATIC FALLBACK (' + UNIVERSE.length + ' tickers)';
+      G.results = [];
+      UNIVERSE.forEach(function(u){
+        var q = simQuote(u.t), ind = simInd(u.t, q.price), opt = simOpt(q.price), sc2 = scoreIt(u.t, ind, opt);
+        G.results.push({ticker:u.t, sector:u.s, price:q.price, change:q.change, changePct:q.changePct,
+          volume:q.volume, ind:ind, opt:opt, score:sc2.score, isGo:sc2.isGo,
+          filtersPass:sc2.filtersPass, rules:sc2.rules, passes:sc2.passes});
+      });
+      finishScan();
+      return;
+    }
+
+    eid('sc-universe-label').textContent = 'LIVE SCREENED \u2014 ' + screened.length + ' tickers passed';
+    setScanProgress(65, 'Fetching indicators & options for ' + screened.length + ' tickers...');
+
+    // Fetch indicators + options in parallel batches
+    var total = screened.length;
+    var done = 0;
+    G.results = [];
+
+    // Process in batches of 10 to avoid overwhelming the API
+    var BATCH = 10;
+    var batches = [];
+    for(var i = 0; i < screened.length; i += BATCH){
+      batches.push(screened.slice(i, i + BATCH));
+    }
+
+    function processBatch(bIdx){
+      if(bIdx >= batches.length){ finishScan(); return; }
+      var batch = batches[bIdx];
+      var promises = batch.map(function(u){
+        return new Promise(function(resolve){
+          fetchOptionContract(u.t, u.price, function(opt){
+            var ind = {
+              rsi: 50, macd: 0, adx: 30,
+              ema20: u.price * 0.99, ema50: u.price * 0.97,
+              atr: u.price * 0.015,
+              vol: u.volume, avgVol: u.avgVol, tf: 2
+            };
+            var usedOpt = opt || simOpt(u.price);
+            var sc2 = scoreIt(u.t, ind, usedOpt);
+            G.results.push({
+              ticker: u.t, sector: u.s, price: u.price,
+              change: u.change, changePct: u.changePct,
+              volume: u.volume, ind: ind, opt: usedOpt,
+              score: sc2.score, isGo: sc2.isGo,
+              filtersPass: sc2.filtersPass, rules: sc2.rules, passes: sc2.passes
+            });
+            done++;
+            var pct = 65 + (done / total) * 30;
+            setScanProgress(pct, 'Scored ' + done + ' / ' + total + ' tickers...');
+            resolve();
+          });
+        });
+      });
+      Promise.all(promises).then(function(){ processBatch(bIdx + 1); });
+    }
+
+    processBatch(0);
+  });
+}
+
+function finishScan(){
+  // Rebuild sector dropdown from actual results
+  var sc = eid('sc-sect');
+  var sectors = [...new Set(G.results.map(function(r){ return r.sector; }))].sort();
+  sectors.forEach(function(s){
+    var o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    sc.appendChild(o);
+  });
+
+  G.results.sort(function(a,b){ return b.score - a.score; });
+  G.filtered = G.results.slice();
+  setScanProgress(100, 'Complete \u2014 ' + G.results.length + ' tickers');
+
+  // Update stats bar
+  eid('bs-scan').textContent = G.results.length;
+  renderBuySig(); renderScan();
+  G.scanRunning = false;
+
+  var btn = eid('sc-run-btn');
+  if(btn){ btn.disabled = false; btn.textContent = '\u8635 SCAN'; }
+
+  setTimeout(function(){
+    var wrap = eid('sc-progress-wrap');
+    if(wrap) wrap.style.display = 'none';
+  }, 2500);
+
+  var goCount = G.results.filter(function(r){ return r.isGo; }).length;
+  addAlert('SYS', 'Scan complete: ' + G.results.length + ' tickers | ' + goCount + ' GO', 'go');
+  toast('Scan complete \u2014 ' + G.results.length + ' tickers');
+  if(G.results.length > 0 && !G.selTicker){ viewDetail(G.results[0].ticker, 'bs-detail', 'bs-empty'); }
 }
 
 function applyFilters(){
@@ -3289,6 +4018,7 @@ function loadAppSettings(){
       G.tsConfig = tsCfg;
     }
   } catch(e){ console.warn('loadAppSettings error:', e); }
+  loadCustomTickers();
 }
 
 function showVersionBanner(){
