@@ -548,7 +548,7 @@ tr.sel-row td{background:var(--blu3);}
           </div>
           <div class="step-cfg-field">
             <label>Max Attempts</label>
-            <input type="number" id="sf-max" value="10" min="1" max="50" placeholder="10">
+            <input type="number" id="sf-max" value="10" min="1" max="50" placeholder="10" oninput="updateStepCalcDisplay()">
           </div>
           <div class="step-cfg-field">
             <label>Delay (sec)</label>
@@ -561,6 +561,16 @@ tr.sel-row td{background:var(--blu3);}
               <option value="mid">Mid</option>
               <option value="ask">Ask</option>
             </select>
+          </div>
+          <div class="step-cfg-field" style="border-left:1px solid var(--gry2);padding-left:10px;">
+            <label style="color:var(--ambb);">Spread Coverage %</label>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <input type="number" id="sf-coverage" value="100" min="10" max="200" step="5" placeholder="100"
+                title="Auto-calculates step size to cover this % of the bid/ask spread across all attempts. Overrides manual Step Size when set."
+                oninput="updateStepCalcDisplay()">
+              <span style="color:var(--gry);font-size:10px;">% of spread</span>
+            </div>
+            <div style="color:var(--gry2);font-size:9px;margin-top:2px;" id="sf-step-calc">auto step: --</div>
           </div>
         </div>
         <div class="step-progress" id="step-progress">
@@ -915,6 +925,8 @@ function renderQuotePanel(q){
   }
   // Update P&L chart with new quote data
   updateOrdChart();
+  // Update step size auto-calc display
+  updateStepCalcDisplay();
 }
 
 function setLimitToBid(){
@@ -962,11 +974,38 @@ function updateStepFillMode(){
 function toggleStepFill(){
   var on=eid('step-fill-toggle').checked;
   eid('step-fill-cfg').style.display=on?'flex':'none';
-  if(on)updateStepFillMode();
+  if(on){ updateStepFillMode(); updateStepCalcDisplay(); }
   if(!on){
     eid('step-fill-log').classList.remove('show');
     eid('step-progress').classList.remove('show');
   }
+}
+
+// Calculate effective step size: coverage mode overrides manual step size
+// spread = ask - bid
+// autoStep = (spread * coveragePct/100) / maxAttempts
+function calcEffectiveStepSize(bid, ask, maxAtt){
+  var spread = Math.max(ask - bid, 0);
+  var coverageEl = eid('sf-coverage');
+  var coverage = coverageEl ? (parseFloat(coverageEl.value)||100) : 100;
+  if(spread <= 0 || coverage <= 0) return parseFloat(eid('sf-step').value)||0.01;
+  var autoStep = (spread * (coverage/100)) / Math.max(maxAtt, 1);
+  return Math.max(+(autoStep.toFixed(2)), 0.01);
+}
+
+function updateStepCalcDisplay(){
+  var calcEl = eid('sf-step-calc');
+  if(!calcEl) return;
+  var bid = G.liveQuote ? G.liveQuote.bid : 0;
+  var ask = G.liveQuote ? G.liveQuote.ask : 0;
+  var maxAtt = parseInt(eid('sf-max').value)||10;
+  if(!bid || !ask){ calcEl.textContent = 'auto step: -- (fetch quote first)'; return; }
+  var spread = ask - bid;
+  var step = calcEffectiveStepSize(bid, ask, maxAtt);
+  var coverage = parseFloat(eid('sf-coverage').value)||100;
+  var totalRange = +(step * maxAtt).toFixed(2);
+  calcEl.textContent = 'spread $'+fmt2(spread)+' | auto step: $'+fmt2(step)+' | covers $'+fmt2(totalRange);
+  calcEl.style.color = totalRange >= spread * (coverage/100) * 0.95 ? 'var(--grn)' : 'var(--wrn)';
 }
 
 function sfLog(msg,cls){
@@ -1164,7 +1203,10 @@ function previewOrder(){
   var acctVal=eid('ord-acct').value||'N/A';
   var stepOn=eid('step-fill-toggle').checked;
   var closing=isCloseAction(action);
-  var stepInfo=stepOn?('<br><b>'+(closing?'&#9660; STEP FILL CLOSE':'&#9650; STEP FILL OPEN')+'</b> \u2014 start: '+(eid('sf-start').value)+' | step: $'+eid('sf-step').value+' | max: '+eid('sf-max').value+' attempts | delay: '+eid('sf-delay').value+'s | direction: '+(closing?'ask\u2192bid \u25bc':'bid\u2192ask \u25b2')):'';  res.innerHTML='<b>PREVIEW</b><br>'
+  var pb=G.liveQuote?G.liveQuote.bid:0, pa=G.liveQuote?G.liveQuote.ask:0;
+  var pm=parseInt(eid('sf-max').value)||10;
+  var effStep=calcEffectiveStepSize(pb||0,pa||0,pm);
+  var stepInfo=stepOn?('<br><b>'+(closing?'&#9660; STEP FILL CLOSE':'&#9650; STEP FILL OPEN')+'</b> &mdash; start: '+(eid('sf-start').value)+' | step: $'+fmt2(effStep)+' ('+eid('sf-coverage').value+'% of spread) | max: '+eid('sf-max').value+' | delay: '+eid('sf-delay').value+'s'):'';  res.innerHTML='<b>PREVIEW</b><br>'
     +'Contract: <b>'+occSym+'</b><br>'
     +side+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+(type==='STOCK'?' (stock)':' (option)')+'<br>'
     +'Acct: '+acctVal
@@ -1208,7 +1250,6 @@ function submitOrder(){
 
   // \u2500\u2500 STEP FILL PATH \u2500\u2500
   if(stepOn&&otype==='limit'){
-    var stepSize=parseFloat(eid('sf-step').value)||0.01;
     var maxAtt=parseInt(eid('sf-max').value)||10;
     var delaySec=parseInt(eid('sf-delay').value)||5;
     var startFrom=eid('sf-start').value;
@@ -1217,6 +1258,8 @@ function submitOrder(){
     var mid=G.liveQuote?G.liveQuote.mid:0;
     var closing=isCloseAction(action);
     var direction=closing?'down':'up';
+    // Use coverage-based auto step size
+    var stepSize=calcEffectiveStepSize(bid||0, ask||0, maxAtt);
 
     // Determine start and limit prices based on direction
     var startPrice, limitPrice;
@@ -2029,12 +2072,13 @@ function executeTsClose(p,closeMode,creds){
       else{var e=d.errors?d.errors.error:'unknown';tsLog(p.underlying+': close error \u2014 '+e,'warn');}
     }).catch(function(e){tsLog(p.underlying+': close error \u2014 '+e.message,'warn');});
   } else {
-    // Step fill close (ask\u2192bid)
+    // Step fill close (ask->bid)
     var bid=p.bid||p.last*0.98;var ask=p.ask||p.last*1.02;
-    var stepSize=parseFloat(eid('sf-step').value)||0.01;
     var maxAtt=parseInt(eid('sf-max').value)||10;
+    var stepSize=calcEffectiveStepSize(bid, ask, maxAtt);
     var delaySec=parseInt(eid('sf-delay').value)||5;
-    tsLog(p.underlying+': launching step fill close @ ask $'+fmt2(ask)+'\u2192bid $'+fmt2(bid),'triggered');
+    var spread=+(ask-bid).toFixed(2);
+    tsLog(p.underlying+': launching step fill close @ ask $'+fmt2(ask)+' bid $'+fmt2(bid)+' | spread $'+fmt2(spread)+' | step $'+fmt2(stepSize)+' x'+maxAtt+' attempts','triggered');
     runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),ask,bid,stepSize,maxAtt,delaySec,'down');
     switchTab('order');
   }
