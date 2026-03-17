@@ -474,28 +474,6 @@ tr.sel-row td{background:var(--blu3);}
         </div>
       </div>
 
-      <!-- ── AUTO-SELECT CONTRACT ── -->
-      <div class="auto-sel-box">
-        <div class="auto-sel-hdr">
-          <span style="color:var(--blub);font-size:10px;font-weight:700;letter-spacing:.5px;">&#9650; AUTO-SELECT CONTRACT</span>
-          <button class="btn blu" style="font-size:10px;padding:2px 10px;" onclick="autoSelectContract()">&#9650; FIND BEST</button>
-          <span class="auto-sel-status" id="asr-status">Enter symbol &amp; type, then click FIND BEST</span>
-        </div>
-        <div class="auto-sel-result" id="asr-result">
-          <div class="asr-row">
-            <div class="asr-cell"><div class="asr-lbl">Selected Strike</div><div class="asr-val good" id="asr-strike">--</div></div>
-            <div class="asr-cell"><div class="asr-lbl">Expiry</div><div class="asr-val good" id="asr-exp">--</div></div>
-            <div class="asr-cell"><div class="asr-lbl">Market Days</div><div class="asr-val" id="asr-dte">--</div></div>
-            <div class="asr-cell"><div class="asr-lbl">GEX Signal</div><div class="asr-val" id="asr-gex">--</div></div>
-            <div class="asr-cell"><div class="asr-lbl">Volume</div><div class="asr-val" id="asr-vol">--</div></div>
-            <div class="asr-cell"><div class="asr-lbl">Open Interest</div><div class="asr-val" id="asr-oi">--</div></div>
-            <div class="asr-cell"><div class="asr-lbl">Delta</div><div class="asr-val" id="asr-delta">--</div></div>
-            <div class="asr-cell"><div class="asr-lbl">Score</div><div class="asr-val good" id="asr-score">--</div></div>
-          </div>
-          <div class="asr-candidates" id="asr-candidates"></div>
-        </div>
-      </div>
-
       <!-- ── REAL-TIME QUOTE PANEL ── -->
       <div class="qp-refresh-row">
         <span style="color:var(--amb);font-size:10px;font-weight:700;letter-spacing:.5px;">&#9632; LIVE QUOTE</span>
@@ -534,6 +512,28 @@ tr.sel-row td{background:var(--blu3);}
       <div class="ord-row">
         <div class="ord-field"><label>STRIKE</label><input id="ord-strike" type="number" placeholder="150.00" onchange="updateOrdChart()" oninput="updateOrdChart()"></div>
         <div class="ord-field"><label>EXPIRY (YYYY-MM-DD)</label><input id="ord-exp" type="date" onchange="updateOrdChart()"></div>
+      </div>
+
+      <!-- ── AUTO-SELECT CONTRACT — sits below strike/expiry so it stays visible ── -->
+      <div class="auto-sel-box">
+        <div class="auto-sel-hdr">
+          <span style="color:var(--blub);font-size:10px;font-weight:700;letter-spacing:.5px;">&#9650; AUTO-SELECT CONTRACT</span>
+          <button class="btn blu" style="font-size:10px;padding:2px 10px;" onclick="autoSelectContract()">&#9650; FIND BEST</button>
+          <span class="auto-sel-status" id="asr-status">Enter symbol &amp; type above, then click FIND BEST to auto-fill strike &amp; expiry</span>
+        </div>
+        <div class="auto-sel-result" id="asr-result">
+          <div class="asr-row">
+            <div class="asr-cell"><div class="asr-lbl">Selected Strike</div><div class="asr-val good" id="asr-strike">--</div></div>
+            <div class="asr-cell"><div class="asr-lbl">Expiry</div><div class="asr-val good" id="asr-exp">--</div></div>
+            <div class="asr-cell"><div class="asr-lbl">Market Days</div><div class="asr-val" id="asr-dte">--</div></div>
+            <div class="asr-cell"><div class="asr-lbl">GEX Signal</div><div class="asr-val" id="asr-gex">--</div></div>
+            <div class="asr-cell"><div class="asr-lbl">Volume</div><div class="asr-val" id="asr-vol">--</div></div>
+            <div class="asr-cell"><div class="asr-lbl">Open Interest</div><div class="asr-val" id="asr-oi">--</div></div>
+            <div class="asr-cell"><div class="asr-lbl">Delta</div><div class="asr-val" id="asr-delta">--</div></div>
+            <div class="asr-cell"><div class="asr-lbl">Score</div><div class="asr-val good" id="asr-score">--</div></div>
+          </div>
+          <div class="asr-candidates" id="asr-candidates"></div>
+        </div>
       </div>
 
       <!-- ACTION + QTY -->
