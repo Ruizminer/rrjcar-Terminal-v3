@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>RRJCAR Terminal v3.3</title>
+<title>RRJCAR Terminal v3.4</title>
 <style>
 :root{
   --bg0:#0d1117;--bg1:#161b22;--bg2:#21262d;--bg3:#30363d;
@@ -313,7 +313,7 @@ tr.sel-row td{background:var(--blu3);}
 </head>
 <body>
 <div id="hdr">
-  <div id="hdr-logo">&#9632; RRJCAR TERMINAL v3.3</div>
+  <div id="hdr-logo">&#9632; RRJCAR TERMINAL v3.4</div>
   <div id="hdr-tickers">
     <span class="htick"><span class="ts">SPY </span><span class="tv" id="h-spy">--</span> <span class="tc" id="h-spy-c"></span></span>
     <span class="htick"><span class="ts">QQQ </span><span class="tv" id="h-qqq">--</span> <span class="tc" id="h-qqq-c"></span></span>
@@ -2049,7 +2049,7 @@ function refreshWL(){
       +'<td class="'+chgCls+'">'+(q.change>=0?'+':'')+fmt2(q.change)+'</td>'
       +'<td class="'+chgCls+'">'+(q.changePct>=0?'+':'')+fmtP(q.changePct)+'</td>'
       +'<td>'+fmtK(q.volume)+'</td><td>'+sigBadge+'</td>'
-      +'<td><button class="cbtn" onclick="event.stopPropagation();removeWL(this.parentNode.parentNode.dataset.ticker)">&#10005;</button></td>'
+      +'<td><button class="cbtn" onclick="event.stopPropagation();removeWL(this.parentNode.parentNode.dataset.ticker)">\u2717</button></td>'
       +'</tr>';
   });
   html+='</tbody></table>';wrap.innerHTML=html;
@@ -3530,8 +3530,8 @@ function buildDetail(r,detId,emptyId){
     +'<div class="og-cell"><div class="og-lbl">OI / Vol</div><div class="og-val">'+fmtK(opt.oi)+' / '+fmtK(opt.vol)+'</div></div>'
     +'</div>'
     +'<div style="padding:8px 12px;border-bottom:var(--bdr);display:flex;align-items:center;gap:10px;">'
-    +'<button class="btn blu" style="font-size:12px;padding:5px 14px;" onclick="doBuyCall()">&#9650; BUY CALL</button>'
-    +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">&#9660; BUY PUT</button>'
+    +'<button class="btn blu" style="font-size:12px;padding:5px 14px;" onclick="doBuyCall()">\u25b2 BUY CALL</button>'
+    +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">\u25bc BUY PUT</button>'
     +'<span style="color:var(--gry);font-size:10px;">Strike: $'+fmt2(opt.strike)+'  |  Exp: '+opt.exp+'</span>'
     +'</div>'
     +'<div class="s-hdr">RULE SCORECARD</div>'
@@ -3623,7 +3623,7 @@ function renderScan(){
   var wrap=eid('sc-tbl-wrap');
   if(!G.filtered.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No results \u2014 run a scan first</p></div>';return;}
   var cols=[{k:'ticker',l:'SYMBOL'},{k:'score',l:'SCORE'},{k:'isGo',l:'SIGNAL'},{k:'sector',l:'SECTOR'},{k:'price',l:'PRICE'},{k:'changePct',l:'CHG%'},{k:'volume',l:'VOLUME'}];
-  var th='';cols.forEach(function(c){var arr=G.sortCol===c.k?(G.sortDir>0?' &#9650;':' &#9660;'):'';th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';});
+  var th='';cols.forEach(function(c){var arr=G.sortCol===c.k?(G.sortDir>0?' \u25b2':' \u25bc'):'';th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';});
   var rows='';
   G.filtered.forEach(function(r){
     var sigBadge=r.isGo?'<span class="badge go">GO</span>':'<span class="badge nogo">NO-GO</span>';
