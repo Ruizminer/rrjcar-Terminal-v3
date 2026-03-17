@@ -1312,11 +1312,11 @@ function updateStepFillMode(){
   var lbl=eid('sf-mode-label');
   var sfStart=eid('sf-start');
   if(closing){
-    lbl.innerHTML='&#9660; STEP FILL MODE \u2014 start at ask, step toward bid (best close price)';
+    lbl.innerHTML='\u25bc STEP FILL MODE \u2014 start at ask, step toward bid (best close price)';
     lbl.style.color='var(--wrn)';
     if(sfStart.value==='bid')sfStart.value='ask'; // auto-flip default
   } else {
-    lbl.innerHTML='&#9650; STEP FILL MODE \u2014 start at bid, step toward ask until filled';
+    lbl.innerHTML='\u25b2 STEP FILL MODE \u2014 start at bid, step toward ask until filled';
     lbl.style.color='var(--grn)';
     if(sfStart.value==='ask')sfStart.value='bid'; // auto-flip default
   }
@@ -1596,12 +1596,13 @@ function previewOrder(){
   var effStep=calcEffectiveStepSize(pb||0,pa||0,pm);
   var fallbackEl2=eid('sf-fallback');
   var fallbackVal=fallbackEl2?fallbackEl2.value:'none';
-  var stepInfo=stepOn?('<br><b>'+(closing?'&#9660; STEP FILL CLOSE':'&#9650; STEP FILL OPEN')+'</b> &mdash; start: '+(eid('sf-start').value)+' | step: $'+fmt2(effStep)+' ('+eid('sf-coverage').value+'% of spread) | max: '+eid('sf-max').value+' | wait: '+eid('sf-delay').value+'s/attempt | fallback: '+(fallbackVal==='market'?'MARKET ORDER':'give up')):'';
+  var stepInfo=stepOn?('<br><b>'+(closing?'\u25bc STEP FILL CLOSE':'\u25b2 STEP FILL OPEN')+'</b> \u2014 start: '+(eid('sf-start').value)+' | step: $'+fmt2(effStep)+' ('+eid('sf-coverage').value+'% of spread) | max: '+eid('sf-max').value+' | wait: '+eid('sf-delay').value+'s/attempt | fallback: '+(fallbackVal==='market'?'MARKET ORDER':'give up')):'';
   res.innerHTML='<b>PREVIEW</b><br>'
     +'Contract: <b>'+occSym+'</b><br>'
     +side+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+(type==='STOCK'?' (stock)':' (option)')+'<br>'
     +'Acct: '+acctVal
     +stepInfo;
+  res.className='ord-result show';
   res.style.borderColor='var(--amb)';
 }
 
@@ -1867,7 +1868,7 @@ function buildDetail(r,detId,emptyId){
   if(det){det.style.display='flex';det.style.flexDirection='column';det.style.height='100%';det.style.overflow='hidden';}
   var sigCls=r.isGo?'go':'nogo';var sigLbl=r.isGo?'GO':'NO-GO';var ind=r.ind,opt=r.opt;
   var rulesHtml='';
-  r.rules.forEach(function(ru){var cls=ru.pass?'pass':(ru.filter?'filt-fail':'fail');var icon=ru.pass?'&#10003;':'&#10007;';rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';});
+  r.rules.forEach(function(ru){var cls=ru.pass?'pass':(ru.filter?'filt-fail':'fail');var icon=ru.pass?'\u2713':'\u2717';rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';});
   G.detailOpt={ticker:r.ticker,strike:opt.strike,exp:opt.exp};
   det.innerHTML=
     '<div class="det-hdr"><span class="det-tk">'+r.ticker+'</span>'
@@ -1900,8 +1901,8 @@ function buildDetail(r,detId,emptyId){
     +'<div class="og-cell"><div class="og-lbl">OI / Vol</div><div class="og-val">'+fmtK(opt.oi)+' / '+fmtK(opt.vol)+'</div></div>'
     +'</div>'
     +'<div style="padding:8px 12px;border-bottom:var(--bdr);display:flex;align-items:center;gap:10px;">'
-    +'<button class="btn blu" style="font-size:12px;padding:5px 14px;" onclick="doBuyCall()">&#9650; BUY CALL</button>'
-    +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">&#9660; BUY PUT</button>'
+    +'<button class="btn blu" style="font-size:12px;padding:5px 14px;" onclick="doBuyCall()">\u25b2 BUY CALL</button>'
+    +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">\u25bc BUY PUT</button>'
     +'<span style="color:var(--gry);font-size:10px;">Strike: $'+fmt2(opt.strike)+'  |  Exp: '+opt.exp+'</span>'
     +'</div>'
     +'<div class="s-hdr">RULE SCORECARD</div>'
@@ -1991,9 +1992,9 @@ function sortTable(col){
 
 function renderScan(){
   var wrap=eid('sc-tbl-wrap');
-  if(!G.filtered.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No results \u2014 run a scan first</p></div>';return;}
+  if(!G.filtered.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>No results \u2014 run a scan first</p></div>';return;}
   var cols=[{k:'ticker',l:'SYMBOL'},{k:'score',l:'SCORE'},{k:'isGo',l:'SIGNAL'},{k:'sector',l:'SECTOR'},{k:'price',l:'PRICE'},{k:'changePct',l:'CHG%'},{k:'volume',l:'VOLUME'}];
-  var th='';cols.forEach(function(c){var arr=G.sortCol===c.k?(G.sortDir>0?' &#9650;':' &#9660;'):'';th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';});
+  var th='';cols.forEach(function(c){var arr=G.sortCol===c.k?(G.sortDir>0?' \u25b2':' \u25bc'):'';th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';});
   var rows='';
   G.filtered.forEach(function(r){
     var sigBadge=r.isGo?'<span class="badge go">GO</span>':'<span class="badge nogo">NO-GO</span>';
@@ -2035,7 +2036,7 @@ function addWL(){var inp=eid('wl-add'),t=inp.value.trim().toUpperCase();if(!t)re
 function removeWL(t){G.wlTickers=G.wlTickers.filter(function(x){return x!==t;});saveWL();refreshWL();}
 function refreshWL(){
   var wrap=eid('wl-tbl-wrap');
-  if(!G.wlTickers.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Add tickers to watchlist</p></div>';return;}
+  if(!G.wlTickers.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>Add tickers to watchlist</p></div>';return;}
   var html='<table><thead><tr><th>SYMBOL</th><th>PRICE</th><th>CHG</th><th>CHG%</th><th>VOLUME</th><th>SIGNAL</th><th></th></tr></thead><tbody>';
   G.wlTickers.forEach(function(t){
     var q=simQuote(t);var u=null;for(var i=0;i<UNIVERSE.length;i++){if(UNIVERSE[i].t===t){u=UNIVERSE[i];break;}}if(!u)u={s:'--'};
@@ -2068,12 +2069,12 @@ function fetchPositions(){
   if(savedAcct&&!G.acctId){G.acctId=savedAcct;eid('ord-acct').value=savedAcct;}
   if(!key){
     eid('pos-src').textContent='[NO API KEY]';
-    eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No Tradier API key configured.<br>Go to the API tab to enter your key.</p></div>';
+    eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>No Tradier API key configured.<br>Go to the API tab to enter your key.</p></div>';
     eid('pos-pnl').textContent='$0.00';eid('pos-daypnl').textContent='$0.00';eid('pos-count').textContent='0';eid('pos-acctval').textContent='--';return;
   }
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
   eid('pos-src').textContent='Loading from Tradier '+mode+'...';
-  eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Fetching positions...</p></div>';
+  eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>Fetching positions...</p></div>';
   if(G.acctId){fetchPositionsDirect(key,mode,host,G.acctId);return;}
   fetch(host+'/v1/user/profile',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
   .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
@@ -2105,7 +2106,7 @@ function fetchPositionsDirect(key,mode,host,acct){
     }).catch(function(){G.positions=pos;renderPositionsTable(pos,mode==='live'?'[TRADIER LIVE]':' [TRADIER SANDBOX]');fetchBalances();});
   }).catch(function(e){showPosError('Tradier API error: '+e.message);});
 }
-function showPosError(msg){eid('pos-src').textContent='[ERROR]';eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p style="color:var(--wrn);">'+msg+'</p><p style="color:var(--gry);margin-top:8px;">Check API key in the API tab.</p></div>';}
+function showPosError(msg){eid('pos-src').textContent='[ERROR]';eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p style="color:var(--wrn);">'+msg+'</p><p style="color:var(--gry);margin-top:8px;">Check API key in the API tab.</p></div>';}
 
 function getTsConfig(sym){
   // Return per-position config, falling back to sensible defaults
@@ -2154,7 +2155,7 @@ function toggleTsRow(sym){
 function renderPositionsTable(pos,srcLabel){
   eid('pos-src').textContent=srcLabel||'';
   var wrap=eid('pos-tbl-wrap');
-  if(!pos.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No open positions</p></div>';return;}
+  if(!pos.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>No open positions</p></div>';return;}
   var totalPnl=0,totalCost=0;pos.forEach(function(p){totalPnl+=p.pnl;totalCost+=p.cost;});
   var colCount = 14; // total columns
   var html='<table><thead><tr>'
@@ -2205,9 +2206,9 @@ function renderPositionsTable(pos,srcLabel){
       +'<td>'+statusBadge+'</td>'
       +'<td><button class="cbtn" onclick="doClose(this)">CLOSE</button></td>'
       +'<td><button class="btn ts-enable-btn" style="'+(cfgEnabled?'border-color:var(--grn);color:var(--grn);':'')+'" '
-        +'onclick="toggleTsRow(\''+sym+'\')">&#9652; TRAIL</button></td>'
+        +'onclick="toggleTsRow(\''+sym+'\')">\u25b4 TRAIL</button></td>'
       +'<td><button class="btn" style="font-size:10px;padding:3px 8px;border-color:var(--blu3);color:var(--blub);" '
-        +'onclick="togglePosChart(\''+sym+'\')">&#9650; P&amp;L</button></td>'
+        +'onclick="togglePosChart(\''+sym+'\')">\u25b2 P&L</button></td>'
       +'</tr>';
 
     // Inline trailing stop config row
@@ -2261,13 +2262,13 @@ function renderPositionsTable(pos,srcLabel){
       +'<td colspan="'+colCount+'">'
       +'<div class="pos-chart-inner">'
       +'<div class="pnl-chart-hdr">'
-      +'<span class="pnl-chart-title" id="pchart-title-'+sym+'">P&amp;L PAYOFF \u2014 '+sym+'</span>'
+      +'<span class="pnl-chart-title" id="pchart-title-'+sym+'">P&L PAYOFF \u2014 '+sym+'</span>'
       +'<div class="pnl-chart-stats">'
       +'<div class="pnl-stat"><div class="pnl-stat-lbl">Breakeven</div><div class="pnl-stat-val neu" id="pbe-'+sym+'">--</div></div>'
       +'<div class="pnl-stat"><div class="pnl-stat-lbl">Max Loss</div><div class="pnl-stat-val neg" id="pml-'+sym+'">--</div></div>'
       +'<div class="pnl-stat"><div class="pnl-stat-lbl">+10% Target</div><div class="pnl-stat-val pos" id="pt10-'+sym+'">--</div></div>'
       +'<div class="pnl-stat"><div class="pnl-stat-lbl">+20% Target</div><div class="pnl-stat-val pos" id="pt20-'+sym+'">--</div></div>'
-      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Current P&amp;L</div><div class="pnl-stat-val" id="pcur-'+sym+'">--</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Current P&L</div><div class="pnl-stat-val" id="pcur-'+sym+'">--</div></div>'
       +'</div></div>'
       +'<div class="pnl-canvas-wrap">'
       +'<canvas id="pcanvas-'+sym+'" height="160"></canvas>'
@@ -2722,7 +2723,7 @@ function drawPnlChart(canvasId, tooltipId, params){
       tooltip.style.display = 'block';
       tooltip.style.left = Math.min(mx+8, W-110)+'px';
       tooltip.style.top  = '8px';
-      tooltip.innerHTML = 'Price: <b>$'+fmt2(hoverPrice)+'</b> &nbsp; P&amp;L: <b style="color:'+(hoverPnl>=0?'#4ade80':'#f87171')+'">'+(hoverPnl>=0?'+':'')+fmtD(hoverPnl)+'</b>';
+      tooltip.innerHTML = 'Price: <b>$'+fmt2(hoverPrice)+'</b> &nbsp; P&L: <b style="color:'+(hoverPnl>=0?'#4ade80':'#f87171')+'">'+(hoverPnl>=0?'+':'')+fmtD(hoverPnl)+'</b>';
     };
     canvas.onmouseleave = function(){ tooltip.style.display='none'; };
   }
@@ -2831,7 +2832,7 @@ function clearPositions(){
   if(eid('ts-toggle'))eid('ts-toggle').checked=false;
   if(eid('ts-cfg'))eid('ts-cfg').style.display='none';
   G.tsActive=false;
-  eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Positions cleared. Click Refresh to reload.</p></div>';
+  eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>Positions cleared. Click Refresh to reload.</p></div>';
   eid('pos-pnl').textContent='$0.00';eid('pos-daypnl').textContent='$0.00';eid('pos-count').textContent='0';
   eid('pos-src').textContent='[Cleared]';toast('Positions cleared');
 }
@@ -2861,7 +2862,7 @@ function closePosition(symbol,type,strike,exp,qty){
     eid('ord-strike').value=strike;eid('ord-exp').value=exp;eid('ord-action').value=action;eid('ord-qty').value=qty;
     updateStepFillMode(); // flip step fill to close mode (ask\u2192bid)
     var res=eid('ord-result');
-    res.innerHTML='&#9888; Close order pre-filled for <b>'+symbol+'</b> \u2014 review and submit.';
+    res.innerHTML='\u26a0 Close order pre-filled for <b>'+symbol+'</b> \u2014 review and submit.';
     res.className='ord-result show';res.style.borderColor='var(--wrn)';
     toast('Close order pre-filled for '+symbol);
     fetchLiveQuote();
@@ -2964,13 +2965,13 @@ function fetchClosedPositions(){
   var src=eid('cl-src');
 
   if(!creds||!acct){
-    wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div>'
+    wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div>'
       +'<p>No Tradier API key or account configured.<br>Go to the API tab.</p></div>';
     return;
   }
 
   src.textContent='Loading...';
-  wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Fetching order history...</p></div>';
+  wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>Fetching order history...</p></div>';
 
   fetch(creds.host+'/v1/accounts/'+acct+'/orders?includeTags=true',{
     headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}
@@ -2995,7 +2996,7 @@ function fetchClosedPositions(){
     renderClosedTable();
   })
   .catch(function(e){
-    wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div>'
+    wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div>'
       +'<p style="color:var(--wrn);">Error: '+e.message+'</p></div>';
     src.textContent='[ERROR]';
   });
@@ -3016,7 +3017,7 @@ function renderClosedTable(){
   });
 
   if(!trades.length){
-    wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div>'
+    wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div>'
       +'<p>No closed trades found'+(filter||symFilter?' matching filter':'')+'</p></div>';
     updateClosedStats([]);return;
   }
@@ -3052,19 +3053,19 @@ function renderClosedTable(){
       +'<td class="'+pnlCls+'">'+(t.pnlPct>=0?'+':'')+fmt2(t.pnlPct)+'%</td>'
       +'<td>'+resultBadge+'</td>'
       +'<td><button class="btn" style="font-size:10px;padding:2px 8px;border-color:var(--blu3);color:var(--blub);" '
-        +'onclick="toggleClosedChart(\''+sym+'\','+t.strike+','+t.openPrice+','+t.closePrice+',\''+t.type+'\','+t.qty+')">&#9650; P&amp;L</button></td>'
+        +'onclick="toggleClosedChart(\''+sym+'\','+t.strike+','+t.openPrice+','+t.closePrice+',\''+t.type+'\','+t.qty+')">\u25b2 P&L</button></td>'
       +'</tr>'
       // Chart expansion row
       +'<tr id="clchart-'+sym+'" class="pos-chart-row">'
       +'<td colspan="14">'
       +'<div class="pos-chart-inner">'
       +'<div class="pnl-chart-hdr">'
-      +'<span class="pnl-chart-title">CLOSED TRADE P&amp;L \u2014 '+t.underlying+' $'+fmt2(t.strike)+' '+t.type
+      +'<span class="pnl-chart-title">CLOSED TRADE P&L \u2014 '+t.underlying+' $'+fmt2(t.strike)+' '+t.type
         +' | Opened $'+fmt2(t.openPrice)+' \u2192 Closed $'+fmt2(t.closePrice)+'</span>'
       +'<div class="pnl-chart-stats">'
       +'<div class="pnl-stat"><div class="pnl-stat-lbl">Breakeven</div><div class="pnl-stat-val neu" id="clbe-'+sym+'">--</div></div>'
       +'<div class="pnl-stat"><div class="pnl-stat-lbl">Max Loss</div><div class="pnl-stat-val neg" id="clml-'+sym+'">--</div></div>'
-      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Realized P&amp;L</div><div class="pnl-stat-val '+(t.pnl>=0?'pos':'neg')+'" id="clrl-'+sym+'">--</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Realized P&L</div><div class="pnl-stat-val '+(t.pnl>=0?'pos':'neg')+'" id="clrl-'+sym+'">--</div></div>'
       +'<div class="pnl-stat"><div class="pnl-stat-lbl">Return %</div><div class="pnl-stat-val '+(t.pnlPct>=0?'pos':'neg')+'">'+(t.pnlPct>=0?'+':'')+fmt2(t.pnlPct)+'%</div></div>'
       +'<div class="pnl-stat"><div class="pnl-stat-lbl">Days Held</div><div class="pnl-stat-val neu">'+t.holdDays+'d</div></div>'
       +'</div></div>'
