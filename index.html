@@ -588,16 +588,19 @@ tr.sel-row td{background:var(--blu3);}
         </div>
         <div class="step-fill-cfg" id="step-fill-cfg" style="display:none;">
           <div class="step-cfg-field">
-            <label>Step Size ($)</label>
-            <input type="number" id="sf-step" value="0.01" step="0.01" min="0.01" placeholder="0.01">
+            <label>Auto Step Size ($)</label>
+            <input type="number" id="sf-step" value="0.01" step="0.01" min="0.01" placeholder="0.01"
+              style="color:var(--grn);border-color:var(--grn3);" readonly
+              title="Auto-calculated from spread coverage. Set coverage % to adjust.">
           </div>
           <div class="step-cfg-field">
             <label>Max Attempts</label>
             <input type="number" id="sf-max" value="10" min="1" max="50" placeholder="10" oninput="updateStepCalcDisplay()">
           </div>
           <div class="step-cfg-field">
-            <label>Delay (sec)</label>
-            <input type="number" id="sf-delay" value="5" min="1" max="60" placeholder="5">
+            <label>Fill Wait (sec)</label>
+            <input type="number" id="sf-delay" value="15" min="5" max="120" placeholder="15"
+              title="How long to wait for each limit order to fill before stepping to next price">
           </div>
           <div class="step-cfg-field">
             <label>Start From</label>
@@ -611,11 +614,19 @@ tr.sel-row td{background:var(--blu3);}
             <label style="color:var(--ambb);">Spread Coverage %</label>
             <div style="display:flex;align-items:center;gap:4px;">
               <input type="number" id="sf-coverage" value="100" min="10" max="200" step="5" placeholder="100"
-                title="Auto-calculates step size to cover this % of the bid/ask spread across all attempts. Overrides manual Step Size when set."
+                title="Covers this % of the bid/ask spread across all attempts"
                 oninput="updateStepCalcDisplay()">
               <span style="color:var(--gry);font-size:10px;">% of spread</span>
             </div>
             <div style="color:var(--gry2);font-size:9px;margin-top:2px;" id="sf-step-calc">auto step: --</div>
+          </div>
+          <div class="step-cfg-field" style="border-left:1px solid var(--gry2);padding-left:10px;">
+            <label style="color:var(--ambb);">If No Fill</label>
+            <select id="sf-fallback" style="background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:12px;padding:4px 7px;width:110px;"
+              title="What to do if all attempts are exhausted without a fill">
+              <option value="none">Give Up</option>
+              <option value="market">Market Order</option>
+            </select>
           </div>
         </div>
         <div class="step-progress" id="step-progress">
@@ -1346,6 +1357,9 @@ function updateStepCalcDisplay(){
   var totalRange = +(step * maxAtt).toFixed(2);
   calcEl.textContent = 'spread $'+fmt2(spread)+' | auto step: $'+fmt2(step)+' | covers $'+fmt2(totalRange);
   calcEl.style.color = totalRange >= spread * (coverage/100) * 0.95 ? 'var(--grn)' : 'var(--wrn)';
+  // Write calculated step into the display field
+  var stepField = eid('sf-step');
+  if(stepField) stepField.value = fmt2(step);
 }
 
 function sfLog(msg,cls){
@@ -1498,10 +1512,44 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
     if(attempt===maxAttempts&&status!=='filled'){
       sfLog('Max attempts reached without fill.','rejected');
       addAlert(sym,'Step Fill: max attempts ('+maxAttempts+') reached \u2014 not filled','warn');
-      var res3=eid('ord-result');
-      res3.innerHTML='<span style="color:var(--wrn)">\u26a0 Step Fill: '+maxAttempts+' attempts, no fill. Last price tried: $'+fmt2(currentPrice)+'</span>';
-      res3.className='ord-result show';
-      res3.style.borderColor='var(--wrn)';
+
+      // Check fallback setting
+      var fallbackEl=eid('sf-fallback');
+      var fallback=fallbackEl?fallbackEl.value:'none';
+      if(fallback==='market'){
+        sfLog('Fallback: submitting MARKET order...','sent');
+        var mktBody='class=option'
+          +'&symbol='+encodeURIComponent(sym)
+          +'&option_symbol='+encodeURIComponent(occSym)
+          +'&side='+encodeURIComponent(side)
+          +'&quantity='+qty
+          +'&type=market'
+          +'&duration=day';
+        try{
+          var mktRes=await fetch(creds.host+'/v1/accounts/'+acct+'/orders',{
+            method:'POST',
+            headers:{Authorization:'Bearer '+creds.key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
+            body:mktBody
+          }).then(function(r){return r.json();});
+          if(mktRes.order&&mktRes.order.id){
+            sfLog('\u2713 MARKET order submitted \u2014 order #'+mktRes.order.id,'filled');
+            addAlert(sym,'Step Fill fallback: MARKET order #'+mktRes.order.id,'go');
+            toast('\u2713 Market fallback submitted: '+sym);
+            var res4=eid('ord-result');
+            res4.innerHTML='<span style="color:var(--ambb)">\u26a1 MARKET FALLBACK: Order #'+mktRes.order.id+' submitted after '+maxAttempts+' step attempts</span>';
+            res4.className='ord-result show';
+            res4.style.borderColor='var(--amb)';
+          } else {
+            var errs=mktRes.errors?mktRes.errors.error:'unknown';
+            sfLog('Market fallback error: '+errs,'rejected');
+          }
+        }catch(e){ sfLog('Market fallback error: '+e.message,'rejected'); }
+      } else {
+        var res3=eid('ord-result');
+        res3.innerHTML='<span style="color:var(--wrn)">\u26a0 Step Fill: '+maxAttempts+' attempts, no fill. Last price tried: $'+fmt2(currentPrice)+'</span>';
+        res3.className='ord-result show';
+        res3.style.borderColor='var(--wrn)';
+      }
     }
   }
 
@@ -1546,12 +1594,14 @@ function previewOrder(){
   var pb=G.liveQuote?G.liveQuote.bid:0, pa=G.liveQuote?G.liveQuote.ask:0;
   var pm=parseInt(eid('sf-max').value)||10;
   var effStep=calcEffectiveStepSize(pb||0,pa||0,pm);
-  var stepInfo=stepOn?('<br><b>'+(closing?'&#9660; STEP FILL CLOSE':'&#9650; STEP FILL OPEN')+'</b> &mdash; start: '+(eid('sf-start').value)+' | step: $'+fmt2(effStep)+' ('+eid('sf-coverage').value+'% of spread) | max: '+eid('sf-max').value+' | delay: '+eid('sf-delay').value+'s'):'';  res.innerHTML='<b>PREVIEW</b><br>'
+  var fallbackEl2=eid('sf-fallback');
+  var fallbackVal=fallbackEl2?fallbackEl2.value:'none';
+  var stepInfo=stepOn?('<br><b>'+(closing?'&#9660; STEP FILL CLOSE':'&#9650; STEP FILL OPEN')+'</b> &mdash; start: '+(eid('sf-start').value)+' | step: $'+fmt2(effStep)+' ('+eid('sf-coverage').value+'% of spread) | max: '+eid('sf-max').value+' | wait: '+eid('sf-delay').value+'s/attempt | fallback: '+(fallbackVal==='market'?'MARKET ORDER':'give up')):'';
+  res.innerHTML='<b>PREVIEW</b><br>'
     +'Contract: <b>'+occSym+'</b><br>'
     +side+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+(type==='STOCK'?' (stock)':' (option)')+'<br>'
     +'Acct: '+acctVal
     +stepInfo;
-  res.className='ord-result show';
   res.style.borderColor='var(--amb)';
 }
 
@@ -3175,5 +3225,417 @@ function init(){
 }
 window.addEventListener('DOMContentLoaded',init);
 </script>
+</body>
+</html>
++lmt:'')+(type==='STOCK'?' (stock)':' (option)')+'<br>'
+    +'Acct: '+acctVal
+    +stepInfo;
+  res.className='ord-result show';
+  res.style.borderColor='var(--amb)';
+}
+
+function submitOrder(){
+  if(G.stepFillActive){toast('Step fill already running');return;}
+  var sym=eid('ord-sym').value.trim().toUpperCase();
+  if(!sym){toast('Enter a symbol first');return;}
+  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  if(!key){
+    var res=eid('ord-result');
+    res.innerHTML='<span style="color:var(--wrn)">No Tradier API key configured.</span>';
+    res.className='ord-result show';return;
+  }
+  var hasBadKey=key.split('').some(function(c){return c.charCodeAt(0)>255;});
+  if(hasBadKey){
+    var res=eid('ord-result');
+    res.innerHTML='<span style="color:var(--wrn)">API key corrupted \u2014 re-enter in API tab.</span>';
+    res.className='ord-result show';return;
+  }
+  var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+  var creds={key:key,mode:mode,host:host};
+  var acct=eid('ord-acct').value.trim()||G.acctId||localStorage.getItem('rrjcar_acct')||'';
+  if(!acct){toast('No account ID \u2014 enter in API tab');return;}
+  var type=eid('ord-type').value;
+  var action=eid('ord-action').value;
+  var sideMap={'BUY_TO_OPEN':'buy_to_open','SELL_TO_OPEN':'sell_to_open','BUY_TO_CLOSE':'buy_to_close','SELL_TO_CLOSE':'sell_to_close','BUY':'buy','SELL':'sell'};
+  var side=sideMap[action]||action.toLowerCase();
+  var qty=eid('ord-qty').value||1;
+  var strike=eid('ord-strike').value;
+  var expRaw=eid('ord-exp').value;
+  var otype=eid('ord-otype').value;
+  var lmt=parseFloat(eid('ord-lmt').value)||0;
+  var occSym=buildOccSym(sym,type,strike,expRaw);
+  var stepOn=eid('step-fill-toggle').checked;
+
+  // \u2500\u2500 STEP FILL PATH \u2500\u2500
+  if(stepOn&&otype==='limit'){
+    var maxAtt=parseInt(eid('sf-max').value)||10;
+    var delaySec=parseInt(eid('sf-delay').value)||5;
+    var startFrom=eid('sf-start').value;
+    var bid=G.liveQuote?G.liveQuote.bid:0;
+    var ask=G.liveQuote?G.liveQuote.ask:0;
+    var mid=G.liveQuote?G.liveQuote.mid:0;
+    var closing=isCloseAction(action);
+    var direction=closing?'down':'up';
+    // Use coverage-based auto step size
+    var stepSize=calcEffectiveStepSize(bid||0, ask||0, maxAtt);
+
+    // Determine start and limit prices based on direction
+    var startPrice, limitPrice;
+    if(lmt&&lmt>0){
+      // Manual limit entered \u2014 use it as the start
+      startPrice=lmt;
+      limitPrice=closing?bid:ask;
+    } else if(closing){
+      // Close: start at ask, step DOWN toward bid
+      if(startFrom==='bid') startPrice=bid;
+      else if(startFrom==='mid') startPrice=mid||ask;
+      else startPrice=ask; // default for close
+      limitPrice=bid||startPrice*0.98;
+    } else {
+      // Open: start at bid, step UP toward ask
+      if(startFrom==='mid') startPrice=mid||bid||(ask*0.98);
+      else if(startFrom==='ask') startPrice=ask;
+      else startPrice=bid; // default for open
+      limitPrice=ask||startPrice*1.02;
+    }
+
+    if(!startPrice||!limitPrice){
+      toast('Fetching live quote for step fill...');
+      fetchLiveQuote();
+      setTimeout(function(){
+        var b=G.liveQuote?G.liveQuote.bid:0;
+        var a=G.liveQuote?G.liveQuote.ask:0;
+        var m=G.liveQuote?G.liveQuote.mid:0;
+        var closing2=isCloseAction(eid('ord-action').value);
+        var sp=closing2?(a||m):( (eid('sf-start').value==='mid')?(m||b):b );
+        var lp=closing2?(b||sp*0.98):(a||sp*1.02);
+        if(!sp){toast('Could not determine start price \u2014 enter limit manually');return;}
+        runStepFill(creds,acct,occSym,sym,side,qty,sp,lp,stepSize,maxAtt,delaySec,closing2?'down':'up');
+      },1500);
+      return;
+    }
+    runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,stepSize,maxAtt,delaySec,direction);
+    return;
+  }
+
+  // \u2500\u2500 STANDARD SUBMIT PATH \u2500\u2500
+  var body='class=option'
+    +'&symbol='+encodeURIComponent(sym)
+    +'&option_symbol='+encodeURIComponent(occSym)
+    +'&side='+encodeURIComponent(side)
+    +'&quantity='+qty
+    +'&type='+otype
+    +'&duration=day';
+  if(otype==='limit'&&lmt)body+='&price='+lmt;
+  if(otype==='stop'&&lmt)body+='&stop='+lmt;
+  var res=eid('ord-result');
+  res.innerHTML='Submitting...';res.className='ord-result show';res.style.borderColor='var(--amb)';
+  fetch(host+'/v1/accounts/'+acct+'/orders',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
+    body:body
+  }).then(function(r){var s=r.status;return r.text().then(function(t){return{s:s,t:t};});})
+  .then(function(resp){
+    try{
+      var data=JSON.parse(resp.t);
+      if(data.order&&data.order.id){
+        res.innerHTML='<span style="color:var(--blub)">Order submitted! ID: '+data.order.id+' Status: '+data.order.status+'</span>';
+        res.style.borderColor='var(--blu)';
+        addAlert(sym,'Order: '+side+' x'+qty+' '+occSym,'go');
+        toast('Order submitted: '+data.order.id);
+      } else if(data.errors){
+        var errs=data.errors.error;if(!Array.isArray(errs))errs=[errs];
+        res.innerHTML='<span style="color:var(--wrn)">Error: '+errs.join(' | ')+
+          (errs.join('').toLowerCase().includes('undefined symbol')?
+            '<br><small>Tip: The option '+occSym+' may not exist. Check the expiry date matches a standard Friday expiration.</small>':'')+'</span>';
+        res.style.borderColor='var(--wrn)';
+      } else {
+        res.innerHTML='<span style="color:var(--wrn)">Response: '+JSON.stringify(data).slice(0,200)+'</span>';
+        res.style.borderColor='var(--wrn)';
+      }
+    }catch(e){
+      res.innerHTML='<span style="color:var(--wrn)">Error (HTTP '+resp.s+'): '+resp.t.slice(0,200)+'</span>';
+      res.style.borderColor='var(--wrn)';
+    }
+  }).catch(function(e){
+    res.innerHTML='<span style="color:var(--wrn)">Error: '+e.message+'</span>';
+    res.style.borderColor='var(--wrn)';
+  });
+}
+
+function clearOrder(){
+  ['ord-sym','ord-strike','ord-exp','ord-lmt'].forEach(function(id){eid(id).value='';});
+  eid('ord-qty').value='1';
+  eid('ord-result').className='ord-result';
+  eid('step-fill-log').innerHTML='';
+  eid('step-fill-log').classList.remove('show');
+  eid('step-progress').classList.remove('show');
+  eid('asr-result').classList.remove('show');
+  eid('asr-status').textContent='Enter symbol & type, then click FIND BEST';
+  resetQuotePanel();
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+//  REMAINING ORIGINAL FUNCTIONS (unchanged)
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+function simQuote(t){
+  var base={AAPL:213,MSFT:415,GOOG:170,NVDA:880,META:485,ORCL:135,FTNT:75,PANW:165,CRM:290,
+    JPM:195,GS:460,C:68,BAC:38,ICE:140,CME:205,V:275,MA:460,XOM:115,CVX:155,
+    HAL:28,VLO:130,MPC:155,CAT:340,URI:680,GE:160,HON:195,UNP:235,
+    AMZN:185,RCL:195,MCD:265,KO:62,PG:165,GIS:65,LIN:430,NEM:38,NEE:75,DUK:105}[t]||100;
+  var pr=+(base*(0.92+Math.random()*0.16)).toFixed(2);
+  var chg=+((Math.random()-0.48)*base*0.025).toFixed(2);
+  return{price:pr,change:chg,changePct:+((chg/pr)*100).toFixed(2),volume:Math.floor(rnd(1e6,25e6))};
+}
+function simInd(t,price){
+  var rsi=+rnd(32,78).toFixed(1);
+  var macd=+(rnd(-0.8,1.2)).toFixed(4);
+  var adx=+rnd(18,52).toFixed(1);
+  var ema20=+(price*(0.97+Math.random()*0.06)).toFixed(2);
+  var ema50=+(price*(0.94+Math.random()*0.06)).toFixed(2);
+  var atr=+(price*rnd(0.008,0.025)).toFixed(2);
+  var vol=Math.floor(rnd(1e6,25e6));
+  var avgVol=Math.floor(rnd(5e6,20e6));
+  var tf=Math.floor(rnd(0,4));
+  return{rsi:rsi,macd:macd,adx:adx,ema20:ema20,ema50:ema50,atr:atr,vol:vol,avgVol:avgVol,tf:tf};
+}
+function simOpt(price){
+  var strike=Math.round(price/5)*5;
+  var spread=+rnd(0.3,3.5).toFixed(2);
+  var spreadPct=+((spread/price)*100).toFixed(2);
+  var delta=+rnd(0.45,0.92).toFixed(2);
+  var ext=+rnd(8,42).toFixed(1);
+  var dte=Math.floor(rnd(10,75));
+  var optPr=+(price*rnd(0.015,0.06)).toFixed(2);
+  var oi=Math.floor(rnd(200,8000));
+  var vol2=Math.floor(rnd(50,3000));
+  var expDate=new Date(Date.now()+dte*864e5);
+  var exp=expDate.toISOString().slice(0,10);
+  return{strike:strike,spread:spread,spreadPct:spreadPct,delta:delta,ext:ext,dte:dte,optPr:optPr,oi:oi,vol:vol2,exp:exp};
+}
+function fetchOptionContract(ticker,simPrice,callback){
+ var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+ if(!key){callback(null);return;}
+ var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
+ var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+ var priceP=fetch(host+'/v1/markets/quotes?symbols='+ticker,{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+  .then(function(r){return r.json();})
+  .then(function(d){
+   try{var q=d.quotes.quote;var p=q.last||(q.bid&&q.ask?(q.bid+q.ask)/2:0)||q.prevclose||simPrice;return parseFloat(p)||simPrice;}catch(e){return simPrice;}
+  }).catch(function(){return simPrice;});
+ var expP=fetch(host+'/v1/markets/options/expirations?symbol='+ticker,{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+  .then(function(r){return r.json();})
+  .then(function(d){var dates=[];try{dates=d.expirations.date;if(!Array.isArray(dates))dates=[dates];}catch(e){}return dates;})
+  .catch(function(){return [];});
+ Promise.all([priceP,expP]).then(function(res){
+  var price=res[0],dates=res[1];
+  if(!dates.length){callback(null);return;}
+  var today=new Date();
+  var best=null,bestDiff=999;
+  dates.forEach(function(d){var dte=Math.round((new Date(d)-today)/864e5);var diff=Math.abs(dte-35);if(dte>=20&&dte<=70&&diff<bestDiff){bestDiff=diff;best={date:d,dte:dte};}});
+  if(!best){best={date:dates[0],dte:Math.round((new Date(dates[0])-today)/864e5)};}
+  fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+best.date+'&greeks=true',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+  .then(function(r){return r.json();})
+  .then(function(cdata){
+   var opts=[];try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
+   if(!opts.length){callback(null);return;}
+   var calls=opts.filter(function(o){return o.option_type==='call'&&o.greeks&&o.greeks.delta>0.05&&o.greeks.delta<0.99;});
+   if(!calls.length)calls=opts.filter(function(o){return o.option_type==='call'&&o.greeks&&o.greeks.delta>0;});
+   if(!calls.length){callback(null);return;}
+   calls.sort(function(a,b){return Math.abs(a.greeks.delta-0.75)-Math.abs(b.greeks.delta-0.75);});
+   var bo=calls[0];
+   var mid=(bo.bid+bo.ask)/2;
+   var spread=bo.ask-bo.bid;
+   var spreadPct=price>0?((spread/price)*100):0;
+   var intrinsic=Math.max(price-bo.strike,0);
+   var extrinsic=Math.max(mid-intrinsic,0);
+   var extPct=mid>0?((extrinsic/mid)*100):0;
+   callback({strike:bo.strike,spread:+(spread.toFixed(2)),spreadPct:+(spreadPct.toFixed(2)),delta:+(bo.greeks.delta.toFixed(2)),ext:+(extPct.toFixed(1)),dte:best.dte,optPr:+(mid.toFixed(2)),oi:bo.open_interest||0,vol:bo.volume||0,exp:best.date,iv:bo.greeks?bo.greeks.smv_vol:0,symbol:bo.symbol,livePrice:price,live:true});
+  }).catch(function(){callback(null);});
+ }).catch(function(){callback(null);});
+}
+function scoreIt(ticker,ind,opt){
+  var score=0,res=[];
+  var rsiOk=ind.rsi>=40&&ind.rsi<=70;var macdOk=ind.macd>0;var adxOk=ind.adx>25;var emaOk=ind.ema20>ind.ema50;
+  var volOk=ind.vol>ind.avgVol;var tfOk=ind.tf>=2;var sprOk=opt.spreadPct<2;var delOk=opt.delta>=0.70;
+  var extOk=opt.ext<=30;var dteOk=opt.dte>=25&&opt.dte<=50;var provenOk=PROVEN.indexOf(ticker)>=0;
+  var avoidBad=AVOID.indexOf(ticker)>=0;
+  var su=UNIVERSE.filter(function(u){return u.t===ticker;})[0];
+  var pf=su?SECTOR_PF[su.s]||0:0;var sectOk=pf>2;
+  if(avoidBad){score-=15;res.push({n:'AVOID ticker',pass:false,val:'-15pts',filter:false});}
+  if(provenOk){score+=8;res.push({n:'PROVEN ticker',pass:true,val:'+8pts',filter:false});}
+  var checks=[
+    {ok:rsiOk,n:'RSI 40-70',val:'RSI '+ind.rsi,filt:false,pts:8},{ok:macdOk,n:'MACD Hist +',val:''+ind.macd,filt:false,pts:10},
+    {ok:adxOk,n:'ADX > 25',val:'ADX '+ind.adx,filt:false,pts:8},{ok:emaOk,n:'EMA20 > EMA50',val:'$'+ind.ema20+' > $'+ind.ema50,filt:false,pts:10},
+    {ok:volOk,n:'Vol > Avg',val:fmtK(ind.vol)+' > '+fmtK(ind.avgVol),filt:false,pts:8},{ok:tfOk,n:'TF Aligned 2/3',val:ind.tf+'/3',filt:false,pts:12},
+    {ok:sprOk,n:'Spread < 2%',val:fmtP(opt.spreadPct),filt:true,pts:10},{ok:delOk,n:'Delta >= 0.70',val:''+opt.delta,filt:true,pts:12},
+    {ok:extOk,n:'Extrinsic <=30%',val:fmtP(opt.ext),filt:true,pts:10},{ok:dteOk,n:'DTE 25-50',val:'DTE '+opt.dte,filt:true,pts:12},
+    {ok:sectOk,n:'Sector PF > 2',val:'PF '+pf,filt:false,pts:5}
+  ];
+  checks.forEach(function(c){if(c.ok)score+=c.pts;res.push({n:c.n,pass:c.ok,val:c.val,filter:c.filt,pts:c.pts});});
+  var filtersPass=sprOk&&delOk&&extOk&&dteOk;
+  var isGo=score>=70&&filtersPass&&!avoidBad;
+  return{score:clamp(score,0,113),isGo:isGo,filtersPass:filtersPass,rules:res,passes:res.filter(function(r){return r.pass;}).length};
+}
+
+function renderTV(cid,ticker){
+  var c=eid(cid);if(!c)return;
+  c.innerHTML='';
+  var wrap=document.createElement('div');wrap.style.cssText='width:100%;height:100%;';c.appendChild(wrap);
+  var s=document.createElement('script');s.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';s.async=true;
+  s.innerHTML=JSON.stringify({autosize:true,symbol:ticker,interval:'5',timezone:'America/New_York',theme:'dark',style:'1',locale:'en',backgroundColor:'#0d1117',gridColor:'#21262d',hide_top_toolbar:false,save_image:false,withdateranges:true,studies:['MACD@tv-screener','RSI@tv-screener','ADX@tv-screener']});
+  wrap.appendChild(s);
+}
+
+function buildDetail(r,detId,emptyId){
+  var det=eid(detId),emp=eid(emptyId);
+  if(!r){if(emp)emp.style.display='flex';if(det)det.style.display='none';return;}
+  if(emp)emp.style.display='none';
+  if(det){det.style.display='flex';det.style.flexDirection='column';det.style.height='100%';det.style.overflow='hidden';}
+  var sigCls=r.isGo?'go':'nogo';var sigLbl=r.isGo?'GO':'NO-GO';var ind=r.ind,opt=r.opt;
+  var rulesHtml='';
+  r.rules.forEach(function(ru){var cls=ru.pass?'pass':(ru.filter?'filt-fail':'fail');var icon=ru.pass?'&#10003;':'&#10007;';rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';});
+  G.detailOpt={ticker:r.ticker,strike:opt.strike,exp:opt.exp};
+  det.innerHTML=
+    '<div class="det-hdr"><span class="det-tk">'+r.ticker+'</span>'
+    +'<span class="det-pr">$'+fmt2(r.price)+'</span>'
+    +'<span class="det-sig '+sigCls+'">'+sigLbl+'</span>'
+    +'<span class="det-meta">'+r.sector+' | Score: <b>'+r.score+'</b> | Passes: '+r.passes+'/12</span>'
+    +'</div>'
+    +'<div class="det-tv" id="tv-'+r.ticker+'"></div>'
+    +'<div class="det-scroll">'
+    +'<div class="s-hdr">TECHNICAL INDICATORS</div>'
+    +'<div class="ind-grid">'
+    +'<div class="ig-cell"><div class="ig-lbl">RSI(14)</div><div class="ig-val '+(ind.rsi<40||ind.rsi>70?'warn':'')+'">'+ind.rsi+'</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">MACD Hist</div><div class="ig-val '+(ind.macd>=0?'pos':'neg')+'">'+(ind.macd>=0?'+':'')+ind.macd+'</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">ADX</div><div class="ig-val '+(ind.adx>25?'pos':'warn')+'">'+ind.adx+'</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">EMA20/50</div><div class="ig-val '+(ind.ema20>ind.ema50?'pos':'neg')+'">'+fmt2(ind.ema20)+' / '+fmt2(ind.ema50)+'</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">ATR</div><div class="ig-val">'+fmt2(ind.atr)+'</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">TF Aligned</div><div class="ig-val '+(ind.tf>=2?'pos':'warn')+'">'+ind.tf+'/3</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">Volume</div><div class="ig-val '+(ind.vol>ind.avgVol?'pos':'warn')+'">'+fmtK(ind.vol)+'</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">%-EMA Exit</div><div class="ig-val">$'+fmt2(ind.ema50*1.005)+'</div></div>'
+    +'</div>'
+    +'<div class="s-hdr">OPTIONS CONTRACT</div>'
+    +'<div class="opt-grid">'
+    +'<div class="og-cell"><div class="og-lbl">Delta</div><div class="og-val '+(opt.delta>=0.70?'ok':'warn')+'">'+opt.delta+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Extrinsic %</div><div class="og-val '+(opt.ext<=30?'ok':'warn')+'">'+fmtP(opt.ext)+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Spread %</div><div class="og-val '+(opt.spreadPct<2?'ok':'warn')+'">'+fmtP(opt.spreadPct)+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">DTE</div><div class="og-val '+((opt.dte>=25&&opt.dte<=50)?'ok':'warn')+'">'+opt.dte+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Strike</div><div class="og-val">$'+fmt2(opt.strike)+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Expiry</div><div class="og-val">'+opt.exp+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Opt Price</div><div class="og-val">$'+fmt2(opt.optPr)+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">OI / Vol</div><div class="og-val">'+fmtK(opt.oi)+' / '+fmtK(opt.vol)+'</div></div>'
+    +'</div>'
+    +'<div style="padding:8px 12px;border-bottom:var(--bdr);display:flex;align-items:center;gap:10px;">'
+    +'<button class="btn blu" style="font-size:12px;padding:5px 14px;" onclick="doBuyCall()">&#9650; BUY CALL</button>'
+    +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">&#9660; BUY PUT</button>'
+    +'<span style="color:var(--gry);font-size:10px;">Strike: $'+fmt2(opt.strike)+'  |  Exp: '+opt.exp+'</span>'
+    +'</div>'
+    +'<div class="s-hdr">RULE SCORECARD</div>'
+    +'<div class="rules-grid">'+rulesHtml+'</div>'
+    +'</div>';
+  renderTV('tv-'+r.ticker,r.ticker);
+}
+
+function viewDetail(ticker,detId,emptyId){
+ var r=null;
+ for(var i=0;i<G.results.length;i++){if(G.results[i].ticker===ticker){r=G.results[i];break;}}
+ if(!r)return;
+ G.selTicker=ticker;
+ document.querySelectorAll('.sig-card').forEach(function(c){c.classList.toggle('sel',c.dataset.ticker===ticker);});
+ document.querySelectorAll('tr.sel-row').forEach(function(row){row.classList.remove('sel-row');});
+ document.querySelectorAll('tr[data-ticker="'+ticker+'"]').forEach(function(row){row.classList.add('sel-row');});
+ buildDetail(r,detId,emptyId);
+ var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+ if(key){
+  fetchOptionContract(ticker,r.price,function(optData){
+   if(!optData)return;
+   if(optData.livePrice&&optData.livePrice>0){r.price=optData.livePrice;}
+   r.opt=Object.assign(r.opt,optData);
+   var newScore=scoreIt(ticker,r.ind,r.opt);
+   r.score=newScore.score;r.isGo=newScore.isGo;r.filtersPass=newScore.filtersPass;
+   r.rules=newScore.rules;r.passes=newScore.passes;
+   G.detailOpt={ticker:ticker,strike:optData.strike,exp:optData.exp};
+   buildDetail(r,detId,emptyId);
+  });
+ }
+}
+
+function renderBuySig(){
+  var goList=eid('bs-go-list'),noList=eid('bs-nogo-list');
+  goList.innerHTML='';noList.innerHTML='';
+  var goCount=0,noCount=0,scoreSum=0,topSect='',topPF=0;
+  Object.keys(SECTOR_PF).forEach(function(sk){if(SECTOR_PF[sk]>topPF){topPF=SECTOR_PF[sk];topSect=sk;}});
+  G.results.forEach(function(r){
+    if(r.isGo)goCount++;else noCount++;scoreSum+=r.score;
+    var card=document.createElement('div');
+    card.className='sig-card'+(r.isGo?'':' nogo-card');card.dataset.ticker=r.ticker;
+    var tk=r.ticker;
+    card.innerHTML='<div class="sc-l"><div class="tk">'+tk+'</div>'
+      +'<div class="sc '+(r.isGo?'go':'nogo')+'">'+r.score+'</div>'
+      +'<div class="sect">'+r.sector+'</div></div>'
+      +'<div class="sc-r"><div class="pr">$'+fmt2(r.price)+'</div>'
+      +'<div class="ind">RSI '+r.ind.rsi+' | ADX '+r.ind.adx+'</div></div>';
+    card.onclick=function(){viewDetail(tk,'bs-detail','bs-empty');};
+    if(r.isGo)goList.appendChild(card);else noList.appendChild(card);
+  });
+  var avg=G.results.length?+(scoreSum/G.results.length).toFixed(1):0;
+  eid('bs-go').textContent=goCount;eid('bs-nogo').textContent=noCount;eid('bs-avg').textContent=avg;
+  eid('bs-sect').textContent=topSect||'--';eid('bs-pf').textContent=topPF||'--';eid('bs-scan').textContent=G.results.length;
+  if(G.results.length>0&&!G.selTicker){viewDetail(G.results[0].ticker,'bs-detail','bs-empty');}
+}
+
+function runScan(){
+  if(G.scanRunning)return;G.scanRunning=true;
+  var sc=eid('sc-sect');sc.innerHTML='<option value="">All</option>';
+  Object.keys(SECTOR_PF).forEach(function(s){var o=document.createElement('option');o.value=s;o.textContent=s;sc.appendChild(o);});
+  G.results=[];
+  UNIVERSE.forEach(function(u){
+    var q=simQuote(u.t),ind=simInd(u.t,q.price),opt=simOpt(q.price),sc2=scoreIt(u.t,ind,opt);
+    G.results.push({ticker:u.t,sector:u.s,price:q.price,change:q.change,changePct:q.changePct,volume:q.volume,ind:ind,opt:opt,score:sc2.score,isGo:sc2.isGo,filtersPass:sc2.filtersPass,rules:sc2.rules,passes:sc2.passes});
+  });
+  G.results.sort(function(a,b){return b.score-a.score;});
+  G.filtered=G.results.slice();renderBuySig();renderScan();G.scanRunning=false;
+  addAlert('SYS','Scan complete: '+G.results.length+' tickers | '+G.results.filter(function(r){return r.isGo;}).length+' GO','go');
+  toast('Scan complete \u2014 '+G.results.length+' tickers');
+}
+
+function applyFilters(){
+  var sect=eid('sc-sect').value,sig=eid('sc-sig').value,minsc=+eid('sc-minscore').value||0;
+  G.filtered=G.results.filter(function(r){
+    if(sect&&r.sector!==sect)return false;if(sig==='GO'&&!r.isGo)return false;
+    if(sig==='NO-GO'&&r.isGo)return false;if(r.score<minsc)return false;return true;
+  });renderScan();
+}
+
+function sortTable(col){
+  if(G.sortCol===col)G.sortDir*=-1;else{G.sortCol=col;G.sortDir=-1;}
+  G.filtered.sort(function(a,b){
+    if(col==='ticker'||col==='sector')return G.sortDir*(a[col]<b[col]?-1:a[col]>b[col]?1:0);
+    return G.sortDir*(a[col]-b[col]);
+  });renderScan();
+}
+
+function renderScan(){
+  var wrap=eid('sc-tbl-wrap');
+  if(!G.filtered.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>No results \u2014 run a scan first</p></div>';return;}
+  var cols=[{k:'ticker',l:'SYMBOL'},{k:'score',l:'SCORE'},{k:'isGo',l:'SIGNAL'},{k:'sector',l:'SECTOR'},{k:'price',l:'PRICE'},{k:'changePct',l:'CHG%'},{k:'volume',l:'VOLUME'}];
+  var th='';cols.forEach(function(c){var arr=G.sortCol===c.k?(G.sortDir>0?' &#9650;':' &#9660;'):'';th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';});
+  var rows='';
+  G.filtered.forEach(function(r){
+    var sigBadge=r.isGo?'<span class="badge go">GO</span>':'<span class="badge nogo">NO-GO</span>';
+    var chgCls=r.changePct>=0?'pnl-pos':'pnl-neg';var tk=r.ticker;
+    rows+='<tr data-ticker="'+tk+'" onclick="viewDetail(this.dataset.ticker,\'sc-detail\',\'sc-det-empty\')">'
+      +'<td>'+tk+'</td><td><b>'+r.score+'</b></td><td>'+sigBadge+'</td><td>'+r.sector+'</td>'
+      +'<td>$'+fmt2(r.price)+'</td><td class="'+chgCls+'">'+(r.changePct>=0?'+':'')+fmtP(r.changePct)+'</td>'
+      +'<td>'+fmtK(r.volume)+'</td></tr>';
+  });
+  wrap.innerHTML='<table><thead><tr>'+th+'</tr></thead><tbody>'+rows+'</tbody></table>';
+}
+</script>
+
+
 </body>
 </html>
