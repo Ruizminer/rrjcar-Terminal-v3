@@ -1964,8 +1964,8 @@ function resetOneTsState(sym){
 }
 
 function executeTsClose(p,closeMode,creds){
-  var action=p.type==='STOCK'?'SELL':'BUY_TO_CLOSE';
-  var side=p.type==='STOCK'?'sell':'buy_to_close';
+  var action=p.type==='STOCK'?'SELL':'SELL_TO_CLOSE';
+  var side=p.type==='STOCK'?'sell':'sell_to_close';
   var acct=G.acctId||localStorage.getItem('rrjcar_acct')||'';
   if(!acct||!creds){
     tsLog(p.underlying+': cannot close \u2014 no API key or account ID','warn');return;
@@ -2378,7 +2378,7 @@ function doBuyCall(){if(G.detailOpt)buyOrder(G.detailOpt.ticker,'CALL',G.detailO
 function doBuyPut(){if(G.detailOpt)buyOrder(G.detailOpt.ticker,'PUT',G.detailOpt.strike,G.detailOpt.exp);}
 function doClose(btn){var tr=btn.closest('tr');closePosition(tr.dataset.tk,tr.dataset.tp,+tr.dataset.st,tr.dataset.ex,+tr.dataset.qty);}
 function closePosition(symbol,type,strike,exp,qty){
-  var action=type==='STOCK'?'SELL':'BUY_TO_CLOSE';
+  var action=type==='STOCK'?'SELL':'SELL_TO_CLOSE';
   switchTab('order');
   setTimeout(function(){
     eid('ord-sym').value=symbol;eid('ord-type').value=type==='STOCK'?'STOCK':(type==='PUT'?'PUT':'CALL');
