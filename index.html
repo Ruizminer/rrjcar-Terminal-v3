@@ -417,13 +417,13 @@ tr.sel-row td{background:var(--blu3);}
         <div class="ts-field">
           <label>Poll interval</label>
           <div style="display:flex;align-items:center;gap:4px;">
-            <input type="number" id="ts-interval" value="30" min="5" step="5" placeholder="30">
+            <input type="number" id="ts-interval" value="30" min="5" step="5" placeholder="30" onchange="saveAppSettings()">
             <span style="color:var(--gry);font-size:10px;">sec</span>
           </div>
         </div>
         <div class="ts-field" style="align-self:flex-end;">
           <label>Default close via</label>
-          <select id="ts-close-mode" style="background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:11px;padding:4px 6px;width:110px;">
+          <select id="ts-close-mode" style="background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:11px;padding:4px 6px;width:110px;" onchange="saveAppSettings()">
             <option value="step">Step Fill</option>
             <option value="market">Market Order</option>
           </select>
@@ -595,16 +595,17 @@ tr.sel-row td{background:var(--blu3);}
           </div>
           <div class="step-cfg-field">
             <label>Max Attempts</label>
-            <input type="number" id="sf-max" value="10" min="1" max="50" placeholder="10" oninput="updateStepCalcDisplay()">
+            <input type="number" id="sf-max" value="10" min="1" max="50" placeholder="10" oninput="updateStepCalcDisplay();saveAppSettings()">
           </div>
           <div class="step-cfg-field">
             <label>Fill Wait (sec)</label>
             <input type="number" id="sf-delay" value="15" min="5" max="120" placeholder="15"
-              title="How long to wait for each limit order to fill before stepping to next price">
+              title="How long to wait for each limit order to fill before stepping to next price"
+              onchange="saveAppSettings()">
           </div>
           <div class="step-cfg-field">
             <label>Start From</label>
-            <select id="sf-start" style="background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:12px;padding:4px 7px;width:90px;">
+            <select id="sf-start" style="background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:12px;padding:4px 7px;width:90px;" onchange="saveAppSettings()">
               <option value="bid">Bid</option>
               <option value="mid">Mid</option>
               <option value="ask">Ask</option>
@@ -615,7 +616,7 @@ tr.sel-row td{background:var(--blu3);}
             <div style="display:flex;align-items:center;gap:4px;">
               <input type="number" id="sf-coverage" value="100" min="10" max="200" step="5" placeholder="100"
                 title="Covers this % of the bid/ask spread across all attempts"
-                oninput="updateStepCalcDisplay()">
+                oninput="updateStepCalcDisplay();saveAppSettings()">
               <span style="color:var(--gry);font-size:10px;">% of spread</span>
             </div>
             <div style="color:var(--gry2);font-size:9px;margin-top:2px;" id="sf-step-calc">auto step: --</div>
@@ -623,7 +624,8 @@ tr.sel-row td{background:var(--blu3);}
           <div class="step-cfg-field" style="border-left:1px solid var(--gry2);padding-left:10px;">
             <label style="color:var(--ambb);">If No Fill</label>
             <select id="sf-fallback" style="background:var(--bg2);border:var(--bdr);border-radius:3px;color:var(--wht);font-family:var(--ff);font-size:12px;padding:4px 7px;width:110px;"
-              title="What to do if all attempts are exhausted without a fill">
+              title="What to do if all attempts are exhausted without a fill"
+              onchange="saveAppSettings()">
               <option value="none">Give Up</option>
               <option value="market">Market Order</option>
             </select>
@@ -1330,6 +1332,7 @@ function toggleStepFill(){
     eid('step-fill-log').classList.remove('show');
     eid('step-progress').classList.remove('show');
   }
+  saveAppSettings();
 }
 
 // Calculate effective step size: coverage mode overrides manual step size
@@ -2134,6 +2137,8 @@ function saveTsConfig(sym){
   cfg.disPull  = parseFloat(cfgRow.querySelector('.tsc-dispull').value) || '';
   cfg.closeMode= cfgRow.querySelector('.tsc-closemode').value;
   G.tsConfig[sym] = cfg;
+  // Persist all tsConfig to localStorage
+  try{ localStorage.setItem('rrjcar_ts_config', JSON.stringify(G.tsConfig)); }catch(e){}
   // Reset state if re-configuring
   if(G.tsState[sym] && G.tsState[sym].status !== 'triggered'){
     delete G.tsState[sym];
@@ -2829,6 +2834,7 @@ function resetTsState(){
 function clearPositions(){
   G.positions=[];
   stopTsPoller();G.tsState={};G.tsTriggered={};G.tsConfig={};
+  try{ localStorage.removeItem('rrjcar_ts_config'); }catch(e){}
   if(eid('ts-toggle'))eid('ts-toggle').checked=false;
   if(eid('ts-cfg'))eid('ts-cfg').style.display='none';
   G.tsActive=false;
@@ -3218,11 +3224,114 @@ function updateHeaderQuotes(){
     if(cel){var chgStr=(q.changePct>=0?'+':'')+fmtP(q.changePct);cel.textContent='('+chgStr+')';cel.className='tc '+(q.changePct>=0?'up':'dn');}
   });
 }
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+//  SETTINGS PERSISTENCE
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+var APP_VERSION = '3.4';
+
+function saveAppSettings(){
+  try{
+    // Step fill settings
+    var sfSettings = {
+      coverage: eid('sf-coverage') ? eid('sf-coverage').value : '100',
+      maxAtt:   eid('sf-max')      ? eid('sf-max').value      : '10',
+      delay:    eid('sf-delay')    ? eid('sf-delay').value    : '15',
+      startFrom:eid('sf-start')    ? eid('sf-start').value    : 'bid',
+      fallback: eid('sf-fallback') ? eid('sf-fallback').value : 'none',
+      enabled:  eid('step-fill-toggle') ? eid('step-fill-toggle').checked : false
+    };
+    localStorage.setItem('rrjcar_sf', JSON.stringify(sfSettings));
+
+    // Trail stop global settings
+    var tsSettings = {
+      interval:  eid('ts-interval')   ? eid('ts-interval').value   : '30',
+      closeMode: eid('ts-close-mode') ? eid('ts-close-mode').value : 'step'
+    };
+    localStorage.setItem('rrjcar_ts_global', JSON.stringify(tsSettings));
+
+    // Per-position trail stop configs
+    if(Object.keys(G.tsConfig).length > 0){
+      localStorage.setItem('rrjcar_ts_config', JSON.stringify(G.tsConfig));
+    }
+  } catch(e){ console.warn('saveAppSettings error:', e); }
+}
+
+function loadAppSettings(){
+  try{
+    // Step fill settings
+    var sfRaw = localStorage.getItem('rrjcar_sf');
+    if(sfRaw){
+      var sf = JSON.parse(sfRaw);
+      if(eid('sf-coverage') && sf.coverage) eid('sf-coverage').value = sf.coverage;
+      if(eid('sf-max')      && sf.maxAtt)   eid('sf-max').value      = sf.maxAtt;
+      if(eid('sf-delay')    && sf.delay)    eid('sf-delay').value    = sf.delay;
+      if(eid('sf-start')    && sf.startFrom)eid('sf-start').value    = sf.startFrom;
+      if(eid('sf-fallback') && sf.fallback) eid('sf-fallback').value = sf.fallback;
+      if(eid('step-fill-toggle') && sf.enabled){
+        eid('step-fill-toggle').checked = true;
+        toggleStepFill();
+      }
+    }
+
+    // Trail stop global settings
+    var tsRaw = localStorage.getItem('rrjcar_ts_global');
+    if(tsRaw){
+      var ts = JSON.parse(tsRaw);
+      if(eid('ts-interval')   && ts.interval)  eid('ts-interval').value   = ts.interval;
+      if(eid('ts-close-mode') && ts.closeMode) eid('ts-close-mode').value = ts.closeMode;
+    }
+
+    // Per-position trail stop configs
+    var tsCfgRaw = localStorage.getItem('rrjcar_ts_config');
+    if(tsCfgRaw){
+      var tsCfg = JSON.parse(tsCfgRaw);
+      G.tsConfig = tsCfg;
+    }
+  } catch(e){ console.warn('loadAppSettings error:', e); }
+}
+
+function showVersionBanner(){
+  try{
+    var lastVer = localStorage.getItem('rrjcar_version') || '';
+    if(lastVer !== APP_VERSION){
+      // Show what's new based on version
+      var msg = 'v'+APP_VERSION+' \u2014 Trail stop & step fill settings now persist between sessions';
+      setTimeout(function(){
+        var banner = document.createElement('div');
+        banner.style.cssText = 'position:fixed;top:40px;left:50%;transform:translateX(-50%);'
+          +'background:#1c2536;border:1px solid #f59e0b;border-radius:4px;'
+          +'color:#fbbf24;font-family:\'Courier New\',monospace;font-size:11px;'
+          +'padding:10px 18px;z-index:9999;max-width:480px;text-align:center;'
+          +'box-shadow:0 4px 24px rgba(0,0,0,0.6);';
+        banner.innerHTML = '<b style="color:#f59e0b">\u25a0 RRJCAR TERMINAL '+APP_VERSION+' \u2014 UPDATED</b><br>'
+          +'<span style="color:#94a3b8;">'+msg+'</span>';
+        document.body.appendChild(banner);
+        setTimeout(function(){ 
+          banner.style.transition='opacity 0.5s';
+          banner.style.opacity='0';
+          setTimeout(function(){ if(banner.parentNode)banner.parentNode.removeChild(banner); }, 600);
+        }, 5000);
+      }, 1200);
+      localStorage.setItem('rrjcar_version', APP_VERSION);
+    }
+  } catch(e){}
+}
+
 function init(){
-  loadKeys();loadWL();updateClock();updateHeaderQuotes();
-  setInterval(updateClock,1000);setInterval(updateHeaderQuotes,30000);
-  runScan();refreshWL();
-  addAlert('SYS','RRJCAR Terminal v3.3 initialized','go');
+  loadKeys();
+  loadWL();
+  loadAppSettings();
+  showVersionBanner();
+  updateClock();
+  updateHeaderQuotes();
+  setInterval(updateClock,1000);
+  setInterval(updateHeaderQuotes,30000);
+  // Auto-save settings every 60s as a safety net
+  setInterval(saveAppSettings, 60000);
+  runScan();
+  refreshWL();
+  addAlert('SYS','RRJCAR Terminal v'+APP_VERSION+' initialized','go');
 }
 window.addEventListener('DOMContentLoaded',init);
 </script>
