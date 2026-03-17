@@ -314,6 +314,7 @@ tr.sel-row td{background:var(--blu3);}
   <button class="ntab" onclick="switchTab('mb')">MARKET BREADTH</button>
   <button class="ntab" onclick="switchTab('al')">ALERTS</button>
   <button class="ntab" onclick="switchTab('ex')">EXPECTANCY</button>
+  <button class="ntab" onclick="switchTab('closed')">CLOSED POSITIONS</button>
   <button class="ntab" onclick="switchTab('api')">&#9881; API</button>
 </div>
 <div id="app">
@@ -631,6 +632,45 @@ tr.sel-row td{background:var(--blu3);}
     </div></div>
   </div>
 </div>
+<!-- ═══════════════════════════════════════════════════════
+     CLOSED POSITIONS TAB
+     ═══════════════════════════════════════════════════════ -->
+<div class="tab-pane" id="tab-closed">
+  <div class="stats-bar">
+    <div class="stat-box"><div class="stat-label">TOTAL TRADES</div><div class="stat-val amb" id="cl-count">--</div></div>
+    <div class="stat-box"><div class="stat-label">WIN RATE</div><div class="stat-val amb" id="cl-wr">--</div></div>
+    <div class="stat-box"><div class="stat-label">TOTAL P&amp;L</div><div class="stat-val" id="cl-pnl">--</div></div>
+    <div class="stat-box"><div class="stat-label">AVG WIN</div><div class="stat-val go" id="cl-avgwin">--</div></div>
+    <div class="stat-box"><div class="stat-label">AVG LOSS</div><div class="stat-val nogo" id="cl-avgloss">--</div></div>
+    <div class="stat-box"><div class="stat-label">BEST TRADE</div><div class="stat-val go" id="cl-best">--</div></div>
+    <div class="stat-box"><div class="stat-label">WORST TRADE</div><div class="stat-val nogo" id="cl-worst">--</div></div>
+  </div>
+  <div class="flt-bar">
+    <button class="btn blu" onclick="fetchClosedPositions()">&#8635; REFRESH</button>
+    <label>Show <select id="cl-limit" onchange="fetchClosedPositions()" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:11px;padding:3px 6px;border-radius:3px;">
+      <option value="25">Last 25</option>
+      <option value="50" selected>Last 50</option>
+      <option value="100">Last 100</option>
+      <option value="250">Last 250</option>
+    </select> orders</label>
+    <label>Filter <select id="cl-filter" onchange="renderClosedTable()" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:11px;padding:3px 6px;border-radius:3px;">
+      <option value="">All</option>
+      <option value="WIN">Winners</option>
+      <option value="LOSS">Losers</option>
+      <option value="CALL">Calls</option>
+      <option value="PUT">Puts</option>
+    </select></label>
+    <label>Symbol <input id="cl-sym-filter" placeholder="e.g. AAPL" oninput="renderClosedTable()" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:11px;padding:3px 6px;border-radius:3px;width:90px;"></label>
+    <span id="cl-src" style="color:var(--gry);font-size:10px;margin-left:auto;"></span>
+  </div>
+  <div class="tbl-wrap" id="cl-tbl-wrap">
+    <div class="empty-det" style="min-height:200px;">
+      <div class="ei">&#9632;</div>
+      <p>Click REFRESH to load closed positions from Tradier</p>
+    </div>
+  </div>
+</div>
+
 <div class="tab-pane" id="tab-api">
   <div class="page-wrap">
     <div class="card"><div class="card-hdr">API CONFIGURATION</div>
@@ -708,14 +748,14 @@ function switchTab(id){
   document.querySelectorAll('.tab-pane').forEach(function(p){p.classList.remove('active');});
   document.querySelectorAll('.ntab').forEach(function(b){b.classList.remove('active');});
   var pane=eid('tab-'+id);if(pane)pane.classList.add('active');
-  var ids=['bs','sc','gx','wl','pos','order','mb','al','ex','api'];
+  var ids=['bs','sc','gx','wl','pos','order','mb','al','ex','closed','api'];
   var idx=ids.indexOf(id);
   var btns=document.querySelectorAll('.ntab');
   if(btns[idx])btns[idx].classList.add('active');
   if(id==='mb')renderBreadth();
   if(id==='al')renderAlerts();
+  if(id==='closed')fetchClosedPositions();
   if(id==='order'){
-    // Auto-fetch quote if symbol is already filled
     var sym=eid('ord-sym').value.trim();
     if(sym)fetchLiveQuote();
   }
@@ -2400,6 +2440,261 @@ function fetchBalances(){
   fetch(host+'/v1/accounts/'+G.acctId+'/balances',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
   .then(function(r){return r.json();})
   .then(function(data){try{var val=data.balances.total_equity;eid('pos-acctval').textContent=fmtD(val);}catch(e){}}).catch(function(){});
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+//  CLOSED POSITIONS ENGINE
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+var G_closed = { raw:[], trades:[] };
+
+function parseOccSymbolFull(sym){
+  var m=sym.match(/^([A-Z1-9]+)(\d{6})([CP])(\d{8})$/);
+  if(!m)return{underlying:sym,type:'STOCK',strike:0,exp:'',isOption:false};
+  var yr='20'+m[2].slice(0,2),mo=m[2].slice(2,4),dy=m[2].slice(4,6);
+  return{underlying:m[1],type:m[3]==='C'?'CALL':'PUT',
+    strike:parseInt(m[4])/1000,exp:yr+'-'+mo+'-'+dy,isOption:true};
+}
+
+function matchTrades(orders){
+  // Pair BTO/STO with corresponding STC/BTC orders to compute realized P&L
+  var trades=[];
+  var opens={};  // key: option_symbol -> array of open lots
+
+  // Sort by date ascending so opens come before closes
+  var sorted=orders.slice().sort(function(a,b){
+    return new Date(a.create_date)-new Date(b.create_date);
+  });
+
+  sorted.forEach(function(o){
+    if(o.status!=='filled')return;
+    var sym=o.option_symbol||o.symbol;
+    var side=(o.side||'').toLowerCase();
+    var qty=parseInt(o.quantity)||1;
+    var avgFill=parseFloat(o.avg_fill_price)||0;
+    var parsed=parseOccSymbolFull(sym);
+    var isOpen=side==='buy_to_open'||side==='sell_to_open'||side==='buy';
+    var isClose=side==='sell_to_close'||side==='buy_to_close'||side==='sell';
+
+    if(isOpen){
+      if(!opens[sym])opens[sym]=[];
+      opens[sym].push({qty:qty,price:avgFill,side:side,date:o.create_date,id:o.id});
+    } else if(isClose){
+      var openLots=opens[sym]||[];
+      var closePx=avgFill;
+      var closeQty=qty;
+      var openPx=openLots.length>0?openLots[0].price:0;
+      var openDate=openLots.length>0?openLots[0].date:o.create_date;
+
+      // P&L: for long (BTO->STC): (close-open)*100*qty
+      //       for short (STO->BTC): (open-close)*100*qty
+      var isLong=(openLots.length>0&&(openLots[0].side==='buy_to_open'||openLots[0].side==='buy'));
+      var pnl = isLong
+        ? (closePx - openPx)*100*closeQty
+        : (openPx - closePx)*100*closeQty;
+      var pnlPct = openPx>0 ? ((closePx-openPx)/openPx*100*(isLong?1:-1)) : 0;
+      var holdDays=openDate?Math.round((new Date(o.create_date)-new Date(openDate))/(864e5)):0;
+
+      trades.push({
+        symbol:sym,
+        underlying:parsed.underlying,
+        type:parsed.type,
+        strike:parsed.strike,
+        exp:parsed.exp,
+        isOption:parsed.isOption,
+        openDate:openDate?openDate.slice(0,10):'--',
+        closeDate:o.create_date?o.create_date.slice(0,10):'--',
+        openPrice:openPx,
+        closePrice:closePx,
+        qty:closeQty,
+        pnl:pnl,
+        pnlPct:pnlPct,
+        holdDays:holdDays,
+        closeOrderId:o.id,
+        side:isLong?'LONG':'SHORT'
+      });
+      // Remove matched open lot
+      if(openLots.length>0) openLots.shift();
+    }
+  });
+  return trades;
+}
+
+function fetchClosedPositions(){
+  var creds=getTradierCreds();
+  var acct=G.acctId||localStorage.getItem('rrjcar_acct')||'';
+  var limit=parseInt(eid('cl-limit').value)||50;
+  var wrap=eid('cl-tbl-wrap');
+  var src=eid('cl-src');
+
+  if(!creds||!acct){
+    wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div>'
+      +'<p>No Tradier API key or account configured.<br>Go to the API tab.</p></div>';
+    return;
+  }
+
+  src.textContent='Loading...';
+  wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div><p>Fetching order history...</p></div>';
+
+  fetch(creds.host+'/v1/accounts/'+acct+'/orders?includeTags=true',{
+    headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}
+  }).then(function(r){return r.json();})
+  .then(function(data){
+    var orders=[];
+    try{
+      var od=data.orders.order;
+      if(!Array.isArray(od))od=[od];
+      orders=od.filter(function(o){return o&&o.status;});
+    }catch(e){}
+
+    // Filter to filled close-side orders and their paired opens
+    var filled=orders.filter(function(o){
+      return o.status==='filled';
+    }).slice(0, limit*2); // grab extra to ensure pairing works
+
+    G_closed.raw=filled;
+    G_closed.trades=matchTrades(filled);
+
+    src.textContent='['+creds.mode.toUpperCase()+'] '+G_closed.trades.length+' closed trades | Updated: '+new Date().toLocaleTimeString();
+    renderClosedTable();
+  })
+  .catch(function(e){
+    wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div>'
+      +'<p style="color:var(--wrn);">Error: '+e.message+'</p></div>';
+    src.textContent='[ERROR]';
+  });
+}
+
+function renderClosedTable(){
+  var wrap=eid('cl-tbl-wrap');
+  var filter=eid('cl-filter').value;
+  var symFilter=(eid('cl-sym-filter').value||'').trim().toUpperCase();
+
+  var trades=G_closed.trades.filter(function(t){
+    if(symFilter&&t.underlying.indexOf(symFilter)<0)return false;
+    if(filter==='WIN'&&t.pnl<=0)return false;
+    if(filter==='LOSS'&&t.pnl>=0)return false;
+    if(filter==='CALL'&&t.type!=='CALL')return false;
+    if(filter==='PUT'&&t.type!=='PUT')return false;
+    return true;
+  });
+
+  if(!trades.length){
+    wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">&#9632;</div>'
+      +'<p>No closed trades found'+(filter||symFilter?' matching filter':'')+'</p></div>';
+    updateClosedStats([]);return;
+  }
+
+  // Sort newest first
+  trades.sort(function(a,b){return new Date(b.closeDate)-new Date(a.closeDate);});
+
+  var html='<table><thead><tr>'
+    +'<th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th>'
+    +'<th>QTY</th><th>OPEN DATE</th><th>CLOSE DATE</th><th>DAYS HELD</th>'
+    +'<th>OPEN PRICE</th><th>CLOSE PRICE</th>'
+    +'<th>P&L $</th><th>P&L %</th><th>RESULT</th><th></th>'
+    +'</tr></thead><tbody>';
+
+  trades.forEach(function(t){
+    var pnlCls=t.pnl>=0?'pnl-pos':'pnl-neg';
+    var resultBadge=t.pnl>=0
+      ?'<span class="badge go">WIN</span>'
+      :'<span class="badge nogo">LOSS</span>';
+    var sym=t.symbol;
+    html+='<tr data-sym="'+sym+'">'
+      +'<td><b>'+t.underlying+'</b></td>'
+      +'<td>'+t.type+'</td>'
+      +'<td>'+(t.isOption?'$'+fmt2(t.strike):'--')+'</td>'
+      +'<td>'+(t.isOption?t.exp:'--')+'</td>'
+      +'<td>'+t.qty+'</td>'
+      +'<td style="color:var(--gry);">'+t.openDate+'</td>'
+      +'<td style="color:var(--gry);">'+t.closeDate+'</td>'
+      +'<td style="color:var(--gry);">'+t.holdDays+'d</td>'
+      +'<td>$'+fmt2(t.openPrice)+'</td>'
+      +'<td>$'+fmt2(t.closePrice)+'</td>'
+      +'<td class="'+pnlCls+'">'+(t.pnl>=0?'+':'')+fmtD(t.pnl)+'</td>'
+      +'<td class="'+pnlCls+'">'+(t.pnlPct>=0?'+':'')+fmt2(t.pnlPct)+'%</td>'
+      +'<td>'+resultBadge+'</td>'
+      +'<td><button class="btn" style="font-size:10px;padding:2px 8px;border-color:var(--blu3);color:var(--blub);" '
+        +'onclick="toggleClosedChart(\''+sym+'\','+t.strike+','+t.openPrice+','+t.closePrice+',\''+t.type+'\','+t.qty+')">&#9650; P&amp;L</button></td>'
+      +'</tr>'
+      // Chart expansion row
+      +'<tr id="clchart-'+sym+'" class="pos-chart-row">'
+      +'<td colspan="14">'
+      +'<div class="pos-chart-inner">'
+      +'<div class="pnl-chart-hdr">'
+      +'<span class="pnl-chart-title">CLOSED TRADE P&amp;L \u2014 '+t.underlying+' $'+fmt2(t.strike)+' '+t.type
+        +' | Opened $'+fmt2(t.openPrice)+' \u2192 Closed $'+fmt2(t.closePrice)+'</span>'
+      +'<div class="pnl-chart-stats">'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Breakeven</div><div class="pnl-stat-val neu" id="clbe-'+sym+'">--</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Max Loss</div><div class="pnl-stat-val neg" id="clml-'+sym+'">--</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Realized P&amp;L</div><div class="pnl-stat-val '+(t.pnl>=0?'pos':'neg')+'" id="clrl-'+sym+'">--</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Return %</div><div class="pnl-stat-val '+(t.pnlPct>=0?'pos':'neg')+'">'+(t.pnlPct>=0?'+':'')+fmt2(t.pnlPct)+'%</div></div>'
+      +'<div class="pnl-stat"><div class="pnl-stat-lbl">Days Held</div><div class="pnl-stat-val neu">'+t.holdDays+'d</div></div>'
+      +'</div></div>'
+      +'<div class="pnl-canvas-wrap">'
+      +'<canvas id="clcanvas-'+sym+'" height="160"></canvas>'
+      +'<div class="pnl-tooltip" id="cltooltip-'+sym+'"></div>'
+      +'</div>'
+      +'</div></td></tr>';
+  });
+
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+  updateClosedStats(trades);
+}
+
+function updateClosedStats(trades){
+  var total=trades.length;
+  var wins=trades.filter(function(t){return t.pnl>0;});
+  var losses=trades.filter(function(t){return t.pnl<=0;});
+  var totalPnl=trades.reduce(function(s,t){return s+t.pnl;},0);
+  var avgWin=wins.length?wins.reduce(function(s,t){return s+t.pnl;},0)/wins.length:0;
+  var avgLoss=losses.length?losses.reduce(function(s,t){return s+t.pnl;},0)/losses.length:0;
+  var best=trades.length?Math.max.apply(null,trades.map(function(t){return t.pnl;})):0;
+  var worst=trades.length?Math.min.apply(null,trades.map(function(t){return t.pnl;})):0;
+  var wr=total?Math.round((wins.length/total)*100):0;
+
+  eid('cl-count').textContent=total||'--';
+  eid('cl-wr').textContent=total?(wr+'%'):'--';
+  eid('cl-wr').className='stat-val '+(wr>=50?'go':'nogo');
+  var pnlEl=eid('cl-pnl');
+  pnlEl.textContent=total?fmtD(totalPnl):'--';
+  pnlEl.className='stat-val '+(totalPnl>=0?'go':'nogo');
+  eid('cl-avgwin').textContent=wins.length?fmtD(avgWin):'--';
+  eid('cl-avgloss').textContent=losses.length?fmtD(avgLoss):'--';
+  eid('cl-best').textContent=best?fmtD(best):'--';
+  eid('cl-worst').textContent=worst?fmtD(worst):'--';
+}
+
+function toggleClosedChart(sym,strike,openPrice,closePrice,optType,qty){
+  var row=document.getElementById('clchart-'+sym);
+  if(!row)return;
+  var isOpen=row.classList.contains('open');
+  document.querySelectorAll('.pos-chart-row.open').forEach(function(r){r.classList.remove('open');});
+  if(!isOpen){
+    row.classList.add('open');
+    setTimeout(function(){
+      var breakeven=calcBreakeven(strike,openPrice,optType,'BUY_TO_OPEN');
+      var maxLoss=-(openPrice*100*qty);
+      var realizedPnl=(closePrice-openPrice)*100*qty*(optType==='PUT'?-1:1);
+      if(eid('clbe-'+sym))eid('clbe-'+sym).textContent=breakeven?'$'+fmt2(breakeven):'N/A';
+      if(eid('clml-'+sym))eid('clml-'+sym).textContent=fmtD(maxLoss);
+      if(eid('clrl-'+sym)){
+        eid('clrl-'+sym).textContent=fmtD(realizedPnl);
+        eid('clrl-'+sym).className='pnl-stat-val '+(realizedPnl>=0?'pos':'neg');
+      }
+      // Draw chart showing open price line AND close price line
+      drawPnlChart('clcanvas-'+sym,'cltooltip-'+sym,{
+        strike:strike,
+        premium:openPrice,
+        optionType:optType,
+        action:'BUY_TO_OPEN',
+        qty:qty,
+        currentPrice:closePrice  // amber line = where they actually closed
+      });
+    },60);
+  }
 }
 
 function renderBreadth(){
