@@ -2943,25 +2943,99 @@ function applyFilters(){
 function sortTable(col){
   if(G.sortCol===col)G.sortDir*=-1;else{G.sortCol=col;G.sortDir=-1;}
   G.filtered.sort(function(a,b){
-    if(col==='ticker'||col==='sector')return G.sortDir*(a[col]<b[col]?-1:a[col]>b[col]?1:0);
+    if(col==='ticker'||col==='sector') return G.sortDir*(a[col]<b[col]?-1:a[col]>b[col]?1:0);
+    // GEX columns \u2014 look up from gexMap
+    if(col==='gexFlow'||col==='gexCall'){
+      var ga = G.gexData ? G.gexData.filter(function(g){return g.t===a.ticker;})[0] : null;
+      var gb = G.gexData ? G.gexData.filter(function(g){return g.t===b.ticker;})[0] : null;
+      var va = ga ? ga.call : 0;
+      var vb = gb ? gb.call : 0;
+      return G.sortDir*(va-vb);
+    }
     return G.sortDir*(a[col]-b[col]);
-  });renderScan();
+  });
+  renderScan();
 }
 
 function renderScan(){
   var wrap=eid('sc-tbl-wrap');
   if(!G.filtered.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>No results \u2014 run a scan first</p></div>';return;}
-  var cols=[{k:'ticker',l:'SYMBOL'},{k:'score',l:'SCORE'},{k:'isGo',l:'SIGNAL'},{k:'sector',l:'SECTOR'},{k:'price',l:'PRICE'},{k:'changePct',l:'CHG%'},{k:'volume',l:'VOLUME'}];
-  var th='';cols.forEach(function(c){var arr=G.sortCol===c.k?(G.sortDir>0?' \u25b2':' \u25bc'):'';th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';});
+
+  // Build GEX lookup from G.gexData if available
+  var gexMap = {};
+  if(G.gexData && G.gexData.length > 0){
+    G.gexData.forEach(function(g){ if(g.t) gexMap[g.t] = g; });
+  }
+  var hasGex = Object.keys(gexMap).length > 0;
+
+  var cols=[
+    {k:'ticker',l:'SYMBOL'},
+    {k:'score',l:'SCORE'},
+    {k:'isGo',l:'SIGNAL'},
+    {k:'sector',l:'SECTOR'},
+    {k:'price',l:'PRICE'},
+    {k:'changePct',l:'CHG%'},
+    {k:'volume',l:'VOLUME'},
+    {k:'techScore',l:'TECH'},
+    {k:'fundScore',l:'FUND'}
+  ];
+  if(hasGex){
+    cols.push({k:'gexFlow',l:'FLOW'});
+    cols.push({k:'gexCall',l:'CALL%'});
+  }
+
+  var th='';
+  cols.forEach(function(c){
+    var arr=G.sortCol===c.k?(G.sortDir>0?' \u25b2':' \u25bc'):'';
+    th+='<th data-col="'+c.k+'" onclick="sortTable(this.dataset.col)">'+c.l+arr+'</th>';
+  });
+
   var rows='';
   G.filtered.forEach(function(r){
     var sigBadge=r.isGo?'<span class="badge go">GO</span>':'<span class="badge nogo">NO-GO</span>';
-    var chgCls=r.changePct>=0?'pnl-pos':'pnl-neg';var tk=r.ticker;
+    var chgCls=r.changePct>=0?'pnl-pos':'pnl-neg';
+    var tk=r.ticker;
+    var tech=r.techScore||0;
+    var fund=r.fundScore||0;
+
+    // Score bar \u2014 visual fill showing score out of 122
+    var scorePct=Math.round((r.score/122)*100);
+    var scoreBar='<div style="display:inline-flex;align-items:center;gap:5px;">'
+      +'<b>'+r.score+'</b>'
+      +'<div style="width:36px;height:4px;background:var(--bg3);border-radius:2px;display:inline-block;vertical-align:middle;">'
+      +'<div style="width:'+scorePct+'%;height:100%;background:'+(r.isGo?'var(--grn)':'var(--gry)')+';border-radius:2px;"></div>'
+      +'</div></div>';
+
+    // Tech/fund mini breakdown
+    var techCls=tech>=60?'pnl-pos':tech>=40?'':'pnl-neg';
+    var fundCls=fund>=15?'pnl-pos':fund>=8?'':'pnl-neg';
+
     rows+='<tr data-ticker="'+tk+'" onclick="viewDetail(this.dataset.ticker,\'sc-detail\',\'sc-det-empty\')">'
-      +'<td>'+tk+'</td><td><b>'+r.score+'</b></td><td>'+sigBadge+'</td><td>'+r.sector+'</td>'
-      +'<td>$'+fmt2(r.price)+'</td><td class="'+chgCls+'">'+(r.changePct>=0?'+':'')+fmtP(r.changePct)+'</td>'
-      +'<td>'+fmtK(r.volume)+'</td></tr>';
+      +'<td><b>'+tk+'</b></td>'
+      +'<td>'+scoreBar+'</td>'
+      +'<td>'+sigBadge+'</td>'
+      +'<td style="font-size:11px;color:var(--gry);">'+r.sector+'</td>'
+      +'<td>$'+fmt2(r.price)+'</td>'
+      +'<td class="'+chgCls+'">'+(r.changePct>=0?'+':'')+fmtP(r.changePct)+'</td>'
+      +'<td>'+fmtK(r.volume)+'</td>'
+      +'<td class="'+techCls+'" style="font-size:11px;">'+tech+'</td>'
+      +'<td class="'+fundCls+'" style="font-size:11px;color:'+(fund>0?'var(--amb)':'var(--gry)')+';">'+fund+'</td>';
+
+    if(hasGex){
+      var gx = gexMap[tk];
+      if(gx){
+        var flowBadge='<span class="badge '+(gx.call>=55?'go':'nogo')+'" style="font-size:9px;padding:1px 5px;">'
+          +(gx.call>=55?'\u25b2 CALL':'\u25bc PUT')+(gx.sim?' ~':'')+'</span>';
+        var callCls=gx.call>=55?'pnl-pos':'pnl-neg';
+        rows+='<td>'+flowBadge+'</td>'
+          +'<td class="'+callCls+'" style="font-size:11px;">'+gx.call+'%</td>';
+      } else {
+        rows+='<td style="color:var(--gry);font-size:10px;">--</td><td style="color:var(--gry);font-size:10px;">--</td>';
+      }
+    }
+    rows+='</tr>';
   });
+
   wrap.innerHTML='<table><thead><tr>'+th+'</tr></thead><tbody>'+rows+'</tbody></table>';
 }
 </script>
