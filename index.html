@@ -313,13 +313,15 @@ tr.sel-row td{background:var(--blu3);}
 </head>
 <body>
 <div id="hdr">
-  <div id="hdr-logo">&#9632; RRJCAR TERMINAL v3.4</div>
+  <div id="hdr-logo">&#9632; RRJCAR TERMINAL v3.5</div>
   <div id="hdr-tickers">
     <span class="htick"><span class="ts">SPY </span><span class="tv" id="h-spy">--</span> <span class="tc" id="h-spy-c"></span></span>
     <span class="htick"><span class="ts">QQQ </span><span class="tv" id="h-qqq">--</span> <span class="tc" id="h-qqq-c"></span></span>
     <span class="htick"><span class="ts">DIA </span><span class="tv" id="h-dia">--</span> <span class="tc" id="h-dia-c"></span></span>
     <span class="htick"><span class="ts">IWM </span><span class="tv" id="h-iwm">--</span> <span class="tc" id="h-iwm-c"></span></span>
     <span class="htick"><span class="ts">VIX </span><span class="tv" id="h-vix">--</span> <span class="tc" id="h-vix-c"></span></span>
+    <span class="htick"><span class="ts">GLD </span><span class="tv" id="h-gld">--</span> <span class="tc" id="h-gld-c"></span></span>
+    <span class="htick"><span class="ts">SPX </span><span class="tv" id="h-spx">--</span> <span class="tc" id="h-spx-c"></span></span>
   </div>
   <div id="hdr-right">
     <span id="clk">--:--:--</span>
@@ -733,9 +735,27 @@ tr.sel-row td{background:var(--blu3);}
 </div>
 
 <div class="tab-pane" id="tab-mb">
+  <div class="flt-bar" style="justify-content:space-between;">
+    <span style="font-family:var(--ff-mono);font-size:10px;color:var(--gry);" id="mb-ts">Not yet loaded</span>
+    <button class="btn blu" style="font-size:10px;padding:3px 10px;" onclick="runMarketBreadth()">&#8635; REFRESH</button>
+  </div>
   <div class="page-wrap">
-    <div class="card"><div class="card-hdr">MARKET BREADTH</div><div class="card-body" id="mb-body"><div style="color:var(--gry);font-size:11px;">Loading...</div></div></div>
-    <div class="card"><div class="card-hdr">SECTOR PERFORMANCE</div><div class="card-body" id="sect-body"><div style="color:var(--gry);font-size:11px;">Loading...</div></div></div>
+    <div class="card">
+      <div class="card-hdr">MARKET BREADTH</div>
+      <div class="card-body" id="mb-body"><div style="color:var(--gry);font-size:11px;">Click Refresh or run a scan to load...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">SECTOR MOMENTUM <span style="font-size:9px;color:var(--gry);font-weight:400;">from scan results</span></div>
+      <div class="card-body" id="sect-body"><div style="color:var(--gry);font-size:11px;">Run a scan first...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">MARKET INDICES</div>
+      <div class="card-body" id="mb-indices-body"><div style="color:var(--gry);font-size:11px;">Loading...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr">SCAN QUALITY <span style="font-size:9px;color:var(--gry);font-weight:400;">from last scan</span></div>
+      <div class="card-body" id="mb-scan-body"><div style="color:var(--gry);font-size:11px;">Run a scan first...</div></div>
+    </div>
   </div>
 </div>
 <div class="tab-pane" id="tab-al">
@@ -3001,6 +3021,8 @@ function finishScan(){
   addAlert('SYS', 'Scan complete: ' + G.results.length + ' tickers | ' + goCount + ' GO', 'go');
   toast('Scan complete \u2014 ' + G.results.length + ' tickers');
   if(G.results.length > 0 && !G.selTicker){ viewDetail(G.results[0].ticker, 'bs-detail', 'bs-empty'); }
+  // Refresh market breadth with new scan data
+  setTimeout(runMarketBreadth, 500);
 
   // Auto-refresh GEX after scan so GEX bonus scores are applied
   // Run in background \u2014 doesn't block UI
@@ -4484,14 +4506,156 @@ function toggleClosedChart(sym,strike,openPrice,closePrice,optType,qty){
   }
 }
 
-function renderBreadth(){
-  var items=[{l:'S&P 500 Above 200MA',v:62,c:'blu'},{l:'S&P 500 Above 50MA',v:54,c:'blu'},{l:'NYSE Advance/Decline',v:58,c:'amb'},{l:'New 52W Highs',v:38,c:'amb'},{l:'VIX Fear Index',v:72,c:'wrn'},{l:'Put/Call Ratio',v:45,c:'amb'}];
-  var html='';items.forEach(function(item){html+='<div class="meter-row"><div class="meter-lbl">'+item.l+'</div><div class="meter-bar"><div class="meter-fill '+item.c+'" style="width:'+item.v+'%"></div></div><div class="meter-val">'+item.v+'%</div></div>';});
-  eid('mb-body').innerHTML=html;
-  var sects=[{l:'Industrials',v:71,c:'blu'},{l:'Utilities',v:66,c:'blu'},{l:'Finance',v:61,c:'blu'},{l:'Staples',v:47,c:'amb'},{l:'Materials',v:46,c:'amb'},{l:'Energy',v:33,c:'wrn'},{l:'Technology',v:31,c:'wrn'},{l:'Consumer',v:30,c:'wrn'}];
-  var sh='';sects.forEach(function(s){sh+='<div class="meter-row"><div class="meter-lbl">'+s.l+'</div><div class="meter-bar"><div class="meter-fill '+s.c+'" style="width:'+s.v+'%"></div></div><div class="meter-val">'+s.v+'</div></div>';});
-  eid('sect-body').innerHTML=sh;
+function makeMeter(label, value, max, colorClass, subtitle){
+  var pct = Math.round((value/max)*100);
+  pct = Math.max(0, Math.min(100, pct));
+  var cls = colorClass || (pct>=60?'blu':pct>=40?'amb':'wrn');
+  return '<div class="meter-row">'
+    +'<div class="meter-lbl">'+label+(subtitle?'<span style="color:var(--gry);font-size:9px;margin-left:4px;">'+subtitle+'</span>':'')+'</div>'
+    +'<div class="meter-bar"><div class="meter-fill '+cls+'" style="width:'+pct+'%"></div></div>'
+    +'<div class="meter-val">'+value+(max===100?'%':'')+'</div>'
+    +'</div>';
 }
+
+async function runMarketBreadth(){
+  eid('mb-ts').textContent = 'Refreshing...';
+  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
+  var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+
+  // \u2500\u2500 SECTION 1: Market Indices from Tradier \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  if(key){
+    try{
+      var idxSymbols='SPY,QQQ,DIA,IWM,VIX,GLD,$SPX.X';
+      var idxRes=await fetch(host+'/v1/markets/quotes?symbols='+encodeURIComponent(idxSymbols),{
+        headers:{Authorization:'Bearer '+key,Accept:'application/json'}
+      }).then(function(r){return r.json();});
+      var idxQuotes=[];
+      try{var q=idxRes.quotes.quote;idxQuotes=Array.isArray(q)?q:[q];}catch(e){}
+      var qmap={};idxQuotes.forEach(function(q){if(q&&q.symbol)qmap[q.symbol]=q;});
+
+      var idxHtml='';
+      [{sym:'SPY',label:'S&P 500 ETF'},{sym:'QQQ',label:'Nasdaq 100'},{sym:'DIA',label:'Dow Jones'},
+       {sym:'IWM',label:'Russell 2000'},{sym:'GLD',label:'Gold ETF'},{sym:'$SPX.X',label:'S&P 500 Index'},
+       {sym:'VIX',label:'VIX Volatility'}].forEach(function(idx){
+        var q=qmap[idx.sym];
+        if(!q)return;
+        var price=parseFloat(q.last||q.prevclose)||0;
+        var chg=parseFloat(q.change)||0;
+        var chgPct=parseFloat(q.change_percentage)||0;
+        var cls=chgPct>=0?'pnl-pos':'pnl-neg';
+        idxHtml+='<div class="meter-row" style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bg3);">'
+          +'<div style="font-family:var(--ff-mono);font-size:11px;color:var(--wht);width:130px;">'+idx.label+'</div>'
+          +'<div style="font-family:var(--ff-mono);font-size:12px;color:var(--wht);">$'+fmt2(price)+'</div>'
+          +'<div class="'+cls+'" style="font-family:var(--ff-mono);font-size:11px;min-width:80px;text-align:right;">'+(chg>=0?'+':'')+fmt2(chg)+' ('+(chgPct>=0?'+':'')+chgPct.toFixed(2)+'%)</div>'
+          +'</div>';
+      });
+      if(eid('mb-indices-body')) eid('mb-indices-body').innerHTML = idxHtml||'<span style="color:var(--gry)">No data</span>';
+    }catch(e){ if(eid('mb-indices-body')) eid('mb-indices-body').innerHTML='<span style="color:var(--gry)">Tradier error</span>'; }
+  } else {
+    if(eid('mb-indices-body')) eid('mb-indices-body').innerHTML='<span style="color:var(--gry);font-size:11px;">Add Tradier key in API tab</span>';
+  }
+
+  // \u2500\u2500 SECTION 2: Breadth from scan results \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  var breadthHtml='';
+  if(G.results && G.results.length>0){
+    var total=G.results.length;
+    var goCount=G.results.filter(function(r){return r.isGo;}).length;
+    var aboveEma200=G.results.filter(function(r){return r.ind&&r.ind.ema200>0&&r.ind.price>r.ind.ema200;}).length;
+    var aboveEma50=G.results.filter(function(r){return r.ind&&r.ind.ema20>r.ind.ema50;}).length;
+    var rsPos=G.results.filter(function(r){return r.ind&&r.ind.relStr5d>0;}).length;
+    var near52hi=G.results.filter(function(r){return r.ind&&r.ind.week52hi>0&&r.ind.price>=r.ind.week52hi*0.85;}).length;
+    var callHeavy=G.gexData?G.gexData.filter(function(g){return g.call>=55;}).length:0;
+    var gexTotal=G.gexData?G.gexData.length:0;
+
+    breadthHtml+=makeMeter('GO Signals',''+goCount+' / '+total,total,'',Math.round((goCount/total)*100)+'% bullish');
+    breadthHtml+=makeMeter('Above EMA200',Math.round((aboveEma200/total)*100),100);
+    breadthHtml+=makeMeter('EMA20 > EMA50',Math.round((aboveEma50/total)*100),100);
+    breadthHtml+=makeMeter('RS > SPY (5d)',Math.round((rsPos/total)*100),100);
+    breadthHtml+=makeMeter('Near 52Wk High',Math.round((near52hi/total)*100),100);
+    if(gexTotal>0) breadthHtml+=makeMeter('Call Heavy Flow',Math.round((callHeavy/gexTotal)*100),100,'amb');
+  } else {
+    breadthHtml='<span style="color:var(--gry);font-size:11px;">Run a scan first to populate breadth data</span>';
+  }
+
+  // \u2500\u2500 FMP Sector performance \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  if(fmpKey){
+    try{
+      var sectRes=await fetch('https://financialmodelingprep.com/api/v3/sectors-performance?apikey='+fmpKey)
+        .then(function(r){return r.json();});
+      if(Array.isArray(sectRes)&&sectRes.length>0){
+        breadthHtml+='<div style="font-family:var(--ff-mono);font-size:10px;color:var(--amb);letter-spacing:1px;margin-top:14px;margin-bottom:6px;">SECTOR PERFORMANCE TODAY \u2014 FMP</div>';
+        sectRes.sort(function(a,b){return parseFloat(b.changesPercentage)-parseFloat(a.changesPercentage);});
+        sectRes.forEach(function(s){
+          var pct=parseFloat(s.changesPercentage)||0;
+          var cls=pct>=0?'pnl-pos':'pnl-neg';
+          breadthHtml+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--bg3);">'
+            +'<span style="font-size:11px;color:var(--gry);">'+s.sector+'</span>'
+            +'<span class="'+cls+'" style="font-family:var(--ff-mono);font-size:11px;">'+(pct>=0?'+':'')+pct.toFixed(2)+'%</span>'
+            +'</div>';
+        });
+      }
+    }catch(e){}
+  }
+
+  if(eid('mb-body')) eid('mb-body').innerHTML=breadthHtml;
+
+  // \u2500\u2500 SECTION 3: Scan Quality \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  var scanHtml='';
+  if(G.results && G.results.length>0){
+    var total=G.results.length;
+    var goCount=G.results.filter(function(r){return r.isGo;}).length;
+    var avgScore=Math.round(G.results.reduce(function(s,r){return s+r.score;},0)/total);
+    var avgTech=Math.round(G.results.reduce(function(s,r){return s+(r.techScore||0);},0)/total);
+    var avgFund=Math.round(G.results.reduce(function(r,s){return r+(s.fundScore||0);},0)/total);
+    var provenGo=G.results.filter(function(r){return r.isGo&&PROVEN.indexOf(r.ticker)>=0;}).length;
+    var topSector='';var sectorScores={};
+    G.results.filter(function(r){return r.isGo;}).forEach(function(r){sectorScores[r.sector]=(sectorScores[r.sector]||0)+1;});
+    var maxS=0;Object.keys(sectorScores).forEach(function(s){if(sectorScores[s]>maxS){maxS=sectorScores[s];topSector=s;}});
+    scanHtml='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+    [{label:'Total Scanned',val:total},{label:'GO Signals',val:goCount},{label:'Avg Score',val:avgScore+'/122'},
+     {label:'Avg Tech',val:avgTech},{label:'Avg Fund',val:avgFund},{label:'PROVEN GO',val:provenGo},
+     {label:'Top Sector',val:topSector||'--'},{label:'GO Rate',val:Math.round((goCount/total)*100)+'%'}
+    ].forEach(function(item){
+      scanHtml+='<div style="background:var(--bg2);border-radius:3px;padding:8px 10px;">'
+        +'<div style="font-size:10px;color:var(--gry);font-family:var(--ff-mono);letter-spacing:.5px;">'+item.label+'</div>'
+        +'<div style="font-size:16px;font-weight:700;color:var(--wht);margin-top:2px;">'+item.val+'</div>'
+        +'</div>';
+    });
+    scanHtml+='</div>';
+  } else {
+    scanHtml='<span style="color:var(--gry);font-size:11px;">Run a scan first</span>';
+  }
+  if(eid('mb-scan-body')) eid('mb-scan-body').innerHTML=scanHtml;
+
+  // Sector breakdown from scan
+  var sectHtml='';
+  if(G.results && G.results.length>0){
+    var bySector={};
+    G.results.forEach(function(r){
+      if(!bySector[r.sector]) bySector[r.sector]={total:0,go:0,scoreSum:0};
+      bySector[r.sector].total++;
+      if(r.isGo) bySector[r.sector].go++;
+      bySector[r.sector].scoreSum+=r.score;
+    });
+    var sectArr=Object.keys(bySector).map(function(s){
+      var d=bySector[s];
+      return{name:s,total:d.total,go:d.go,goPct:Math.round((d.go/d.total)*100),avgScore:Math.round(d.scoreSum/d.total)};
+    }).sort(function(a,b){return b.goPct-a.goPct;});
+    sectArr.forEach(function(s){
+      var cls=s.goPct>=60?'blu':s.goPct>=40?'amb':'wrn';
+      sectHtml+=makeMeter(s.name+' ('+s.go+'/'+s.total+')',s.goPct,100,cls,'avg '+s.avgScore);
+    });
+  } else {
+    sectHtml='<span style="color:var(--gry);font-size:11px;">Run a scan first</span>';
+  }
+  if(eid('sect-body')) eid('sect-body').innerHTML=sectHtml;
+
+  eid('mb-ts').textContent='Updated: '+new Date().toLocaleTimeString();
+}
+
+function renderBreadth(){ runMarketBreadth(); }
 
 function renderAlerts(){
   var list=eid('alerts-list');
@@ -4561,11 +4725,60 @@ function updateClock(){
   eid('mkt-status').style.color=mktOpen?'var(--blu)':'var(--gry)';
 }
 function updateHeaderQuotes(){
-  var tickers=['SPY','QQQ','DIA','IWM','VIX'],ids=['spy','qqq','dia','iwm','vix'];
-  tickers.forEach(function(t,i){
-    var q=simQuote(t);var el=eid('h-'+ids[i]);if(el)el.textContent='$'+fmt2(q.price);
-    var cel=eid('h-'+ids[i]+'-c');
-    if(cel){var chgStr=(q.changePct>=0?'+':'')+fmtP(q.changePct);cel.textContent='('+chgStr+')';cel.className='tc '+(q.changePct>=0?'up':'dn');}
+  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+
+  if(!key){
+    // No API key \u2014 show simulated data
+    var simTickers=['SPY','QQQ','DIA','IWM','VIX','GLD','SPX'];
+    var simIds=['spy','qqq','dia','iwm','vix','gld','spx'];
+    simTickers.forEach(function(t,i){
+      var q=simQuote(t);
+      var el=eid('h-'+simIds[i]); if(el) el.textContent='$'+fmt2(q.price);
+      var cel=eid('h-'+simIds[i]+'-c');
+      if(cel){cel.textContent='('+(q.changePct>=0?'+':'')+fmtP(q.changePct)+')';cel.className='tc '+(q.changePct>=0?'up':'dn');}
+    });
+    return;
+  }
+
+  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+  // SPX is the index \u2014 Tradier uses $SPX.X
+  var symbols='SPY,QQQ,DIA,IWM,VIX,GLD,$SPX.X';
+  fetch(host+'/v1/markets/quotes?symbols='+encodeURIComponent(symbols), {
+    headers:{Authorization:'Bearer '+key, Accept:'application/json'}
+  })
+  .then(function(r){return r.json();})
+  .then(function(data){
+    var quotes=[];
+    try{ var q=data.quotes.quote; quotes=Array.isArray(q)?q:[q]; }catch(e){}
+    var qmap={};
+    quotes.forEach(function(q){ if(q&&q.symbol) qmap[q.symbol]=q; });
+
+    var pairs=[
+      {sym:'SPY',   id:'spy'},
+      {sym:'QQQ',   id:'qqq'},
+      {sym:'DIA',   id:'dia'},
+      {sym:'IWM',   id:'iwm'},
+      {sym:'VIX',   id:'vix'},
+      {sym:'GLD',   id:'gld'},
+      {sym:'$SPX.X',id:'spx'}
+    ];
+    pairs.forEach(function(p){
+      var q=qmap[p.sym];
+      if(!q) return;
+      var price=parseFloat(q.last||q.prevclose)||0;
+      var chgPct=parseFloat(q.change_percentage)||0;
+      var el=eid('h-'+p.id);
+      if(el) el.textContent='$'+fmt2(price);
+      var cel=eid('h-'+p.id+'-c');
+      if(cel){
+        cel.textContent='('+(chgPct>=0?'+':'')+chgPct.toFixed(2)+'%)';
+        cel.className='tc '+(chgPct>=0?'up':'dn');
+      }
+    });
+  })
+  .catch(function(){
+    // Silently fail \u2014 keep showing last values
   });
 }
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
@@ -4679,12 +4892,13 @@ function init(){
   showVersionBanner();
   updateClock();
   updateHeaderQuotes();
-  setInterval(updateClock,1000);
-  setInterval(updateHeaderQuotes,30000);
-  // Auto-save settings every 60s as a safety net
+  setInterval(updateClock, 1000);
+  setInterval(updateHeaderQuotes, 60000);      // header: every 60s
   setInterval(saveAppSettings, 60000);
+  setInterval(runMarketBreadth, 300000);        // breadth: every 5 minutes
   runScan();
   refreshWL();
+  setTimeout(runMarketBreadth, 3000);           // initial breadth load after 3s
   addAlert('SYS','RRJCAR Terminal v'+APP_VERSION+' initialized','go');
 }
 window.addEventListener('DOMContentLoaded',init);
