@@ -117,6 +117,10 @@ tr.sel-row td{background:var(--blu3);}
 .flt-bar{background:var(--bg1);border-bottom:var(--bdr);display:flex;flex-wrap:wrap;gap:6px;padding:6px 10px;flex-shrink:0;align-items:center;}
 .flt-bar label{color:var(--gry);font-size:10px;}
 .flt-bar select,.flt-bar input{background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:11px;padding:3px 6px;border-radius:3px;}
+.ind-filter-lbl{display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 8px;border:1px solid var(--bg3);border-radius:3px;font-family:var(--ff-mono);font-size:10px;color:var(--gry);transition:border-color 0.15s,color 0.15s;}
+.ind-filter-lbl:hover{border-color:var(--gry);color:var(--wht);}
+.ind-filter-lbl input[type=checkbox]{width:auto;margin:0;accent-color:var(--amb);}
+.ind-filter-lbl:has(input:checked){border-color:var(--amb);color:var(--ambb);background:rgba(245,158,11,0.08);}
 .btn{background:var(--bg2);border:1px solid var(--amb3);border-radius:3px;color:var(--amb);cursor:pointer;font-family:var(--ff);font-size:11px;font-weight:600;padding:4px 10px;transition:background .15s;}
 .btn:hover{background:var(--amb3);}
 .btn.blu{border-color:var(--blu3);color:var(--blub);}
@@ -371,6 +375,23 @@ tr.sel-row td{background:var(--blu3);}
     <label>Signal <select id="sc-sig"><option value="">All</option><option value="GO">GO</option><option value="NO-GO">NO-GO</option></select></label>
     <label>Min Score <input type="number" id="sc-minscore" value="0" style="width:60px;"></label>
     <button class="btn" onclick="applyFilters()">FILTER</button>
+    <button class="btn" onclick="clearFilters()" style="border-color:var(--gry2);color:var(--gry);">CLEAR</button>
+  </div>
+  <!-- ── INDICATOR FILTERS ── -->
+  <div class="flt-bar" style="flex-wrap:wrap;gap:6px;border-top:1px solid var(--bg3);padding:6px 10px;">
+    <span style="font-family:var(--ff-mono);font-size:10px;color:var(--amb);letter-spacing:.5px;margin-right:4px;">MUST PASS:</span>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-analyst" onchange="applyFilters()"> <span>Analyst Revisions &#8593;</span></label>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-insider" onchange="applyFilters()"> <span>Insider Buying</span></label>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-gex" onchange="applyFilters()"> <span>GEX Call Heavy</span></label>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-proven" onchange="applyFilters()"> <span>PROVEN Ticker</span></label>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-52hi" onchange="applyFilters()"> <span>52Wk Hi &lt;15%</span></label>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-rs" onchange="applyFilters()"> <span>RS &gt; SPY</span></label>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-macd" onchange="applyFilters()"> <span>MACD +</span></label>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-tf" onchange="applyFilters()"> <span>TF Aligned 2/3</span></label>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-ema200" onchange="applyFilters()"> <span>Above EMA200</span></label>
+    <label class="ind-filter-lbl"><input type="checkbox" class="ind-filter" id="filt-vol" onchange="applyFilters()"> <span>Vol &gt; Avg</span></label>
+    <span id="sc-filter-count" style="font-family:var(--ff-mono);font-size:10px;color:var(--gry);margin-left:auto;"></span>
+  </div>
     <button class="btn blu" id="sc-run-btn" onclick="runScan()">↻ SCAN</button>
     <div style="display:flex;align-items:center;gap:6px;margin-left:8px;border-left:1px solid var(--gry2);padding-left:10px;">
       <span style="color:var(--gry);font-size:10px;letter-spacing:.5px;">SCREENER</span>
@@ -3036,12 +3057,92 @@ function finishScan(){
   }
 }
 
+function getIndFilter(id){ var el=eid(id); return el?el.checked:false; }
+
 function applyFilters(){
-  var sect=eid('sc-sect').value,sig=eid('sc-sig').value,minsc=+eid('sc-minscore').value||0;
-  G.filtered=G.results.filter(function(r){
-    if(sect&&r.sector!==sect)return false;if(sig==='GO'&&!r.isGo)return false;
-    if(sig==='NO-GO'&&r.isGo)return false;if(r.score<minsc)return false;return true;
-  });renderScan();
+  var sect    = eid('sc-sect').value;
+  var sig     = eid('sc-sig').value;
+  var minsc   = +eid('sc-minscore').value||0;
+
+  // Indicator filter checkboxes
+  var needAnalyst = getIndFilter('filt-analyst');
+  var needInsider = getIndFilter('filt-insider');
+  var needGex     = getIndFilter('filt-gex');
+  var needProven  = getIndFilter('filt-proven');
+  var need52hi    = getIndFilter('filt-52hi');
+  var needRS      = getIndFilter('filt-rs');
+  var needMacd    = getIndFilter('filt-macd');
+  var needTF      = getIndFilter('filt-tf');
+  var needEma200  = getIndFilter('filt-ema200');
+  var needVol     = getIndFilter('filt-vol');
+
+  // Build GEX lookup
+  var gexMap = {};
+  if(G.gexData && G.gexData.length > 0){
+    G.gexData.forEach(function(g){ if(g.t) gexMap[g.t] = g; });
+  }
+
+  G.filtered = G.results.filter(function(r){
+    // Standard filters
+    if(sect && r.sector !== sect) return false;
+    if(sig === 'GO' && !r.isGo) return false;
+    if(sig === 'NO-GO' && r.isGo) return false;
+    if(r.score < minsc) return false;
+
+    // Indicator filters \u2014 check rule scorecards
+    if(needAnalyst || needInsider || needGex || needProven ||
+       need52hi || needRS || needMacd || needTF || needEma200 || needVol){
+
+      // Build a quick lookup of which rules passed for this ticker
+      var passed = {};
+      if(r.rules){
+        r.rules.forEach(function(rule){ if(rule.pass) passed[rule.n] = true; });
+      }
+
+      // Check each active filter against the rule scorecard
+      if(needAnalyst && !passed['Analyst Revisions \u2191']) return false;
+      if(needInsider && !passed['Insider Buying'])          return false;
+      if(needGex     && !passed['GEX Call Heavy'])          return false;
+      if(needProven  && !passed['PROVEN ticker'])           return false;
+      if(need52hi    && !passed['52Wk Hi Prox <15%'])       return false;
+      if(needRS      && !passed['RS > SPY (5d)'])           return false;
+      if(needMacd    && !passed['MACD Hist +'])             return false;
+      if(needTF      && !passed['TF Aligned 2/3'])          return false;
+      if(needEma200  && !passed['Price > EMA200'])          return false;
+      if(needVol     && !passed['Vol > Avg'])               return false;
+    }
+
+    return true;
+  });
+
+  // Update filter count label
+  var total = G.results.length;
+  var shown = G.filtered.length;
+  var activeFilters = [needAnalyst,needInsider,needGex,needProven,
+    need52hi,needRS,needMacd,needTF,needEma200,needVol].filter(Boolean).length;
+  var countEl = eid('sc-filter-count');
+  if(countEl){
+    countEl.textContent = shown + ' / ' + total + (activeFilters > 0 ? ' (' + activeFilters + ' filter' + (activeFilters>1?'s':'')+' active)' : '');
+    countEl.style.color = activeFilters > 0 ? 'var(--ambb)' : 'var(--gry)';
+  }
+
+  renderScan();
+}
+
+function clearFilters(){
+  // Reset dropdowns
+  if(eid('sc-sect'))     eid('sc-sect').value = '';
+  if(eid('sc-sig'))      eid('sc-sig').value  = '';
+  if(eid('sc-minscore')) eid('sc-minscore').value = '0';
+  // Uncheck all indicator filters
+  ['filt-analyst','filt-insider','filt-gex','filt-proven',
+   'filt-52hi','filt-rs','filt-macd','filt-tf','filt-ema200','filt-vol'].forEach(function(id){
+    var el = eid(id); if(el) el.checked = false;
+  });
+  var countEl = eid('sc-filter-count');
+  if(countEl) countEl.textContent = '';
+  G.filtered = G.results.slice();
+  renderScan();
 }
 
 function sortTable(col){
