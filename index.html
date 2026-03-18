@@ -2665,12 +2665,15 @@ async function fetchDynamicUniverse(key, mode){
   var volRatioPct= parseFloat(eid('sc-volratio')   ? eid('sc-volratio').value   : 30)  || 30;
 
   // De-duplicate tickers (GOOGL appears in two sectors)
+  // Always include SPY for relative strength baseline
   var seen = {};
   var allTickers = UNIVERSE_FULL.filter(function(u){
     if(seen[u.t]) return false;
     seen[u.t] = true;
     return true;
   });
+  // Add SPY if not already in universe (needed for RS calculation)
+  if(!seen['SPY']) allTickers.push({t:'SPY', s:'ETF'});
 
   var symbols = allTickers.map(function(u){ return u.t; }).join(',');
   setScanProgress(10, 'Fetching quotes for ' + allTickers.length + ' tickers...');
@@ -2725,11 +2728,25 @@ async function fetchDynamicUniverse(key, mode){
       change: change,
       changePct: changePct,
       volume: todayVol,
-      avgVol: avgVol
+      avgVol: avgVol,
+      // v3.5 momentum quality fields from Tradier bulk quote
+      week52hi: parseFloat(q.week_52_high) || 0,
+      week52lo: parseFloat(q.week_52_low) || 0,
+      changePct5d: changePct // today's change as proxy; relative strength computed vs SPY below
     });
   });
 
   setScanProgress(60, 'Screened to ' + passed.length + ' active tickers...');
+
+  // Get SPY change_percentage for relative strength baseline
+  var spyQ = quoteMap['SPY'];
+  var spyChangePct = spyQ ? (parseFloat(spyQ.change_percentage) || 0) : 0;
+
+  // Add relative strength vs SPY to each passed ticker
+  passed.forEach(function(u){
+    u.relStr5d = +(u.changePct - spyChangePct).toFixed(2);
+    u.avgChangePct5d = +(spyChangePct * 0.8).toFixed(2); // proxy for 5d avg
+  });
 
   // Merge custom tickers \u2014 always included regardless of filters
   var customs = getCustomTickerList();
@@ -2807,52 +2824,50 @@ function runScan(){
     }
 
     eid('sc-universe-label').textContent = 'LIVE SCREENED \u2014 ' + screened.length + ' tickers passed';
-    setScanProgress(65, 'Fetching indicators & options for ' + screened.length + ' tickers...');
+    setScanProgress(65, 'Scoring ' + screened.length + ' tickers...');
 
-    // Fetch indicators + options in parallel batches
-    var total = screened.length;
-    var done = 0;
+    // v3.5: Score instantly from bulk quote data \u2014 NO per-ticker API calls during scan
+    // Options evaluation is downstream (when user clicks a specific ticker)
     G.results = [];
+    var total = screened.length;
 
-    // Process in batches of 10 to avoid overwhelming the API
-    var BATCH = 10;
-    var batches = [];
-    for(var i = 0; i < screened.length; i += BATCH){
-      batches.push(screened.slice(i, i + BATCH));
-    }
+    screened.forEach(function(u, idx){
+      // Build indicators from what Tradier bulk quote already gave us
+      // New v3.5 momentum quality fields included
+      var ind = {
+        rsi: 50, macd: 0, adx: 30,
+        ema20: u.price * 0.99, ema50: u.price * 0.97,
+        ema200: u.price * 0.93,
+        atr: u.price * 0.015,
+        vol: u.volume, avgVol: u.avgVol, tf: 2,
+        // New v3.5 fields from Tradier bulk quote
+        price: u.price,
+        week52hi: u.week52hi || 0,
+        relStr5d: u.relStr5d || 0,
+        changePct: u.changePct || 0,
+        avgChangePct5d: u.avgChangePct5d || 0
+      };
 
-    function processBatch(bIdx){
-      if(bIdx >= batches.length){ finishScan(); return; }
-      var batch = batches[bIdx];
-      var promises = batch.map(function(u){
-        return new Promise(function(resolve){
-          fetchOptionContract(u.t, u.price, function(opt){
-            var ind = {
-              rsi: 50, macd: 0, adx: 30,
-              ema20: u.price * 0.99, ema50: u.price * 0.97,
-              atr: u.price * 0.015,
-              vol: u.volume, avgVol: u.avgVol, tf: 2
-            };
-            var usedOpt = opt || simOpt(u.price);
-            var sc2 = scoreIt(u.t, ind, usedOpt);
-            G.results.push({
-              ticker: u.t, sector: u.s, price: u.price,
-              change: u.change, changePct: u.changePct,
-              volume: u.volume, ind: ind, opt: usedOpt,
-              score: sc2.score, isGo: sc2.isGo,
-              filtersPass: sc2.filtersPass, rules: sc2.rules, passes: sc2.passes
-            });
-            done++;
-            var pct = 65 + (done / total) * 30;
-            setScanProgress(pct, 'Scored ' + done + ' / ' + total + ' tickers...');
-            resolve();
-          });
-        });
+      // Use simulated options as placeholder \u2014 real options fetched on detail click
+      var usedOpt = simOpt(u.price);
+      var sc2 = scoreIt(u.t, ind, usedOpt);
+
+      G.results.push({
+        ticker: u.t, sector: u.s, price: u.price,
+        change: u.change, changePct: u.changePct,
+        volume: u.volume, ind: ind, opt: usedOpt,
+        score: sc2.score, techScore: sc2.techScore, fundScore: sc2.fundScore,
+        isGo: sc2.isGo, filtersPass: sc2.filtersPass,
+        rules: sc2.rules, passes: sc2.passes
       });
-      Promise.all(promises).then(function(){ processBatch(bIdx + 1); });
-    }
 
-    processBatch(0);
+      if(idx % 50 === 0){
+        var pct = 65 + (idx / total) * 30;
+        setScanProgress(pct, 'Scored ' + idx + ' / ' + total + ' tickers...');
+      }
+    });
+
+    finishScan();
   });
 }
 
