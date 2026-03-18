@@ -2631,16 +2631,41 @@ function viewDetail(ticker,detId,emptyId){
  document.querySelectorAll('tr.sel-row').forEach(function(row){row.classList.remove('sel-row');});
  document.querySelectorAll('tr[data-ticker="'+ticker+'"]').forEach(function(row){row.classList.add('sel-row');});
  buildDetail(r,detId,emptyId);
- var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
- if(key){
+
+ var tradierKey='';try{tradierKey=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+ var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
+
+ // Fetch options contract (Tradier)
+ if(tradierKey){
   fetchOptionContract(ticker,r.price,function(optData){
    if(!optData)return;
    if(optData.livePrice&&optData.livePrice>0){r.price=optData.livePrice;}
    r.opt=Object.assign(r.opt,optData);
    var newScore=scoreIt(ticker,r.ind,r.opt);
-   r.score=newScore.score;r.isGo=newScore.isGo;r.filtersPass=newScore.filtersPass;
+   r.score=newScore.score;r.techScore=newScore.techScore;r.fundScore=newScore.fundScore;
+   r.isGo=newScore.isGo;r.filtersPass=newScore.filtersPass;
    r.rules=newScore.rules;r.passes=newScore.passes;
    G.detailOpt={ticker:ticker,strike:optData.strike,exp:optData.exp};
+   buildDetail(r,detId,emptyId);
+
+   // After options load, fetch FMP data and re-score again if key set
+   if(fmpKey){
+    fetchFmpData(ticker).then(function(fmpData){
+     if(!fmpData)return;
+     var updated=scoreIt(ticker,r.ind,r.opt);
+     r.score=updated.score;r.techScore=updated.techScore;r.fundScore=updated.fundScore;
+     r.isGo=updated.isGo;r.rules=updated.rules;r.passes=updated.passes;
+     buildDetail(r,detId,emptyId);
+    });
+   }
+  });
+ } else if(fmpKey){
+  // No Tradier but has FMP \u2014 still fetch FMP data
+  fetchFmpData(ticker).then(function(fmpData){
+   if(!fmpData)return;
+   var updated=scoreIt(ticker,r.ind,r.opt);
+   r.score=updated.score;r.techScore=updated.techScore;r.fundScore=updated.fundScore;
+   r.isGo=updated.isGo;r.rules=updated.rules;r.passes=updated.passes;
    buildDetail(r,detId,emptyId);
   });
  }
@@ -2949,6 +2974,28 @@ function finishScan(){
     var wrap = eid('sc-progress-wrap');
     if(wrap) wrap.style.display = 'none';
   }, 2500);
+
+  // Pre-fetch FMP data for top GO tickers in background \u2014 warms cache before user clicks
+  var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
+  if(fmpKey){
+    var goTickers = G.results.filter(function(r){ return r.isGo; }).slice(0,20).map(function(r){ return r.ticker; });
+    var fmpDelay = 0;
+    goTickers.forEach(function(t){
+      setTimeout(function(){
+        fetchFmpData(t).then(function(data){
+          if(!data) return;
+          // Re-score this ticker with fresh FMP data
+          var r = G.results.filter(function(x){ return x.ticker===t; })[0];
+          if(r){
+            var updated = scoreIt(t, r.ind, r.opt);
+            r.score=updated.score; r.techScore=updated.techScore; r.fundScore=updated.fundScore;
+            r.isGo=updated.isGo; r.rules=updated.rules; r.passes=updated.passes;
+          }
+        });
+      }, fmpDelay);
+      fmpDelay += 300; // stagger by 300ms to avoid rate limiting
+    });
+  }
 
   var goCount = G.results.filter(function(r){ return r.isGo; }).length;
   addAlert('SYS', 'Scan complete: ' + G.results.length + ' tickers | ' + goCount + ' GO', 'go');
