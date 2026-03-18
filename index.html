@@ -2977,7 +2977,7 @@ function runGex(){
     // Use top GO signals first, then top NO-GO by score \u2014 max 50
     var goTickers = G.results.filter(function(r){ return r.isGo; }).slice(0,35);
     var nogoTickers = G.results.filter(function(r){ return !r.isGo; }).slice(0,15);
-    sourceTickers = goTickers.concat(nogoTickers).map(function(r){ return r.t; });
+    sourceTickers = goTickers.concat(nogoTickers).map(function(r){ return r.ticker; });
   } else {
     sourceTickers = UNIVERSE.slice(0,30).map(function(u){ return u.t; });
   }
