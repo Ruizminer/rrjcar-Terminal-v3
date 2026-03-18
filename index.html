@@ -2431,6 +2431,7 @@ async function fetchFmpData(ticker){
 
   var fmpKey = '';
   try{ fmpKey = localStorage.getItem('rrjcar_fmp') || ''; }catch(e){}
+  if(!fmpKey && typeof FMP_KEY_DEFAULT !== 'undefined') fmpKey = FMP_KEY_DEFAULT;
   if(!fmpKey) return null;
 
   var base = 'https://financialmodelingprep.com/api/v3';
@@ -3019,6 +3020,7 @@ function finishScan(){
 
   // Pre-fetch FMP data for top GO tickers in background \u2014 warms cache before user clicks
   var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
+  if(!fmpKey && typeof FMP_KEY_DEFAULT !== 'undefined') fmpKey = FMP_KEY_DEFAULT;
   if(fmpKey){
     var goTickers = G.results.filter(function(r){ return r.isGo; }).slice(0,20).map(function(r){ return r.ticker; });
     var fmpDelay = 0;
@@ -4805,6 +4807,12 @@ function loadKeys(){
   var _hasBadFmp=_fmpRaw.length>0&&_fmpRaw.split('').some(function(c){return c.charCodeAt(0)>255;});
   if(_hasBadTr)localStorage.removeItem('rrjcar_tradier');if(_hasBadFmp)localStorage.removeItem('rrjcar_fmp');
   var fmp=localStorage.getItem('rrjcar_fmp')||'',tr=localStorage.getItem('rrjcar_tradier')||'',mode=localStorage.getItem('rrjcar_mode')||'sandbox',acct=localStorage.getItem('rrjcar_acct')||'';
+  // Pre-populate FMP key for all users \u2014 saves team setup step
+  // Individual keys entered in API tab override this default
+  if(!fmp && typeof FMP_KEY_DEFAULT !== 'undefined' && FMP_KEY_DEFAULT){
+    fmp = FMP_KEY_DEFAULT;
+    try{ localStorage.setItem('rrjcar_fmp', fmp); }catch(e){}
+  }
   if(fmp&&!_hasBadFmp){eid('api-fmp').value='';eid('fmp-status').textContent='Key saved (hidden)';eid('fmp-status').className='api-status ok';}
   else if(_hasBadFmp){eid('fmp-status').textContent='Key corrupted - re-enter';eid('fmp-status').className='api-status miss';}
   else{eid('fmp-status').textContent='Not set';eid('fmp-status').className='api-status miss';}
@@ -4888,6 +4896,7 @@ function updateHeaderQuotes(){
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 var APP_VERSION = '3.5';
+var FMP_KEY_DEFAULT = 'IPvsKpxwgJfimD4BIjF5ntLiNGuAPrqQ'; // shared team key \u2014 individual keys override via API tab
 
 function saveAppSettings(){
   try{
