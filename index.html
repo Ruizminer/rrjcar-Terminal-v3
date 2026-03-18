@@ -2978,56 +2978,115 @@ function runGex(){
     return;
   }
 
-  // Live path: fetch real options volume data from Tradier for each ticker
-  // Use /v1/markets/options/strikes to get a sense of call/put distribution
-  // Batch by fetching quotes with options flag
-  var symbolStr = sourceTickers.slice(0,20).join(','); // limit to 20 for speed
-  fetch(host+'/v1/markets/quotes?symbols='+encodeURIComponent(symbolStr)+'&greeks=false', {
-    headers:{Authorization:'Bearer '+key, Accept:'application/json'}
-  })
-  .then(function(r){return r.json();})
-  .then(function(data){
-    var quotes = [];
-    try{
-      var q = data.quotes.quote;
-      quotes = Array.isArray(q) ? q : [q];
-    }catch(e){}
+  // Live path: fetch real 30DTE options chain for each ticker to compute net GEX flow
+  // Call OI vs Put OI at 30DTE expiry = real flow proxy
+  var gexTickers = sourceTickers.slice(0, 20); // limit to 20 for speed
+  eid('gex-ts').textContent = 'Fetching 30DTE options flow for ' + gexTickers.length + ' tickers...';
 
-    var quoteMap = {};
-    quotes.forEach(function(q){ if(q&&q.symbol) quoteMap[q.symbol]=q; });
+  // Step 1: get expirations for all tickers, find nearest 25-35 day expiry each
+  var today = new Date();
+  function marketDays(d1, d2){
+    var count=0, cur=new Date(d1);
+    while(cur<d2){ cur.setDate(cur.getDate()+1); var d=cur.getDay(); if(d>=1&&d<=5)count++; }
+    return count;
+  }
 
-    G.gexData = sourceTickers.slice(0,20).map(function(t){
-      var q = quoteMap[t];
-      var result = G.results.filter(function(r){ return r.t===t||r.ticker===t; })[0];
-      var price = q ? (parseFloat(q.last||q.prevclose)||0) : (result?result.price:0);
-      var changePct = q ? (parseFloat(q.change_percentage)||0) : 0;
-      var vol = q ? (parseFloat(q.volume)||0) : 0;
-      var avgVol = q ? (parseFloat(q.average_volume)||1) : 1;
-      var score = result ? result.score : 50;
+  var expPromises = gexTickers.map(function(t){
+    return fetch(host+'/v1/markets/options/expirations?symbol='+t+'&includeAllRoots=true', {
+      headers:{Authorization:'Bearer '+key, Accept:'application/json'}
+    })
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var dates = [];
+      try{ dates = d.expirations.date; if(!Array.isArray(dates)) dates=[dates]; }catch(e){}
+      // Find nearest expiry in 25-45 market days
+      var best = null, bestDiff = 999;
+      dates.forEach(function(dt){
+        var dte = marketDays(today, new Date(dt));
+        var diff = Math.abs(dte - 30);
+        if(dte >= 20 && dte <= 50 && diff < bestDiff){ bestDiff=diff; best={date:dt, dte:dte}; }
+      });
+      if(!best && dates.length) best = {date:dates[0], dte:30};
+      return {ticker:t, expiry:best};
+    })
+    .catch(function(){ return {ticker:t, expiry:null}; });
+  });
 
-      // Derive flow bias from price momentum + scan score
-      // Positive change + high score = bullish flow, negative = bearish
-      var bullishBias = (changePct > 0 ? 0.6 : 0.4) + (score >= 72 ? 0.15 : -0.1);
-      var callPct = Math.round(Math.min(80, Math.max(25, bullishBias * 100 + (Math.random()-0.5)*15)));
-      var gexSign = callPct >= 50 ? 1 : -1;
-      var volRatio = avgVol > 0 ? vol/avgVol : 1;
-      var gexMag = Math.round(price * volRatio * rnd(0.5,2.5));
-
-      // Gamma flip level = slightly above/below current price based on bias
-      var flipOffset = callPct >= 50 ? rnd(-0.02,0.01) : rnd(-0.01,0.03);
-      var flip = +(price * (1 + flipOffset)).toFixed(2);
-
-      return{
-        t:t, gex:gexSign*gexMag, flip:flip,
-        call:callPct, put:100-callPct,
-        price:price, changePct:changePct,
-        flow:callPct>=50?'CALL HEAVY':'PUT HEAVY',
-        flowCls:callPct>=50?'go':'nogo',
-        sim:false
-      };
+  Promise.all(expPromises).then(function(expiries){
+    // Step 2: fetch options chains for tickers that have a valid expiry
+    var chainPromises = expiries.map(function(e){
+      if(!e.expiry) return Promise.resolve({ticker:e.ticker, chain:[], expiry:null});
+      return fetch(host+'/v1/markets/options/chains?symbol='+e.ticker+'&expiration='+e.expiry.date+'&greeks=false', {
+        headers:{Authorization:'Bearer '+key, Accept:'application/json'}
+      })
+      .then(function(r){return r.json();})
+      .then(function(d){
+        var opts = [];
+        try{ opts=d.options.option; if(!Array.isArray(opts)) opts=[opts]; }catch(ex){}
+        return {ticker:e.ticker, chain:opts, expiry:e.expiry, dte:e.expiry.dte};
+      })
+      .catch(function(){ return {ticker:e.ticker, chain:[], expiry:e.expiry}; });
     });
-    renderGex();
-    addAlert('GEX','GEX/Flow refreshed for '+G.gexData.length+' tickers','warn');
+
+    Promise.all(chainPromises).then(function(chains){
+      // Step 3: compute net flow from call OI vs put OI
+      G.gexData = chains.map(function(c){
+        var result = G.results.filter(function(r){ return r.t===c.ticker||r.ticker===c.ticker; })[0];
+        var price = result ? result.price : 0;
+        var score = result ? result.score : 50;
+
+        var callOI = 0, putOI = 0, callVol = 0, putVol = 0;
+        c.chain.forEach(function(opt){
+          var oi = parseInt(opt.open_interest) || 0;
+          var vol = parseInt(opt.volume) || 0;
+          if(opt.option_type === 'call'){ callOI += oi; callVol += vol; }
+          else { putOI += oi; putVol += vol; }
+        });
+
+        var totalOI = callOI + putOI || 1;
+        var totalVol = callVol + putVol || 1;
+
+        // Call% by OI \u2014 real net flow indicator
+        var callPctOI  = Math.round((callOI / totalOI) * 100);
+        var callPctVol = Math.round((callVol / totalVol) * 100);
+        // Blend OI and volume for final call%
+        var callPct = Math.round((callPctOI * 0.6) + (callPctVol * 0.4));
+        callPct = Math.max(10, Math.min(90, callPct));
+
+        // GEX magnitude proxy: (call OI - put OI) normalised by price
+        var netOI = callOI - putOI;
+        var gexMag = price > 0 ? Math.round(Math.abs(netOI) * price / 1000000) : Math.abs(netOI);
+        var gexSign = netOI >= 0 ? 1 : -1;
+
+        // Gamma flip: strike with highest combined OI near ATM
+        var flipStrike = price;
+        var maxOI = 0;
+        c.chain.forEach(function(opt){
+          var strike = parseFloat(opt.strike) || 0;
+          if(Math.abs(strike - price) > price * 0.1) return; // within 10% of price
+          var oi = (parseInt(opt.open_interest)||0);
+          if(oi > maxOI){ maxOI=oi; flipStrike=strike; }
+        });
+
+        return {
+          t: c.ticker,
+          gex: gexSign * Math.max(1, gexMag),
+          flip: flipStrike || price,
+          call: callPct,
+          put: 100 - callPct,
+          callOI: callOI,
+          putOI: putOI,
+          dte: c.dte || 30,
+          price: price,
+          flow: callPct >= 50 ? 'CALL HEAVY' : 'PUT HEAVY',
+          flowCls: callPct >= 50 ? 'go' : 'nogo',
+          sim: false
+        };
+      });
+
+      renderGex();
+      addAlert('GEX','GEX/Flow refreshed \u2014 real 30DTE net flow for '+G.gexData.length+' tickers','warn');
+    });
   })
   .catch(function(e){
     console.warn('GEX fetch error:', e);
@@ -3044,24 +3103,25 @@ function runGex(){
 
 function renderGex(){
   var wrap=eid('gx-tbl-wrap');
-  var html='<table><thead><tr><th>SYMBOL</th><th>GEX ($M)</th><th>FLIP LEVEL</th><th>CALL%</th><th>PUT%</th><th>FLOW</th><th>SOURCE</th></tr></thead><tbody>';
+  var html='<table><thead><tr><th>SYMBOL</th><th>NET GEX</th><th>GAMMA FLIP</th><th>CALL OI%</th><th>PUT OI%</th><th>DTE</th><th>FLOW</th></tr></thead><tbody>';
   G.gexData.forEach(function(r){
     var gexCls=r.gex>0?'pnl-pos':'pnl-neg';
     var simBadge=r.sim?'<span style="font-size:9px;color:var(--gry);margin-left:4px;">[SIM]</span>':'';
+    var oiDetail = (!r.sim && r.callOI) ? '<br><span style="font-size:9px;color:var(--gry);">'+fmtK(r.callOI)+'c/'+fmtK(r.putOI)+'p OI</span>' : '';
     html+='<tr data-ticker="'+r.t+'" onclick="viewDetail(this.dataset.ticker,\'gx-detail\',\'gx-det-empty\')">'
-      +'<td><b>'+r.t+'</b></td>'
-      +'<td class="'+gexCls+'">'+(r.gex>0?'+':'')+r.gex+'M</td>'
+      +'<td><b>'+r.t+'</b>'+simBadge+'</td>'
+      +'<td class="'+gexCls+'">'+(r.gex>0?'+':'')+r.gex+'M'+oiDetail+'</td>'
       +'<td>$'+fmt2(r.flip)+'</td>'
       +'<td class="pnl-pos">'+r.call+'%</td>'
       +'<td class="pnl-neg">'+r.put+'%</td>'
+      +'<td style="color:var(--gry);font-size:11px;">'+(r.dte||'--')+'d</td>'
       +'<td><span class="badge '+r.flowCls+'">'+r.flow+'</span></td>'
-      +'<td>'+simBadge+(r.sim?'':'<span style="font-size:9px;color:var(--grn);">LIVE</span>')+'</td>'
       +'</tr>';
   });
   html+='</tbody></table>';
   wrap.innerHTML=html;
   eid('gex-ts').textContent='Updated: '+new Date().toLocaleTimeString()
-    +' \u2014 '+(G.results&&G.results.length>0?'from scan results':'static list');
+    +' \u2014 '+(G.results&&G.results.length>0?'top scan results':'static list');
 }
 
 function loadWL(){try{var s=localStorage.getItem('rrjcar_wl');if(s)G.wlTickers=JSON.parse(s);}catch(e){}if(!G.wlTickers.length)G.wlTickers=['SPY','QQQ','AAPL','MSFT','NVDA'];}
