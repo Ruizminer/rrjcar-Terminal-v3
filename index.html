@@ -434,7 +434,7 @@ tr.sel-row td{background:var(--blu3);}
     <div class="ts-panel-hdr">
       <input type="checkbox" id="ts-toggle" onchange="toggleTrailingStop()">
       <label for="ts-toggle">&#9652; TRAILING STOP</label>
-      <span style="color:var(--gry);font-size:10px;">Enable per-position trailing stops using the settings in each row below</span>
+      <span style="color:var(--gry);font-size:10px;">Enable per-position trailing stops — auto-armed on position load</span>
       <span id="ts-poll-status" style="color:var(--gry2);font-size:10px;margin-left:auto;"></span>
     </div>
     <div id="ts-cfg" style="display:none;">
@@ -455,6 +455,41 @@ tr.sel-row td{background:var(--blu3);}
         </div>
         <div class="ts-field" style="align-self:flex-end;">
           <button class="btn" style="font-size:10px;padding:3px 10px;" onclick="resetTsState()">&#8635; RESET STATE</button>
+        </div>
+      </div>
+      <!-- ── DEFAULT TRAIL STOP VALUES applied to all positions on load ── -->
+      <div class="ts-cfg" style="border-top:1px solid var(--bg3);padding-top:10px;margin-top:4px;">
+        <span style="color:var(--amb);font-size:10px;font-weight:700;letter-spacing:.5px;align-self:center;">DEFAULT SETTINGS</span>
+        <div class="ts-field">
+          <label>Activate at</label>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" id="ts-default-activate" value="6" min="0" step="1" style="width:60px;" onchange="saveAppSettings()" title="Auto-arm trail stop when position reaches this % return">
+            <span style="color:var(--gry);font-size:10px;">% return</span>
+          </div>
+        </div>
+        <div class="ts-field">
+          <label>Close on</label>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" id="ts-default-pullback" value="3" min="1" step="1" style="width:60px;" onchange="saveAppSettings()" title="Close position when it pulls back this % from peak">
+            <span style="color:var(--gry);font-size:10px;">% pullback</span>
+          </div>
+        </div>
+        <div class="ts-field">
+          <label>Disable if &lt;</label>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" id="ts-default-disret" value="2" min="0" step="1" style="width:60px;" onchange="saveAppSettings()" title="Disable trail stop if return drops below this %">
+            <span style="color:var(--gry);font-size:10px;">% return</span>
+          </div>
+        </div>
+        <div class="ts-field" style="align-self:flex-end;">
+          <label>Auto-arm</label>
+          <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+            <input type="checkbox" id="ts-auto-arm" checked onchange="saveAppSettings()" style="width:auto;" title="Automatically enable trail stop for all positions when they load">
+            <span style="color:var(--gry);font-size:10px;">On load</span>
+          </div>
+        </div>
+        <div class="ts-field" style="align-self:flex-end;">
+          <button class="btn grn" style="font-size:10px;padding:3px 10px;" onclick="applyDefaultsToAll()" title="Apply default settings to all current positions now">APPLY ALL</button>
         </div>
       </div>
       <div class="ts-log" id="ts-log"></div>
@@ -3314,6 +3349,51 @@ function fetchPositionsDirect(key,mode,host,acct){
 }
 function showPosError(msg){eid('pos-src').textContent='[ERROR]';eid('pos-tbl-wrap').innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p style="color:var(--wrn);">'+msg+'</p><p style="color:var(--gry);margin-top:8px;">Check API key in the API tab.</p></div>';}
 
+function getTsDefaultSettings(){
+  return {
+    activate:  parseFloat(eid('ts-default-activate') ? eid('ts-default-activate').value : 6)  || 6,
+    pullback:  parseFloat(eid('ts-default-pullback')  ? eid('ts-default-pullback').value  : 3)  || 3,
+    disRet:    parseFloat(eid('ts-default-disret')    ? eid('ts-default-disret').value    : 2)  || 2,
+    disPull:   '',
+    closeMode: eid('ts-close-mode') ? eid('ts-close-mode').value : 'step',
+    enabled:   true
+  };
+}
+
+function applyDefaultTsConfig(symbols){
+  // Apply defaults to any position that has NOT been manually configured
+  var autoArm = eid('ts-auto-arm') ? eid('ts-auto-arm').checked : true;
+  if(!autoArm) return;
+  var defaults = getTsDefaultSettings();
+  var changed = false;
+  symbols.forEach(function(sym){
+    if(!G.tsConfig[sym]){
+      G.tsConfig[sym] = Object.assign({}, defaults);
+      changed = true;
+      tsLog(sym + ': default trail stop applied (activate ' + defaults.activate + '%, close on ' + defaults.pullback + '% pullback)', 'info');
+    }
+  });
+  if(changed){
+    try{ localStorage.setItem('rrjcar_ts_config', JSON.stringify(G.tsConfig)); }catch(e){}
+  }
+}
+
+function applyDefaultsToAll(){
+  // Force-apply defaults to ALL current positions including already-configured ones
+  var defaults = getTsDefaultSettings();
+  G.positions.forEach(function(p){
+    G.tsConfig[p.symbol] = Object.assign({}, defaults);
+  });
+  try{ localStorage.setItem('rrjcar_ts_config', JSON.stringify(G.tsConfig)); }catch(e){}
+  renderPositionsTable(G.positions, eid('pos-src').textContent);
+  toast('Default trail stop applied to all ' + G.positions.length + ' positions');
+  // Auto-enable the poller if not already running
+  if(!G.tsActive && eid('ts-toggle')){
+    eid('ts-toggle').checked = true;
+    toggleTrailingStop();
+  }
+}
+
 function getTsConfig(sym){
   // Return per-position config, falling back to sensible defaults
   return G.tsConfig[sym] || {
@@ -3366,6 +3446,20 @@ function renderPositionsTable(pos,srcLabel){
   if(!pos.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>No open positions</p></div>';return;}
   var totalPnl=0,totalCost=0;pos.forEach(function(p){totalPnl+=p.pnl;totalCost+=p.cost;});
   var colCount = 14; // total columns
+
+  // Auto-apply default trail stop config to any unconfigured positions
+  var symbols = pos.map(function(p){ return p.symbol; });
+  applyDefaultTsConfig(symbols);
+
+  // Auto-enable the trailing stop poller if auto-arm is on and positions exist
+  var autoArm = eid('ts-auto-arm') ? eid('ts-auto-arm').checked : true;
+  if(autoArm && pos.length > 0 && !G.tsActive){
+    if(eid('ts-toggle')){ eid('ts-toggle').checked = true; }
+    if(eid('ts-cfg')){ eid('ts-cfg').style.display = ''; }
+    G.tsActive = true;
+    startTsPoller();
+    tsLog('Trail stop auto-armed for ' + pos.length + ' position(s)', 'info');
+  }
   var html='<table><thead><tr>'
     +'<th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th><th>QTY</th>'
     +'<th>AVG COST</th><th>LAST</th><th>P&L $</th><th>P&L %</th>'
@@ -4448,8 +4542,13 @@ function saveAppSettings(){
 
     // Trail stop global settings
     var tsSettings = {
-      interval:  eid('ts-interval')   ? eid('ts-interval').value   : '30',
-      closeMode: eid('ts-close-mode') ? eid('ts-close-mode').value : 'step'
+      interval:  eid('ts-interval')          ? eid('ts-interval').value          : '30',
+      closeMode: eid('ts-close-mode')        ? eid('ts-close-mode').value        : 'step',
+      // Default values for auto-arm
+      defaultActivate: eid('ts-default-activate') ? eid('ts-default-activate').value : '6',
+      defaultPullback: eid('ts-default-pullback')  ? eid('ts-default-pullback').value  : '3',
+      defaultDisRet:   eid('ts-default-disret')    ? eid('ts-default-disret').value    : '2',
+      autoArm:         eid('ts-auto-arm')          ? eid('ts-auto-arm').checked        : true
     };
     localStorage.setItem('rrjcar_ts_global', JSON.stringify(tsSettings));
 
@@ -4481,8 +4580,12 @@ function loadAppSettings(){
     var tsRaw = localStorage.getItem('rrjcar_ts_global');
     if(tsRaw){
       var ts = JSON.parse(tsRaw);
-      if(eid('ts-interval')   && ts.interval)  eid('ts-interval').value   = ts.interval;
-      if(eid('ts-close-mode') && ts.closeMode) eid('ts-close-mode').value = ts.closeMode;
+      if(eid('ts-interval')           && ts.interval)         eid('ts-interval').value           = ts.interval;
+      if(eid('ts-close-mode')         && ts.closeMode)        eid('ts-close-mode').value         = ts.closeMode;
+      if(eid('ts-default-activate')   && ts.defaultActivate)  eid('ts-default-activate').value   = ts.defaultActivate;
+      if(eid('ts-default-pullback')   && ts.defaultPullback)  eid('ts-default-pullback').value   = ts.defaultPullback;
+      if(eid('ts-default-disret')     && ts.defaultDisRet)    eid('ts-default-disret').value     = ts.defaultDisRet;
+      if(eid('ts-auto-arm')           && ts.autoArm !== undefined) eid('ts-auto-arm').checked    = ts.autoArm;
     }
 
     // Per-position trail stop configs
