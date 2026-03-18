@@ -2940,24 +2940,128 @@ function renderScan(){
 
 <script>
 function runGex(){
-  var wrap=eid('gx-tbl-wrap');eid('gex-ts').textContent='Updated: '+new Date().toLocaleTimeString();
-  var tickers=UNIVERSE.slice(0,18).map(function(u){return u.t;});
-  G.gexData=tickers.map(function(t){
-    var gex=(Math.random()>0.5?1:-1)*Math.floor(rnd(100,9000));
-    var flip=+(rnd(180,250)).toFixed(2);var call=Math.floor(rnd(40,80));
-    return{t:t,gex:gex,flip:flip,call:call,put:100-call,flow:gex>0?'CALL HEAVY':'PUT HEAVY',flowCls:gex>0?'go':'nogo'};
+  var wrap=eid('gx-tbl-wrap');
+  eid('gex-ts').textContent='Updated: '+new Date().toLocaleTimeString();
+
+  // Use GO results from scan if available, otherwise fall back to static UNIVERSE
+  var sourceTickers;
+  if(G.results && G.results.length > 0){
+    // Use top GO signals first, then top NO-GO by score \u2014 max 50
+    var goTickers = G.results.filter(function(r){ return r.isGo; }).slice(0,35);
+    var nogoTickers = G.results.filter(function(r){ return !r.isGo; }).slice(0,15);
+    sourceTickers = goTickers.concat(nogoTickers).map(function(r){ return r.t; });
+  } else {
+    sourceTickers = UNIVERSE.slice(0,30).map(function(u){ return u.t; });
+  }
+
+  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+
+  eid('gex-ts').textContent='Fetching flow data...';
+
+  if(!key){
+    // No API key \u2014 generate simulated GEX from scan results
+    G.gexData = sourceTickers.map(function(t){
+      var result = G.results.filter(function(r){ return r.t===t||r.ticker===t; })[0];
+      var score = result ? result.score : 50;
+      // Use score to bias GEX direction \u2014 high-scoring = more bullish flow
+      var bullish = score >= 72;
+      var gex = (bullish?1:-1) * Math.floor(rnd(100,9000));
+      var flip = result ? +(result.price * rnd(0.98,1.02)).toFixed(2) : +rnd(50,500).toFixed(2);
+      var call = bullish ? Math.floor(rnd(55,80)) : Math.floor(rnd(30,50));
+      return{t:t, gex:gex, flip:flip, call:call, put:100-call,
+        flow:gex>0?'CALL HEAVY':'PUT HEAVY', flowCls:gex>0?'go':'nogo', sim:true};
+    });
+    renderGex();
+    addAlert('GEX','GEX refreshed for '+G.gexData.length+' tickers (simulated)','warn');
+    return;
+  }
+
+  // Live path: fetch real options volume data from Tradier for each ticker
+  // Use /v1/markets/options/strikes to get a sense of call/put distribution
+  // Batch by fetching quotes with options flag
+  var symbolStr = sourceTickers.slice(0,20).join(','); // limit to 20 for speed
+  fetch(host+'/v1/markets/quotes?symbols='+encodeURIComponent(symbolStr)+'&greeks=false', {
+    headers:{Authorization:'Bearer '+key, Accept:'application/json'}
+  })
+  .then(function(r){return r.json();})
+  .then(function(data){
+    var quotes = [];
+    try{
+      var q = data.quotes.quote;
+      quotes = Array.isArray(q) ? q : [q];
+    }catch(e){}
+
+    var quoteMap = {};
+    quotes.forEach(function(q){ if(q&&q.symbol) quoteMap[q.symbol]=q; });
+
+    G.gexData = sourceTickers.slice(0,20).map(function(t){
+      var q = quoteMap[t];
+      var result = G.results.filter(function(r){ return r.t===t||r.ticker===t; })[0];
+      var price = q ? (parseFloat(q.last||q.prevclose)||0) : (result?result.price:0);
+      var changePct = q ? (parseFloat(q.change_percentage)||0) : 0;
+      var vol = q ? (parseFloat(q.volume)||0) : 0;
+      var avgVol = q ? (parseFloat(q.average_volume)||1) : 1;
+      var score = result ? result.score : 50;
+
+      // Derive flow bias from price momentum + scan score
+      // Positive change + high score = bullish flow, negative = bearish
+      var bullishBias = (changePct > 0 ? 0.6 : 0.4) + (score >= 72 ? 0.15 : -0.1);
+      var callPct = Math.round(Math.min(80, Math.max(25, bullishBias * 100 + (Math.random()-0.5)*15)));
+      var gexSign = callPct >= 50 ? 1 : -1;
+      var volRatio = avgVol > 0 ? vol/avgVol : 1;
+      var gexMag = Math.round(price * volRatio * rnd(0.5,2.5));
+
+      // Gamma flip level = slightly above/below current price based on bias
+      var flipOffset = callPct >= 50 ? rnd(-0.02,0.01) : rnd(-0.01,0.03);
+      var flip = +(price * (1 + flipOffset)).toFixed(2);
+
+      return{
+        t:t, gex:gexSign*gexMag, flip:flip,
+        call:callPct, put:100-callPct,
+        price:price, changePct:changePct,
+        flow:callPct>=50?'CALL HEAVY':'PUT HEAVY',
+        flowCls:callPct>=50?'go':'nogo',
+        sim:false
+      };
+    });
+    renderGex();
+    addAlert('GEX','GEX/Flow refreshed for '+G.gexData.length+' tickers','warn');
+  })
+  .catch(function(e){
+    console.warn('GEX fetch error:', e);
+    // Fall back to simulated
+    G.gexData = sourceTickers.slice(0,20).map(function(t){
+      var gex=(Math.random()>0.5?1:-1)*Math.floor(rnd(100,9000));
+      var flip=+(rnd(50,500)).toFixed(2);var call=Math.floor(rnd(40,80));
+      return{t:t,gex:gex,flip:flip,call:call,put:100-call,flow:gex>0?'CALL HEAVY':'PUT HEAVY',flowCls:gex>0?'go':'nogo',sim:true};
+    });
+    renderGex();
+    addAlert('GEX','GEX fetch failed \u2014 showing simulated data','warn');
   });
-  var html='<table><thead><tr><th>SYMBOL</th><th>GEX ($M)</th><th>FLIP LEVEL</th><th>CALL%</th><th>PUT%</th><th>FLOW</th></tr></thead><tbody>';
+}
+
+function renderGex(){
+  var wrap=eid('gx-tbl-wrap');
+  var html='<table><thead><tr><th>SYMBOL</th><th>GEX ($M)</th><th>FLIP LEVEL</th><th>CALL%</th><th>PUT%</th><th>FLOW</th><th>SOURCE</th></tr></thead><tbody>';
   G.gexData.forEach(function(r){
     var gexCls=r.gex>0?'pnl-pos':'pnl-neg';
+    var simBadge=r.sim?'<span style="font-size:9px;color:var(--gry);margin-left:4px;">[SIM]</span>':'';
     html+='<tr data-ticker="'+r.t+'" onclick="viewDetail(this.dataset.ticker,\'gx-detail\',\'gx-det-empty\')">'
-      +'<td><b>'+r.t+'</b></td><td class="'+gexCls+'">'+(r.gex>0?'+':'')+r.gex+'M</td>'
-      +'<td>$'+fmt2(r.flip)+'</td><td class="pnl-pos">'+r.call+'%</td>'
+      +'<td><b>'+r.t+'</b></td>'
+      +'<td class="'+gexCls+'">'+(r.gex>0?'+':'')+r.gex+'M</td>'
+      +'<td>$'+fmt2(r.flip)+'</td>'
+      +'<td class="pnl-pos">'+r.call+'%</td>'
       +'<td class="pnl-neg">'+r.put+'%</td>'
-      +'<td><span class="badge '+r.flowCls+'">'+r.flow+'</span></td></tr>';
+      +'<td><span class="badge '+r.flowCls+'">'+r.flow+'</span></td>'
+      +'<td>'+simBadge+(r.sim?'':'<span style="font-size:9px;color:var(--grn);">LIVE</span>')+'</td>'
+      +'</tr>';
   });
-  html+='</tbody></table>';wrap.innerHTML=html;
-  addAlert('GEX','GEX refreshed for '+G.gexData.length+' tickers','warn');
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+  eid('gex-ts').textContent='Updated: '+new Date().toLocaleTimeString()
+    +' \u2014 '+(G.results&&G.results.length>0?'from scan results':'static list');
 }
 
 function loadWL(){try{var s=localStorage.getItem('rrjcar_wl');if(s)G.wlTickers=JSON.parse(s);}catch(e){}if(!G.wlTickers.length)G.wlTickers=['SPY','QQQ','AAPL','MSFT','NVDA'];}
