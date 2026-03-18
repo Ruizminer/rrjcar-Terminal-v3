@@ -768,7 +768,7 @@ tr.sel-row td{background:var(--blu3);}
   <div class="page-wrap">
     <div class="card"><div class="card-hdr">API CONFIGURATION</div>
     <div class="card-body api-form">
-      <div class="api-row"><label>TWELVE DATA API KEY</label><input id="api-td" type="password" placeholder="Enter Twelve Data key..."><div class="api-status" id="td-status"></div></div>
+      <div class="api-row"><label>FMP API KEY (financialmodelingprep.com)</label><input id="api-fmp" type="password" placeholder="Enter FMP key..."><div class="api-status" id="fmp-status"></div></div>
       <div class="api-row"><label>TRADIER API KEY</label><input id="api-tr" type="password" placeholder="Enter Tradier key..."><div class="api-status" id="tr-status"></div></div>
       <div class="api-row"><label>TRADIER MODE</label>
         <select id="api-mode" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:12px;padding:5px 8px;border-radius:3px;width:100%;">
@@ -786,7 +786,7 @@ tr.sel-row td{background:var(--blu3);}
         <button class="btn wrn" onclick="clearKeys()">CLEAR KEYS</button>
       </div>
       <div class="api-note">Keys stored only in your browser localStorage — never leave your device.<br>
-        Twelve Data: <a href="https://twelvedata.com" target="_blank">twelvedata.com</a> &nbsp;|&nbsp;
+        FMP: <a href="https://financialmodelingprep.com" target="_blank">financialmodelingprep.com</a> &nbsp;|&nbsp;
         Tradier: <a href="https://developer.tradier.com" target="_blank">developer.tradier.com</a>
       </div>
     </div></div>
@@ -2243,11 +2243,20 @@ function simInd(t,price){
   var adx=+rnd(18,52).toFixed(1);
   var ema20=+(price*(0.97+Math.random()*0.06)).toFixed(2);
   var ema50=+(price*(0.94+Math.random()*0.06)).toFixed(2);
+  var ema200=+(price*(0.88+Math.random()*0.10)).toFixed(2);
   var atr=+(price*rnd(0.008,0.025)).toFixed(2);
   var vol=Math.floor(rnd(1e6,25e6));
   var avgVol=Math.floor(rnd(5e6,20e6));
   var tf=Math.floor(rnd(0,4));
-  return{rsi:rsi,macd:macd,adx:adx,ema20:ema20,ema50:ema50,atr:atr,vol:vol,avgVol:avgVol,tf:tf};
+  // New v3.5 fields
+  var week52hi=+(price*(1.0+rnd(0,0.35))).toFixed(2);
+  var relStr5d=+(rnd(-3,4)).toFixed(2);       // % outperformance vs SPY 5-day
+  var changePct=+(rnd(-2.5,3.5)).toFixed(2);  // today's % change
+  var avgChangePct5d=+(rnd(-1,2)).toFixed(2); // 5-day avg % change
+  return{rsi,macd,adx,ema20,ema50,ema200,atr,vol,avgVol,tf,
+    week52hi,relStr5d,changePct,avgChangePct5d,
+    price:price // convenience ref
+  };
 }
 function simOpt(price){
   var strike=Math.round(price/5)*5;
@@ -2304,28 +2313,193 @@ function fetchOptionContract(ticker,simPrice,callback){
   }).catch(function(){callback(null);});
  }).catch(function(){callback(null);});
 }
-function scoreIt(ticker,ind,opt){
-  var score=0,res=[];
-  var rsiOk=ind.rsi>=40&&ind.rsi<=70;var macdOk=ind.macd>0;var adxOk=ind.adx>25;var emaOk=ind.ema20>ind.ema50;
-  var volOk=ind.vol>ind.avgVol;var tfOk=ind.tf>=2;var sprOk=opt.spreadPct<2;var delOk=opt.delta>=0.70;
-  var extOk=opt.ext<=30;var dteOk=opt.dte>=25&&opt.dte<=50;var provenOk=PROVEN.indexOf(ticker)>=0;
-  var avoidBad=AVOID.indexOf(ticker)>=0;
-  var su=UNIVERSE.filter(function(u){return u.t===ticker;})[0];
-  var pf=su?SECTOR_PF[su.s]||0:0;var sectOk=pf>2;
-  if(avoidBad){score-=15;res.push({n:'AVOID ticker',pass:false,val:'-15pts',filter:false});}
-  if(provenOk){score+=8;res.push({n:'PROVEN ticker',pass:true,val:'+8pts',filter:false});}
-  var checks=[
-    {ok:rsiOk,n:'RSI 40-70',val:'RSI '+ind.rsi,filt:false,pts:8},{ok:macdOk,n:'MACD Hist +',val:''+ind.macd,filt:false,pts:10},
-    {ok:adxOk,n:'ADX > 25',val:'ADX '+ind.adx,filt:false,pts:8},{ok:emaOk,n:'EMA20 > EMA50',val:'$'+ind.ema20+' > $'+ind.ema50,filt:false,pts:10},
-    {ok:volOk,n:'Vol > Avg',val:fmtK(ind.vol)+' > '+fmtK(ind.avgVol),filt:false,pts:8},{ok:tfOk,n:'TF Aligned 2/3',val:ind.tf+'/3',filt:false,pts:12},
-    {ok:sprOk,n:'Spread < 2%',val:fmtP(opt.spreadPct),filt:true,pts:10},{ok:delOk,n:'Delta >= 0.70',val:''+opt.delta,filt:true,pts:12},
-    {ok:extOk,n:'Extrinsic <=30%',val:fmtP(opt.ext),filt:true,pts:10},{ok:dteOk,n:'DTE 25-50',val:'DTE '+opt.dte,filt:true,pts:12},
-    {ok:sectOk,n:'Sector PF > 2',val:'PF '+pf,filt:false,pts:5}
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+//  v3.5 SCORING ENGINE
+//  Section A: Technical Momentum  (8 rules, 69 pts max)
+//  Section B: Momentum Quality    (4 rules, 38 pts max, Tradier-only)
+//  Section C: FMP Daily Signals   (2 rules, 20 pts max, requires FMP key)
+//  PROVEN bonus +8 | AVOID penalty -15 | Max: 116 pts | GO: >= 72 (62%)
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+// \u2500\u2500 FMP fundamental cache (24hr TTL per ticker) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+var G_FMP_CACHE = {};
+
+function fmpCacheKey(ticker){ return 'rrjcar_fmp_' + ticker; }
+
+function loadFmpCache(ticker){
+  try{
+    var raw = localStorage.getItem(fmpCacheKey(ticker));
+    if(!raw) return null;
+    var obj = JSON.parse(raw);
+    var age = Date.now() - (obj.fetched || 0);
+    if(age > 86400000) return null; // 24hr TTL
+    return obj;
+  } catch(e){ return null; }
+}
+
+function saveFmpCache(ticker, data){
+  try{
+    data.fetched = Date.now();
+    localStorage.setItem(fmpCacheKey(ticker), JSON.stringify(data));
+    G_FMP_CACHE[ticker] = data;
+  } catch(e){}
+}
+
+async function fetchFmpData(ticker){
+  // Check memory cache first
+  if(G_FMP_CACHE[ticker]) return G_FMP_CACHE[ticker];
+  // Check localStorage cache
+  var cached = loadFmpCache(ticker);
+  if(cached){ G_FMP_CACHE[ticker] = cached; return cached; }
+
+  var fmpKey = '';
+  try{ fmpKey = localStorage.getItem('rrjcar_fmp') || ''; }catch(e){}
+  if(!fmpKey) return null;
+
+  var base = 'https://financialmodelingprep.com/api/v3';
+  try{
+    // Fetch analyst estimates (revisions) and insider transactions in parallel
+    var [estRes, insRes] = await Promise.all([
+      fetch(base+'/analyst-estimates/'+ticker+'?limit=2&apikey='+fmpKey).then(function(r){return r.json();}),
+      fetch(base+'/insider-trading?symbol='+ticker+'&limit=20&apikey='+fmpKey).then(function(r){return r.json();})
+    ]);
+
+    // Analyst revisions: count how many estimates were revised UP in last 30 days
+    var revisionsUp = 0;
+    var thirtyDaysAgo = Date.now() - (30 * 86400000);
+    if(Array.isArray(estRes)){
+      estRes.forEach(function(est){
+        var estDate = new Date(est.date).getTime();
+        if(estDate >= thirtyDaysAgo){
+          // Compare EPS estimate to prior \u2014 if higher, it's a revision up
+          if(est.estimatedEpsAvg && est.estimatedEpsAvgLast){
+            if(est.estimatedEpsAvg > est.estimatedEpsAvgLast) revisionsUp++;
+          } else if(est.numberAnalystEstimatedEps && est.numberAnalystEstimatedEps >= 2){
+            revisionsUp++; // analysts covering = proxy for active coverage
+          }
+        }
+      });
+    }
+
+    // Insider buying: non-CEO buys >= $100K in last 90 days, no selling cluster
+    var insiderBuyValue = 0;
+    var insiderSellValue = 0;
+    var ninetyDaysAgo = Date.now() - (90 * 86400000);
+    if(Array.isArray(insRes)){
+      insRes.forEach(function(tx){
+        var txDate = new Date(tx.transactionDate).getTime();
+        if(txDate < ninetyDaysAgo) return;
+        var title = (tx.reportingName || '').toUpperCase();
+        var isCeo = title.includes('CEO') || title.includes('CHIEF EXECUTIVE');
+        var val = Math.abs((tx.securitiesTransacted || 0) * (tx.price || 0));
+        if(tx.transactionType === 'P-Purchase' && !isCeo) insiderBuyValue += val;
+        if(tx.transactionType === 'S-Sale') insiderSellValue += val;
+      });
+    }
+
+    var data = {
+      revisionsUp: revisionsUp,
+      insiderBuyValue: insiderBuyValue,
+      insiderSellValue: insiderSellValue,
+      analystRevisionsOk: revisionsUp >= 2,
+      insiderBuyingOk: insiderBuyValue >= 100000 && insiderSellValue < insiderBuyValue * 2
+    };
+    saveFmpCache(ticker, data);
+    return data;
+  } catch(e){
+    console.warn('FMP fetch error for '+ticker+':', e);
+    return null;
+  }
+}
+
+function scoreIt(ticker, ind, opt){
+  // \u2500\u2500 Look up cached FMP data (sync \u2014 fetched async during scan) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  var fmp = G_FMP_CACHE[ticker] || loadFmpCache(ticker);
+
+  var score = 0, techScore = 0, fundScore = 0, res = [];
+
+  // \u2500\u2500 AVOID / PROVEN \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  var avoidBad = AVOID.indexOf(ticker) >= 0;
+  var provenOk = PROVEN.indexOf(ticker) >= 0;
+  if(avoidBad){ score -= 15; res.push({n:'AVOID ticker', pass:false, val:'-15pts', filter:false}); }
+  if(provenOk){ score += 8; techScore += 8; res.push({n:'PROVEN ticker', pass:true, val:'+8pts', filter:false}); }
+
+  // \u2500\u2500 SECTION A: Technical Momentum (8 rules, 69 pts) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  var rsiOk  = ind.rsi >= 40 && ind.rsi <= 70;
+  var macdOk = ind.macd > 0;
+  var adxOk  = ind.adx > 25;
+  var emaOk  = ind.ema20 > ind.ema50;
+  var volOk  = ind.vol > ind.avgVol;
+  var tfOk   = ind.tf >= 2;
+  var su     = UNIVERSE_FULL.filter(function(u){ return u.t === ticker; })[0] ||
+               UNIVERSE.filter(function(u){ return u.t === ticker; })[0];
+  var pf     = su ? (SECTOR_PF[su.s] || 0) : 0;
+  var sectOk = pf > 2;
+
+  // 52-week high proximity (within 15%) \u2014 Tradier quote provides week_52_high
+  var hiOk = ind.week52hi > 0 ? (ind.price >= ind.week52hi * 0.85) : false;
+
+  // Relative strength vs SPY 5-day (positive outperformance)
+  var rsRelOk = ind.relStr5d > 0;
+
+  // Price acceleration: today's % change > 5-day average % change
+  var accelOk = ind.changePct > ind.avgChangePct5d;
+
+  // Above 200 EMA
+  var ema200Ok = ind.ema200 > 0 ? ind.price > ind.ema200 : ind.ema20 > ind.ema50; // fallback if 200 not available
+
+  var techChecks = [
+    {ok:rsiOk,   n:'RSI 40-70',        val:'RSI '+ind.rsi,                                          pts:8},
+    {ok:macdOk,  n:'MACD Hist +',      val:''+(ind.macd>=0?'+':'')+ind.macd,                        pts:10},
+    {ok:adxOk,   n:'ADX > 25',         val:'ADX '+ind.adx,                                          pts:8},
+    {ok:emaOk,   n:'EMA20 > EMA50',    val:'$'+fmt2(ind.ema20)+' > $'+fmt2(ind.ema50),              pts:10},
+    {ok:volOk,   n:'Vol > Avg',        val:fmtK(ind.vol)+' > '+fmtK(ind.avgVol),                   pts:8},
+    {ok:tfOk,    n:'TF Aligned 2/3',   val:ind.tf+'/3',                                             pts:12},
+    {ok:sectOk,  n:'Sector PF > 2',    val:'PF '+pf,                                               pts:5},
+    // Momentum Quality rules (Tradier-derived)
+    {ok:hiOk,    n:'52Wk Hi Prox <15%',val:ind.week52hi>0?'$'+fmt2(ind.price)+' / $'+fmt2(ind.week52hi):'no data', pts:10},
+    {ok:rsRelOk, n:'RS > SPY (5d)',    val:ind.relStr5d>0?'+'+ind.relStr5d.toFixed(2)+'%':ind.relStr5d.toFixed(2)+'%', pts:8},
+    {ok:accelOk, n:'Price Accel',      val:(ind.changePct>=0?'+':'')+ind.changePct.toFixed(2)+'% vs '+ind.avgChangePct5d.toFixed(2)+'%avg', pts:7},
+    {ok:ema200Ok,n:'Price > EMA200',   val:ind.ema200>0?'$'+fmt2(ind.price)+' > $'+fmt2(ind.ema200):'via EMA trend', pts:6}
   ];
-  checks.forEach(function(c){if(c.ok)score+=c.pts;res.push({n:c.n,pass:c.ok,val:c.val,filter:c.filt,pts:c.pts});});
-  var filtersPass=sprOk&&delOk&&extOk&&dteOk;
-  var isGo=score>=70&&filtersPass&&!avoidBad;
-  return{score:clamp(score,0,113),isGo:isGo,filtersPass:filtersPass,rules:res,passes:res.filter(function(r){return r.pass;}).length};
+  techChecks.forEach(function(c){
+    if(c.ok){ score += c.pts; techScore += c.pts; }
+    res.push({n:c.n, pass:c.ok, val:c.val, filter:false, pts:c.pts});
+  });
+
+  // \u2500\u2500 SECTION B: FMP Daily Signals (2 rules, 20 pts) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  var analystOk = fmp ? fmp.analystRevisionsOk : false;
+  var insiderOk = fmp ? fmp.insiderBuyingOk    : false;
+
+  var analystVal = fmp
+    ? (fmp.revisionsUp >= 2 ? fmp.revisionsUp+' revisions up' : fmp.revisionsUp+' (need \u22652)')
+    : 'No FMP key';
+  var insiderVal = fmp
+    ? (insiderOk ? '$'+Math.round(fmp.insiderBuyValue/1000)+'K buys' : 'No qualifying buys')
+    : 'No FMP key';
+
+  var fmpChecks = [
+    {ok:analystOk, n:'Analyst Revisions \u2191', val:analystVal, pts:12},
+    {ok:insiderOk, n:'Insider Buying',           val:insiderVal, pts:8}
+  ];
+  fmpChecks.forEach(function(c){
+    if(c.ok){ score += c.pts; fundScore += c.pts; }
+    res.push({n:c.n, pass:c.ok, val:c.val, filter:false, pts:c.pts, isFmp:true});
+  });
+
+  // \u2500\u2500 GO DECISION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  var total = clamp(score, 0, 116);
+  var isGo  = total >= 72 && !avoidBad;
+
+  return {
+    score:      total,
+    techScore:  clamp(techScore, 0, 85),
+    fundScore:  clamp(fundScore, 0, 20),
+    isGo:       isGo,
+    filtersPass:true, // no hard filters in v3.5 \u2014 options evaluated downstream
+    rules:      res,
+    passes:     res.filter(function(r){ return r.pass; }).length
+  };
 }
 
 function renderTV(cid,ticker){
@@ -2343,14 +2517,20 @@ function buildDetail(r,detId,emptyId){
   if(emp)emp.style.display='none';
   if(det){det.style.display='flex';det.style.flexDirection='column';det.style.height='100%';det.style.overflow='hidden';}
   var sigCls=r.isGo?'go':'nogo';var sigLbl=r.isGo?'GO':'NO-GO';var ind=r.ind,opt=r.opt;
+  var techScore=r.techScore||0, fundScore=r.fundScore||0;
   var rulesHtml='';
-  r.rules.forEach(function(ru){var cls=ru.pass?'pass':(ru.filter?'filt-fail':'fail');var icon=ru.pass?'\u2713':'\u2717';rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';});
+  r.rules.forEach(function(ru){
+    var cls=ru.pass?'pass':'fail';
+    var icon=ru.pass?'\u2713':'\u2717';
+    var fmpBadge=ru.isFmp?'<span style="font-size:9px;color:var(--blub);margin-left:4px;">FMP</span>':'';
+    rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+fmpBadge+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';
+  });
   G.detailOpt={ticker:r.ticker,strike:opt.strike,exp:opt.exp};
   det.innerHTML=
     '<div class="det-hdr"><span class="det-tk">'+r.ticker+'</span>'
     +'<span class="det-pr">$'+fmt2(r.price)+'</span>'
     +'<span class="det-sig '+sigCls+'">'+sigLbl+'</span>'
-    +'<span class="det-meta">'+r.sector+' | Score: <b>'+r.score+'</b> | Passes: '+r.passes+'/12</span>'
+    +'<span class="det-meta">'+r.sector+' | Score: <b>'+r.score+'</b>/116 | Tech: '+techScore+' Fund: '+fundScore+' | Passes: '+r.passes+'/14</span>'
     +'</div>'
     +'<div class="det-tv" id="tv-'+r.ticker+'"></div>'
     +'<div class="det-scroll">'
@@ -2360,17 +2540,20 @@ function buildDetail(r,detId,emptyId){
     +'<div class="ig-cell"><div class="ig-lbl">MACD Hist</div><div class="ig-val '+(ind.macd>=0?'pos':'neg')+'">'+(ind.macd>=0?'+':'')+ind.macd+'</div></div>'
     +'<div class="ig-cell"><div class="ig-lbl">ADX</div><div class="ig-val '+(ind.adx>25?'pos':'warn')+'">'+ind.adx+'</div></div>'
     +'<div class="ig-cell"><div class="ig-lbl">EMA20/50</div><div class="ig-val '+(ind.ema20>ind.ema50?'pos':'neg')+'">'+fmt2(ind.ema20)+' / '+fmt2(ind.ema50)+'</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">EMA200</div><div class="ig-val '+(ind.price>ind.ema200?'pos':'warn')+'">$'+fmt2(ind.ema200)+'</div></div>'
     +'<div class="ig-cell"><div class="ig-lbl">ATR</div><div class="ig-val">'+fmt2(ind.atr)+'</div></div>'
     +'<div class="ig-cell"><div class="ig-lbl">TF Aligned</div><div class="ig-val '+(ind.tf>=2?'pos':'warn')+'">'+ind.tf+'/3</div></div>'
     +'<div class="ig-cell"><div class="ig-lbl">Volume</div><div class="ig-val '+(ind.vol>ind.avgVol?'pos':'warn')+'">'+fmtK(ind.vol)+'</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">RS vs SPY 5d</div><div class="ig-val '+(ind.relStr5d>0?'pos':'warn')+'">'+(ind.relStr5d>=0?'+':'')+ind.relStr5d+'%</div></div>'
+    +'<div class="ig-cell"><div class="ig-lbl">52Wk High</div><div class="ig-val '+(ind.price>=ind.week52hi*0.85?'pos':'warn')+'">'+'$'+fmt2(ind.week52hi)+'</div></div>'
     +'<div class="ig-cell"><div class="ig-lbl">%-EMA Exit</div><div class="ig-val">$'+fmt2(ind.ema50*1.005)+'</div></div>'
     +'</div>'
-    +'<div class="s-hdr">OPTIONS CONTRACT</div>'
+    +'<div class="s-hdr">OPTIONS CHECKLIST <span style="font-size:10px;color:var(--gry);font-weight:400;">(downstream \u2014 not scored)</span></div>'
     +'<div class="opt-grid">'
-    +'<div class="og-cell"><div class="og-lbl">Delta</div><div class="og-val '+(opt.delta>=0.70?'ok':'warn')+'">'+opt.delta+'</div></div>'
-    +'<div class="og-cell"><div class="og-lbl">Extrinsic %</div><div class="og-val '+(opt.ext<=30?'ok':'warn')+'">'+fmtP(opt.ext)+'</div></div>'
-    +'<div class="og-cell"><div class="og-lbl">Spread %</div><div class="og-val '+(opt.spreadPct<2?'ok':'warn')+'">'+fmtP(opt.spreadPct)+'</div></div>'
-    +'<div class="og-cell"><div class="og-lbl">DTE</div><div class="og-val '+((opt.dte>=25&&opt.dte<=50)?'ok':'warn')+'">'+opt.dte+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Delta</div><div class="og-val '+(opt.delta>=0.70?'ok':'warn')+'">'+opt.delta+(opt.delta>=0.70?' \u2713':' \u2717')+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Extrinsic %</div><div class="og-val '+(opt.ext<=30?'ok':'warn')+'">'+fmtP(opt.ext)+(opt.ext<=30?' \u2713':' \u2717')+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Spread %</div><div class="og-val '+(opt.spreadPct<2?'ok':'warn')+'">'+fmtP(opt.spreadPct)+(opt.spreadPct<2?' \u2713':' \u2717')+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">DTE</div><div class="og-val '+((opt.dte>=25&&opt.dte<=50)?'ok':'warn')+'">'+opt.dte+'d'+((opt.dte>=25&&opt.dte<=50)?' \u2713':' \u2717')+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Strike</div><div class="og-val">$'+fmt2(opt.strike)+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Expiry</div><div class="og-val">'+opt.exp+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Opt Price</div><div class="og-val">$'+fmt2(opt.optPr)+'</div></div>'
@@ -2381,7 +2564,7 @@ function buildDetail(r,detId,emptyId){
     +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">\u25bc BUY PUT</button>'
     +'<span style="color:var(--gry);font-size:10px;">Strike: $'+fmt2(opt.strike)+'  |  Exp: '+opt.exp+'</span>'
     +'</div>'
-    +'<div class="s-hdr">RULE SCORECARD</div>'
+    +'<div class="s-hdr">RULE SCORECARD v3.5 <span style="font-size:10px;color:var(--gry);font-weight:400;">Tech '+techScore+' + Fund '+fundScore+' = '+r.score+'/116</span></div>'
     +'<div class="rules-grid">'+rulesHtml+'</div>'
     +'</div>';
   renderTV('tv-'+r.ticker,r.ticker);
@@ -3897,11 +4080,11 @@ function calcEx(){
 }
 
 function saveKeys(){
-  var td=eid('api-td').value.trim(),tr=eid('api-tr').value.trim(),mode=eid('api-mode').value,acct=eid('api-acct').value.trim();
-  if(td)localStorage.setItem('rrjcar_td',td);if(tr)localStorage.setItem('rrjcar_tradier',tr);
+  var fmp=eid('api-fmp').value.trim(),tr=eid('api-tr').value.trim(),mode=eid('api-mode').value,acct=eid('api-acct').value.trim();
+  if(fmp)localStorage.setItem('rrjcar_fmp',fmp);if(tr)localStorage.setItem('rrjcar_tradier',tr);
   localStorage.setItem('rrjcar_mode',mode);
   if(acct){localStorage.setItem('rrjcar_acct',acct);G.acctId=acct;eid('ord-acct').value=acct;}
-  eid('td-status').textContent=td?'Key saved':'(unchanged)';eid('td-status').className='api-status '+(td?'ok':'miss');
+  eid('fmp-status').textContent=fmp?'Key saved':'(unchanged)';eid('fmp-status').className='api-status '+(fmp?'ok':'miss');
   eid('tr-status').textContent=tr?'Key saved':'(unchanged)';eid('tr-status').className='api-status '+(tr?'ok':'miss');
   eid('acct-status').textContent=acct?'Account saved':'(unchanged)';eid('acct-status').className='api-status '+(acct?'ok':'miss');
   var badge=eid('mode-badge');badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
@@ -3910,25 +4093,25 @@ function saveKeys(){
 }
 
 function clearKeys(){
-  ['rrjcar_td','rrjcar_tradier','rrjcar_mode','rrjcar_acct'].forEach(function(k){localStorage.removeItem(k);});
-  eid('api-td').value='';eid('api-tr').value='';eid('api-acct').value='';G.acctId='';eid('ord-acct').value='';
-  eid('td-status').textContent='Cleared';eid('td-status').className='api-status miss';
+  ['rrjcar_fmp','rrjcar_tradier','rrjcar_mode','rrjcar_acct'].forEach(function(k){localStorage.removeItem(k);});
+  eid('api-fmp').value='';eid('api-tr').value='';eid('api-acct').value='';G.acctId='';eid('ord-acct').value='';
+  eid('fmp-status').textContent='Cleared';eid('fmp-status').className='api-status miss';
   eid('tr-status').textContent='Cleared';eid('tr-status').className='api-status miss';
   eid('acct-status').textContent='Cleared';eid('acct-status').className='api-status miss';
   toast('API keys cleared');
 }
 
 function loadKeys(){
-  var _trRaw=localStorage.getItem('rrjcar_tradier')||'',_tdRaw=localStorage.getItem('rrjcar_td')||'';
+  var _trRaw=localStorage.getItem('rrjcar_tradier')||'',_fmpRaw=localStorage.getItem('rrjcar_fmp')||'';
   var _hasBadTr=_trRaw.length>0&&_trRaw.split('').some(function(c){return c.charCodeAt(0)>255;});
-  var _hasBadTd=_tdRaw.length>0&&_tdRaw.split('').some(function(c){return c.charCodeAt(0)>255;});
-  if(_hasBadTr)localStorage.removeItem('rrjcar_tradier');if(_hasBadTd)localStorage.removeItem('rrjcar_td');
-  var td=localStorage.getItem('rrjcar_td')||'',tr=localStorage.getItem('rrjcar_tradier')||'',mode=localStorage.getItem('rrjcar_mode')||'sandbox',acct=localStorage.getItem('rrjcar_acct')||'';
-  if(td&&!_hasBadTd){eid('api-td').value='';eid('td-status').textContent='Key saved (hidden)';eid('td-status').className='api-status ok';}
-  else if(_hasBadTd){eid('td-status').textContent='Key corrupted - please re-enter';eid('td-status').className='api-status miss';}
-  else{eid('td-status').textContent='Not set';eid('td-status').className='api-status miss';}
+  var _hasBadFmp=_fmpRaw.length>0&&_fmpRaw.split('').some(function(c){return c.charCodeAt(0)>255;});
+  if(_hasBadTr)localStorage.removeItem('rrjcar_tradier');if(_hasBadFmp)localStorage.removeItem('rrjcar_fmp');
+  var fmp=localStorage.getItem('rrjcar_fmp')||'',tr=localStorage.getItem('rrjcar_tradier')||'',mode=localStorage.getItem('rrjcar_mode')||'sandbox',acct=localStorage.getItem('rrjcar_acct')||'';
+  if(fmp&&!_hasBadFmp){eid('api-fmp').value='';eid('fmp-status').textContent='Key saved (hidden)';eid('fmp-status').className='api-status ok';}
+  else if(_hasBadFmp){eid('fmp-status').textContent='Key corrupted - re-enter';eid('fmp-status').className='api-status miss';}
+  else{eid('fmp-status').textContent='Not set';eid('fmp-status').className='api-status miss';}
   if(tr&&!_hasBadTr){eid('api-tr').value='';eid('tr-status').textContent='Key saved (hidden)';eid('tr-status').className='api-status ok';}
-  else if(_hasBadTr){eid('tr-status').textContent='Key corrupted - please re-enter your Tradier API key';eid('tr-status').className='api-status miss';}
+  else if(_hasBadTr){eid('tr-status').textContent='Key corrupted - re-enter your Tradier API key';eid('tr-status').className='api-status miss';}
   else{eid('tr-status').textContent='Not set';eid('tr-status').className='api-status miss';}
   if(acct){eid('api-acct').value=acct;eid('acct-status').textContent='Account loaded';eid('acct-status').className='api-status ok';G.acctId=acct;eid('ord-acct').value=acct;}
   else{eid('acct-status').textContent='Not set - enter account number';eid('acct-status').className='api-status miss';}
@@ -3957,7 +4140,7 @@ function updateHeaderQuotes(){
 //  SETTINGS PERSISTENCE
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
-var APP_VERSION = '3.4';
+var APP_VERSION = '3.5';
 
 function saveAppSettings(){
   try{
