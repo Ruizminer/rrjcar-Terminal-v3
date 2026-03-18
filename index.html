@@ -2488,7 +2488,23 @@ function scoreIt(ticker, ind, opt){
   });
 
   // \u2500\u2500 GO DECISION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  var total = clamp(score, 0, 116);
+  // \u2500\u2500 SECTION C: GEX Confirmation (bonus rule, +6 pts, no penalty) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // Looks up G.gexData populated by the GEX/Flow tab after runGex() is called
+  var gexEntry = null;
+  if(G.gexData && G.gexData.length > 0){
+    for(var gi=0; gi<G.gexData.length; gi++){
+      if(G.gexData[gi].t === ticker){ gexEntry = G.gexData[gi]; break; }
+    }
+  }
+  var gexCallHeavy = gexEntry ? (gexEntry.call >= 55) : false;
+  var gexVal = gexEntry
+    ? (gexEntry.sim ? '[SIM] ' : '') + gexEntry.call + '% calls / ' + gexEntry.put + '% puts'
+    : 'Run GEX/Flow tab first';
+  if(gexCallHeavy){ score += 6; techScore += 6; }
+  res.push({n:'GEX Call Heavy', pass:gexCallHeavy, val:gexVal, filter:false, pts:6, isGex:true});
+
+  // \u2500\u2500 GO DECISION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  var total = clamp(score, 0, 122); // 116 base + 6 GEX bonus
   var isGo  = total >= 72 && !avoidBad;
 
   return {
@@ -2523,14 +2539,15 @@ function buildDetail(r,detId,emptyId){
     var cls=ru.pass?'pass':'fail';
     var icon=ru.pass?'\u2713':'\u2717';
     var fmpBadge=ru.isFmp?'<span style="font-size:9px;color:var(--blub);margin-left:4px;">FMP</span>':'';
-    rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+fmpBadge+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';
+    var gexBadge=ru.isGex?'<span style="font-size:9px;color:var(--amb);margin-left:4px;">GEX</span>':'';
+    rulesHtml+='<div class="rule-item '+cls+'"><div class="ri-name">'+ru.n+fmpBadge+gexBadge+'</div><div class="ri-val '+cls+'">'+icon+' '+ru.val+'</div></div>';
   });
   G.detailOpt={ticker:r.ticker,strike:opt.strike,exp:opt.exp};
   det.innerHTML=
     '<div class="det-hdr"><span class="det-tk">'+r.ticker+'</span>'
     +'<span class="det-pr">$'+fmt2(r.price)+'</span>'
     +'<span class="det-sig '+sigCls+'">'+sigLbl+'</span>'
-    +'<span class="det-meta">'+r.sector+' | Score: <b>'+r.score+'</b>/116 | Tech: '+techScore+' Fund: '+fundScore+' | Passes: '+r.passes+'/14</span>'
+    +'<span class="det-meta">'+r.sector+' | Score: <b>'+r.score+'</b>/122 | Tech: '+techScore+' Fund: '+fundScore+' | Passes: '+r.passes+'/14</span>'
     +'</div>'
     +'<div class="det-tv" id="tv-'+r.ticker+'"></div>'
     +'<div class="det-scroll">'
@@ -2564,7 +2581,7 @@ function buildDetail(r,detId,emptyId){
     +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">\u25bc BUY PUT</button>'
     +'<span style="color:var(--gry);font-size:10px;">Strike: $'+fmt2(opt.strike)+'  |  Exp: '+opt.exp+'</span>'
     +'</div>'
-    +'<div class="s-hdr">RULE SCORECARD v3.5 <span style="font-size:10px;color:var(--gry);font-weight:400;">Tech '+techScore+' + Fund '+fundScore+' = '+r.score+'/116</span></div>'
+    +'<div class="s-hdr">RULE SCORECARD v3.5 <span style="font-size:10px;color:var(--gry);font-weight:400;">Tech '+techScore+' + Fund '+fundScore+' = '+r.score+'/122</span></div>'
     +'<div class="rules-grid">'+rulesHtml+'</div>'
     +'</div>';
   renderTV('tv-'+r.ticker,r.ticker);
@@ -2902,6 +2919,17 @@ function finishScan(){
   addAlert('SYS', 'Scan complete: ' + G.results.length + ' tickers | ' + goCount + ' GO', 'go');
   toast('Scan complete \u2014 ' + G.results.length + ' tickers');
   if(G.results.length > 0 && !G.selTicker){ viewDetail(G.results[0].ticker, 'bs-detail', 'bs-empty'); }
+
+  // Auto-refresh GEX after scan so GEX bonus scores are applied
+  // Run in background \u2014 doesn't block UI
+  var tradierKey = '';
+  try{ tradierKey = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
+  if(tradierKey){
+    setTimeout(function(){
+      addAlert('GEX', 'Auto-refreshing GEX after scan...', 'warn');
+      runGex();
+    }, 2000);
+  }
 }
 
 function applyFilters(){
@@ -3086,6 +3114,16 @@ function runGex(){
 
       renderGex();
       addAlert('GEX','GEX/Flow refreshed \u2014 real 30DTE net flow for '+G.gexData.length+' tickers','warn');
+      // Re-score all results now that GEX data is available
+      G.results.forEach(function(r){
+        var updated = scoreIt(r.ticker, r.ind, r.opt);
+        r.score = updated.score; r.techScore = updated.techScore;
+        r.isGo = updated.isGo; r.rules = updated.rules; r.passes = updated.passes;
+      });
+      G.results.sort(function(a,b){ return b.score - a.score; });
+      G.filtered = G.results.slice();
+      renderBuySig(); renderScan();
+      toast('GEX loaded \u2014 scores updated');
     });
   })
   .catch(function(e){
