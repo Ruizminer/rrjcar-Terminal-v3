@@ -851,9 +851,9 @@ tr.sel-row td{background:var(--blu3);}
 <div id="toast"></div>
 
 <script>
-var PROVEN=['URI','C','GOOG','GS','JPM','HAL','VLO','MPC','ICE','CME','FTNT','ORCL','PANW','KO','RCL'];
-var AVOID=['LULU','OXY','UNP','LMT','TDG','DIS','CMCSA','GIS','MA','PWR'];
-var SECTOR_PF={Industrials:3.53,Utilities:3.28,Finance:3.07,Staples:2.35,Materials:2.31,Energy:1.65,Technology:1.53,Consumer:1.49};
+var PROVEN=['URI','C','GOOG','GS','JPM','HAL','VLO','MPC','ICE','CME','FTNT','ORCL','PANW','KO','RCL','NVDA','MSFT','AMZN','V','META','CAT','XOM'];
+var AVOID=['LULU','OXY','TDG','DIS','CMCSA','GIS','PWR','MRNA','RIVN','PLUG'];
+var SECTOR_PF={Industrials:3.53,Utilities:3.28,Finance:3.07,Healthcare:2.20,Communication:2.10,Technology:2.80,Staples:2.35,Materials:2.31,Energy:1.90,Consumer:1.80,RealEstate:1.75};
 // Full S&P 500 universe with sectors \u2014 used for dynamic Tradier screener
 var UNIVERSE_FULL=[
   // Technology
@@ -3186,7 +3186,7 @@ function runGex(){
 
   // Live path: fetch real 30DTE options chain for each ticker to compute net GEX flow
   // Call OI vs Put OI at 30DTE expiry = real flow proxy
-  var gexTickers = sourceTickers.slice(0, 20); // limit to 20 for speed
+  var gexTickers = sourceTickers.slice(0, 35); // expanded for full GO coverage
   eid('gex-ts').textContent = 'Fetching 30DTE options flow for ' + gexTickers.length + ' tickers...';
 
   // Step 1: get expirations for all tickers, find nearest 25-35 day expiry each
