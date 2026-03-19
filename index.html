@@ -990,6 +990,7 @@ tr.sel-row td{background:var(--blu3);}
       <div class="ord-row" style="margin-top:4px;">
         <button class="btn blu" onclick="saveKeys()">SAVE KEYS</button>
         <button class="btn wrn" onclick="clearKeys()">CLEAR KEYS</button>
+        <button class="btn" style="border-color:var(--gry2);color:var(--gry);" onclick="clearFmpCache()" title="Clear the 24-hour FMP data cache — forces fresh API calls on next ticker click">CLEAR FMP CACHE</button>
       </div>
       <div class="api-note">Keys stored only in your browser localStorage — never leave your device.<br>
         FMP: <a href="https://financialmodelingprep.com" target="_blank">financialmodelingprep.com</a> &nbsp;|&nbsp;
@@ -5550,6 +5551,18 @@ function saveKeys(){
   var badge=eid('mode-badge');badge.textContent=mode==='live'?'LIVE MODE':'SANDBOX';
   badge.style.background=mode==='live'?'var(--wrn3)':'var(--amb3)';badge.style.color=mode==='live'?'var(--wrn)':'var(--ambb)';
   toast('API settings saved');
+}
+
+function clearFmpCache(){
+  var count = 0;
+  Object.keys(localStorage).filter(function(k){ return k.startsWith('rrjcar_fmp_'); }).forEach(function(k){
+    localStorage.removeItem(k); count++;
+  });
+  if(typeof G_FMP_CACHE !== 'undefined'){
+    Object.keys(G_FMP_CACHE).forEach(function(k){ delete G_FMP_CACHE[k]; });
+  }
+  toast('FMP cache cleared (' + count + ' entries) \u2014 next click fetches fresh data');
+  addAlert('SYS', 'FMP cache cleared \u2014 ' + count + ' entries removed', 'go');
 }
 
 function clearKeys(){
