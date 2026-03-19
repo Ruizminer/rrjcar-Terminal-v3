@@ -4267,11 +4267,30 @@ async function runTsCheck(){
   if(G.positions.length)renderPositionsTable(G.positions,eid('pos-src').textContent);
   var sec=parseInt(eid('ts-interval').value)||30;
   eid('ts-poll-status').textContent='Last check: '+new Date().toLocaleTimeString()+' | next in '+sec+'s';
+
+  // Persist state after every poll so peaks survive page refresh
+  try{
+    var stateToSave = {};
+    Object.keys(G.tsState).forEach(function(sym){
+      var st = G.tsState[sym];
+      if(st && st.status && st.status !== 'inactive'){
+        stateToSave[sym] = st;
+      }
+    });
+    if(Object.keys(stateToSave).length > 0){
+      localStorage.setItem('rrjcar_ts_state', JSON.stringify(stateToSave));
+    }
+  }catch(e){}
 }
 
 function resetOneTsState(sym){
   delete G.tsState[sym];
   delete G.tsTriggered[sym];
+  // Clear this position's state from localStorage
+  try{
+    var raw = localStorage.getItem('rrjcar_ts_state');
+    if(raw){ var s = JSON.parse(raw); delete s[sym]; localStorage.setItem('rrjcar_ts_state', JSON.stringify(s)); }
+  }catch(e){}
   tsLog(sym+': state reset','info');
   toast('Trail stop reset for '+sym);
   if(G.positions.length)renderPositionsTable(G.positions,eid('pos-src').textContent);
@@ -4660,6 +4679,7 @@ function renderPosChart(p){
 
 function resetTsState(){
   G.tsState={};G.tsTriggered={};
+  try{ localStorage.removeItem('rrjcar_ts_state'); }catch(e){}
   tsLog('All trailing stop states reset','info');
   if(G.positions.length)renderPositionsTable(G.positions,eid('pos-src').textContent);
 }
@@ -4668,6 +4688,7 @@ function clearPositions(){
   G.positions=[];
   stopTsPoller();G.tsState={};G.tsTriggered={};G.tsConfig={};
   try{ localStorage.removeItem('rrjcar_ts_config'); }catch(e){}
+  try{ localStorage.removeItem('rrjcar_ts_state'); }catch(e){}
   if(eid('ts-toggle'))eid('ts-toggle').checked=false;
   if(eid('ts-cfg'))eid('ts-cfg').style.display='none';
   G.tsActive=false;
@@ -5672,6 +5693,21 @@ function saveAppSettings(){
     if(Object.keys(G.tsConfig).length > 0){
       localStorage.setItem('rrjcar_ts_config', JSON.stringify(G.tsConfig));
     }
+
+    // Per-position trail stop STATE (peak, status) \u2014 persists across refreshes
+    if(Object.keys(G.tsState).length > 0){
+      // Only save active states \u2014 skip inactive/empty to keep storage clean
+      var stateToSave = {};
+      Object.keys(G.tsState).forEach(function(sym){
+        var st = G.tsState[sym];
+        if(st && st.status && st.status !== 'inactive'){
+          stateToSave[sym] = st;
+        }
+      });
+      if(Object.keys(stateToSave).length > 0){
+        localStorage.setItem('rrjcar_ts_state', JSON.stringify(stateToSave));
+      }
+    }
   } catch(e){ console.warn('saveAppSettings error:', e); }
 }
 
@@ -5709,6 +5745,18 @@ function loadAppSettings(){
     if(tsCfgRaw){
       var tsCfg = JSON.parse(tsCfgRaw);
       G.tsConfig = tsCfg;
+    }
+
+    // Per-position trail stop STATE \u2014 restore peak/status across refreshes
+    var tsStateRaw = localStorage.getItem('rrjcar_ts_state');
+    if(tsStateRaw){
+      var savedState = JSON.parse(tsStateRaw);
+      // Merge into G.tsState \u2014 don't overwrite any state already in memory
+      Object.keys(savedState).forEach(function(sym){
+        if(!G.tsState[sym]){
+          G.tsState[sym] = savedState[sym];
+        }
+      });
     }
   } catch(e){ console.warn('loadAppSettings error:', e); }
   loadCustomTickers();
