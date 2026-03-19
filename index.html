@@ -858,6 +858,40 @@ tr.sel-row td{background:var(--blu3);}
         <span style="color:var(--gry);font-size:11px;margin-left:8px;">minutes — prevents repeat alerts for same ticker</span>
       </div>
 
+      <!-- Option 1: Auto-fill order ticket -->
+      <div style="border-top:1px solid var(--bg3);margin-top:14px;padding-top:14px;">
+        <div style="font-family:var(--ff-mono);font-size:10px;color:var(--amb);letter-spacing:.5px;margin-bottom:10px;">AUTO-EXECUTION SETTINGS</div>
+        <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 180px;">AUTO-FILL ORDER</label>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" id="notif-autofill" style="width:auto;accent-color:var(--grn);" onchange="saveNotifSettings()">
+            <span style="color:var(--gry);font-size:11px;">When signal fires, fetch best contract and pre-fill Order Ticket — one click to submit</span>
+          </div>
+        </div>
+        <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 180px;">DEFAULT CONTRACTS</label>
+          <input type="number" id="notif-autoqty" value="1" min="1" style="width:60px;" oninput="saveNotifSettings()">
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">contracts to pre-fill (overridden by budget field if set)</span>
+        </div>
+
+        <!-- Option 2: Auto-submit countdown -->
+        <div class="api-row" style="align-items:center;margin-top:6px;">
+          <label style="flex:0 0 180px;">AUTO-SUBMIT</label>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="checkbox" id="notif-autosubmit" style="width:auto;accent-color:var(--red);" onchange="saveNotifSettings()">
+            <span style="color:var(--gry);font-size:11px;">Auto-submit after countdown — order fires unless you cancel</span>
+          </div>
+        </div>
+        <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 180px;">COUNTDOWN SECONDS</label>
+          <input type="number" id="notif-countdown-secs" value="10" min="5" max="60" style="width:60px;" oninput="saveNotifSettings()">
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">seconds before auto-submit fires (5–60)</span>
+        </div>
+        <div class="api-note" style="border-color:rgba(239,68,68,0.3);background:rgba(239,68,68,0.05);">
+          &#9888; Auto-Submit executes a real order at your broker when enabled in LIVE mode. Only enable if you are actively monitoring the terminal. The countdown modal has a CANCEL button. Sandbox mode is always safe.
+        </div>
+      </div>
+
     </div></div>
 
     <!-- ── STRATEGY MODE ── -->
@@ -1049,6 +1083,36 @@ tr.sel-row td{background:var(--blu3);}
 </div>
 </div>
 <div id="toast"></div>
+
+<!-- ── HIGH-CONVICTION AUTO-SUBMIT MODAL ── -->
+<div id="hc-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+  <div style="background:var(--bg1);border:2px solid var(--grn);border-radius:6px;padding:28px 32px;max-width:520px;width:90%;box-shadow:0 0 60px rgba(34,197,94,0.2);">
+    <div style="font-family:var(--ff-mono);font-size:10px;color:var(--grn);letter-spacing:2px;margin-bottom:10px;">&#9733; HIGH CONVICTION SIGNAL DETECTED</div>
+    <div id="hc-modal-ticker" style="font-size:28px;font-weight:700;color:var(--wht);margin-bottom:4px;"></div>
+    <div id="hc-modal-details" style="font-family:var(--ff-mono);font-size:11px;color:var(--gry);margin-bottom:18px;line-height:1.7;"></div>
+    <div style="background:var(--bg2);border:1px solid var(--bg3);border-radius:3px;padding:12px 14px;margin-bottom:18px;">
+      <div id="hc-modal-order" style="font-family:var(--ff-mono);font-size:12px;color:var(--ambb);line-height:1.8;"></div>
+    </div>
+    <!-- Countdown bar -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;font-family:var(--ff-mono);font-size:10px;color:var(--gry);margin-bottom:5px;">
+        <span>Submitting order in</span>
+        <span id="hc-modal-countdown" style="color:var(--grn);font-weight:700;"></span>
+      </div>
+      <div style="background:var(--bg3);border-radius:3px;height:4px;">
+        <div id="hc-modal-bar" style="background:var(--grn);height:4px;border-radius:3px;width:100%;transition:width 1s linear;"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn grn" style="flex:1;font-size:13px;padding:8px;" onclick="hcModalSubmit()">&#9650; SUBMIT NOW</button>
+      <button class="btn wrn" style="flex:1;font-size:13px;padding:8px;" onclick="hcModalCancel()">&#10005; CANCEL</button>
+      <button class="btn" style="font-size:13px;padding:8px;border-color:var(--gry2);color:var(--gry);" onclick="hcModalSkip()">SKIP TICKER</button>
+    </div>
+    <div style="font-family:var(--ff-mono);font-size:10px;color:var(--gry);margin-top:10px;text-align:center;">
+      CANCEL stops this order only &nbsp;|&nbsp; SKIP suppresses this ticker for cooldown period
+    </div>
+  </div>
+</div>
 
 <script>
 var PROVEN=['URI','C','GOOG','GS','JPM','HAL','VLO','MPC','ICE','CME','FTNT','ORCL','PANW','KO','RCL','NVDA','MSFT','AMZN','V','META','CAT','XOM'];
@@ -5069,14 +5133,18 @@ var G_NOTIF_COOLDOWNS = {}; // ticker -> timestamp of last alert
 function saveNotifSettings(){
   try{
     localStorage.setItem('rrjcar_notif', JSON.stringify({
-      browser:    eid('notif-browser')     ? eid('notif-browser').checked     : false,
-      email:      eid('notif-email')       ? eid('notif-email').checked       : false,
-      ejsService: eid('notif-ejs-service') ? eid('notif-ejs-service').value   : '',
-      ejsTemplate:eid('notif-ejs-template')? eid('notif-ejs-template').value  : '',
-      ejsPubKey:  eid('notif-ejs-pubkey')  ? eid('notif-ejs-pubkey').value    : '',
-      emailTo:    eid('notif-email-to')    ? eid('notif-email-to').value      : '',
-      minScore:   eid('notif-min-score')   ? parseInt(eid('notif-min-score').value)||90 : 90,
-      cooldown:   eid('notif-cooldown')    ? parseInt(eid('notif-cooldown').value)||60  : 60,
+      browser:       eid('notif-browser')        ? eid('notif-browser').checked        : false,
+      email:         eid('notif-email')           ? eid('notif-email').checked          : false,
+      ejsService:    eid('notif-ejs-service')     ? eid('notif-ejs-service').value      : '',
+      ejsTemplate:   eid('notif-ejs-template')    ? eid('notif-ejs-template').value     : '',
+      ejsPubKey:     eid('notif-ejs-pubkey')      ? eid('notif-ejs-pubkey').value       : '',
+      emailTo:       eid('notif-email-to')        ? eid('notif-email-to').value         : '',
+      minScore:      eid('notif-min-score')       ? parseInt(eid('notif-min-score').value)||90   : 90,
+      cooldown:      eid('notif-cooldown')        ? parseInt(eid('notif-cooldown').value)||60    : 60,
+      autoFill:      eid('notif-autofill')        ? eid('notif-autofill').checked       : false,
+      autoQty:       eid('notif-autoqty')         ? parseInt(eid('notif-autoqty').value)||1      : 1,
+      autoSubmit:    eid('notif-autosubmit')      ? eid('notif-autosubmit').checked     : false,
+      countdownSecs: eid('notif-countdown-secs')  ? parseInt(eid('notif-countdown-secs').value)||10 : 10,
     }));
   }catch(e){}
 }
@@ -5086,14 +5154,18 @@ function loadNotifSettings(){
     var raw = localStorage.getItem('rrjcar_notif');
     if(!raw) return;
     var s = JSON.parse(raw);
-    if(eid('notif-browser'))      eid('notif-browser').checked      = !!s.browser;
-    if(eid('notif-email'))        eid('notif-email').checked        = !!s.email;
-    if(eid('notif-ejs-service'))  eid('notif-ejs-service').value    = s.ejsService  || '';
-    if(eid('notif-ejs-template')) eid('notif-ejs-template').value   = s.ejsTemplate || '';
-    if(eid('notif-ejs-pubkey'))   eid('notif-ejs-pubkey').value     = s.ejsPubKey   || '';
-    if(eid('notif-email-to'))     eid('notif-email-to').value       = s.emailTo     || '';
-    if(eid('notif-min-score'))    eid('notif-min-score').value      = s.minScore    || 90;
-    if(eid('notif-cooldown'))     eid('notif-cooldown').value       = s.cooldown    || 60;
+    if(eid('notif-browser'))       eid('notif-browser').checked       = !!s.browser;
+    if(eid('notif-email'))         eid('notif-email').checked         = !!s.email;
+    if(eid('notif-ejs-service'))   eid('notif-ejs-service').value     = s.ejsService   || '';
+    if(eid('notif-ejs-template'))  eid('notif-ejs-template').value    = s.ejsTemplate  || '';
+    if(eid('notif-ejs-pubkey'))    eid('notif-ejs-pubkey').value      = s.ejsPubKey    || '';
+    if(eid('notif-email-to'))      eid('notif-email-to').value        = s.emailTo      || '';
+    if(eid('notif-min-score'))     eid('notif-min-score').value       = s.minScore     || 90;
+    if(eid('notif-cooldown'))      eid('notif-cooldown').value        = s.cooldown     || 60;
+    if(eid('notif-autofill'))      eid('notif-autofill').checked      = !!s.autoFill;
+    if(eid('notif-autoqty'))       eid('notif-autoqty').value         = s.autoQty      || 1;
+    if(eid('notif-autosubmit'))    eid('notif-autosubmit').checked    = !!s.autoSubmit;
+    if(eid('notif-countdown-secs'))eid('notif-countdown-secs').value  = s.countdownSecs|| 10;
   }catch(e){}
   updateNotifPermStatus();
 }
@@ -5204,53 +5276,163 @@ function testEmailAlert(){
   toast('Test email sending...');
 }
 
-// \u2500\u2500 HIGH CONVICTION DETECTION \u2014 runs after every scan + GEX load \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+// \u2500\u2500 AUTO-FILL & AUTO-SUBMIT ENGINE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+var G_HC_MODAL_TIMER = null;
+var G_HC_MODAL_QUEUE = [];
+var G_HC_CURRENT     = null;
+
+function autoFillHighConviction(r, optData){
+  var s = getNotifSettings();
+  var qty = s.autoQty || 1;
+  switchTab('order');
+  setTimeout(function(){
+    eid('ord-sym').value    = r.ticker;
+    eid('ord-type').value   = 'CALL';
+    eid('ord-action').value = 'BUY_TO_OPEN';
+    eid('ord-otype').value  = 'limit';
+    eid('ord-qty').value    = qty;
+    if(optData){
+      if(optData.strike) eid('ord-strike').value = optData.strike;
+      if(optData.exp)    eid('ord-exp').value    = optData.exp;
+      if(optData.mid || optData.optPr){
+        eid('ord-lmt').value = +((optData.mid||optData.optPr)||0).toFixed(2);
+      }
+      if(optData.bid && optData.ask){
+        G.liveQuote = {bid:optData.bid, ask:optData.ask, mid:((optData.bid+optData.ask)/2)};
+      }
+    }
+    var res = eid('ord-result');
+    if(res){
+      res.innerHTML = '<span style="color:var(--grn);font-size:13px;">&#9733; HIGH CONVICTION AUTO-FILL</span><br>'
+        + '<b>' + r.ticker + ' CALL</b>'
+        + (optData && optData.strike ? ' &nbsp;$' + fmt2(optData.strike) : '')
+        + (optData && optData.exp    ? ' &nbsp;Exp: ' + optData.exp : '')
+        + '<br>Score: <b>' + r.score + '/122</b> | ' + r.sector + ' | $' + fmt2(r.price)
+        + '<br><span style="color:var(--gry);font-size:10px;">Review fields then click SUBMIT ORDER</span>';
+      res.className = 'ord-result show';
+      res.style.borderColor = 'var(--grn)';
+    }
+    fetchLiveQuote();
+    toast('\u2605 ' + r.ticker + ' order pre-filled \u2014 review and submit');
+  }, 150);
+}
+
+function showAutoSubmitModal(r, optData){
+  G_HC_CURRENT = {r:r, optData:optData};
+  var s = getNotifSettings();
+  var secs = s.countdownSecs || 10;
+  var qty  = s.autoQty || 1;
+  var tickerEl = eid('hc-modal-ticker'), detailEl = eid('hc-modal-details'), orderEl = eid('hc-modal-order');
+  if(tickerEl) tickerEl.textContent = r.ticker + ' \u2605 HIGH CONVICTION';
+  if(detailEl) detailEl.innerHTML =
+    'Score: <b style="color:var(--grn);">' + r.score + '/122</b>'
+    + ' &nbsp;|&nbsp; Sector: ' + r.sector
+    + ' &nbsp;|&nbsp; Price: $' + fmt2(r.price) + '<br>'
+    + 'PROVEN \u2713 &nbsp; Analyst Revisions \u2191 \u2713 &nbsp; GEX Call Heavy \u2713';
+  if(orderEl) orderEl.innerHTML =
+    'Action: <b>BUY TO OPEN</b> &nbsp;|&nbsp; Type: <b>CALL</b><br>'
+    + (optData && optData.strike ? 'Strike: <b>$' + fmt2(optData.strike) + '</b> &nbsp;|&nbsp; ' : '')
+    + (optData && optData.exp    ? 'Expiry: <b>' + optData.exp + '</b> &nbsp;|&nbsp; ' : '')
+    + 'Qty: <b>' + qty + '</b>'
+    + (optData && (optData.mid||optData.optPr) ? ' &nbsp;|&nbsp; Limit: <b>$' + fmt2(optData.mid||optData.optPr) + '</b>' : '');
+  var modal = eid('hc-modal');
+  if(modal) modal.style.display = 'flex';
+  var remaining = secs;
+  var bar = eid('hc-modal-bar'), countEl = eid('hc-modal-countdown');
+  if(countEl) countEl.textContent = remaining + 's';
+  if(bar){ bar.style.transition = 'none'; bar.style.width = '100%'; bar.getBoundingClientRect(); bar.style.transition = 'width ' + secs + 's linear'; bar.style.width = '0%'; }
+  G_HC_MODAL_TIMER = setInterval(function(){
+    remaining--;
+    if(countEl) countEl.textContent = remaining + 's';
+    if(remaining <= 0){ clearInterval(G_HC_MODAL_TIMER); G_HC_MODAL_TIMER = null; hcModalSubmit(); }
+  }, 1000);
+}
+
+function hcModalSubmit(){
+  if(G_HC_MODAL_TIMER){ clearInterval(G_HC_MODAL_TIMER); G_HC_MODAL_TIMER = null; }
+  var modal = eid('hc-modal');
+  if(modal) modal.style.display = 'none';
+  if(!G_HC_CURRENT) return;
+  var r = G_HC_CURRENT.r, optData = G_HC_CURRENT.optData;
+  G_HC_CURRENT = null;
+  autoFillHighConviction(r, optData);
+  setTimeout(function(){
+    addAlert(r.ticker, '\u2605 Auto-submitted: BUY ' + r.ticker + ' CALL | Score ' + r.score, 'go');
+    submitOrder();
+  }, 400);
+  if(G_HC_MODAL_QUEUE.length > 0){
+    var next = G_HC_MODAL_QUEUE.shift();
+    setTimeout(function(){ showAutoSubmitModal(next.r, next.optData); }, 1000);
+  }
+}
+
+function hcModalCancel(){
+  if(G_HC_MODAL_TIMER){ clearInterval(G_HC_MODAL_TIMER); G_HC_MODAL_TIMER = null; }
+  var modal = eid('hc-modal');
+  if(modal) modal.style.display = 'none';
+  if(G_HC_CURRENT){
+    addAlert(G_HC_CURRENT.r.ticker, 'Auto-submit cancelled by user', 'warn');
+    autoFillHighConviction(G_HC_CURRENT.r, G_HC_CURRENT.optData);
+  }
+  G_HC_CURRENT = null;
+  if(G_HC_MODAL_QUEUE.length > 0){ var next = G_HC_MODAL_QUEUE.shift(); setTimeout(function(){ showAutoSubmitModal(next.r, next.optData); }, 500); }
+}
+
+function hcModalSkip(){
+  if(G_HC_MODAL_TIMER){ clearInterval(G_HC_MODAL_TIMER); G_HC_MODAL_TIMER = null; }
+  var modal = eid('hc-modal');
+  if(modal) modal.style.display = 'none';
+  if(G_HC_CURRENT){ G_NOTIF_COOLDOWNS[G_HC_CURRENT.r.ticker] = Date.now(); addAlert(G_HC_CURRENT.r.ticker, 'Skipped \u2014 suppressed for cooldown period', 'warn'); }
+  G_HC_CURRENT = null;
+  if(G_HC_MODAL_QUEUE.length > 0){ var next = G_HC_MODAL_QUEUE.shift(); setTimeout(function(){ showAutoSubmitModal(next.r, next.optData); }, 500); }
+}
+
 function checkHighConvictionSignals(results){
   var s = getNotifSettings();
-  var minScore = s.minScore || 90;
-  var cooldownMs = (s.cooldown || 60) * 60000;
+  var minScore   = s.minScore    || 90;
+  var cooldownMs = (s.cooldown   || 60) * 60000;
+  var doAutoFill   = !!s.autoFill;
+  var doAutoSubmit = !!s.autoSubmit;
   var now = Date.now();
-
   if(!results || !results.length) return;
-
   var fired = [];
   results.forEach(function(r){
     if(!r.isGo) return;
     if(r.score < minScore) return;
-
-    // Check all 4 high-conviction conditions via rule scorecard
     var passed = {};
     if(r.rules) r.rules.forEach(function(rule){ if(rule.pass) passed[rule.n] = true; });
-
-    var isProven    = passed['PROVEN ticker'];
-    var hasAnalyst  = passed['Analyst Revisions \u2191'];
-    var hasGex      = passed['GEX Call Heavy'];
-    // Score >= minScore already checked above
-
+    var isProven = passed['PROVEN ticker'], hasAnalyst = passed['Analyst Revisions \u2191'], hasGex = passed['GEX Call Heavy'];
     if(!isProven || !hasAnalyst || !hasGex) return;
-
-    // Cooldown check \u2014 don't spam the same ticker
     if(G_NOTIF_COOLDOWNS[r.ticker] && (now - G_NOTIF_COOLDOWNS[r.ticker]) < cooldownMs) return;
     G_NOTIF_COOLDOWNS[r.ticker] = now;
-
     var rulesSummary = 'PROVEN \u2713  Analyst Rev \u2191 \u2713  GEX Call Heavy \u2713  Score ' + r.score;
     var price = r.price || 0;
-
-    // Add to system alerts log
-    addAlert(r.ticker,
-      '\u2605 HIGH CONVICTION \u2014 Score ' + r.score + '/122 | ' + r.sector + ' | $' + price.toFixed(2),
-      'go');
-
-    // Fire notifications
+    addAlert(r.ticker, '\u2605 HIGH CONVICTION \u2014 Score ' + r.score + '/122 | ' + r.sector + ' | $' + price.toFixed(2), 'go');
     fireBrowserNotif(r.ticker, r.score, r.sector, price, rulesSummary);
     fireEmailAlert(r.ticker, r.score, r.sector, price, rulesSummary);
     fired.push(r.ticker);
+    if(doAutoFill || doAutoSubmit){
+      (function(signal){
+        var tradierKey = '';
+        try{ tradierKey = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
+        if(tradierKey){
+          fetchOptionContract(signal.ticker, signal.price, function(optData){
+            if(doAutoSubmit){
+              if(G_HC_CURRENT){ G_HC_MODAL_QUEUE.push({r:signal, optData:optData||null}); addAlert(signal.ticker, '\u2605 Queued \u2014 another signal is processing', 'warn'); }
+              else { autoFillHighConviction(signal, optData||null); showAutoSubmitModal(signal, optData||null); }
+            } else if(doAutoFill){ autoFillHighConviction(signal, optData||null); }
+          });
+        } else {
+          autoFillHighConviction(signal, null);
+          if(doAutoSubmit) showAutoSubmitModal(signal, null);
+        }
+      })(r);
+    }
   });
-
   if(fired.length > 0){
     toast('\u2605 High-conviction signals: ' + fired.join(', '));
-    // Switch to alerts tab to show the signals
-    if(fired.length >= 1) addAlert('SYS', fired.length + ' high-conviction signal(s) detected', 'go');
+    addAlert('SYS', fired.length + ' high-conviction signal(s) detected', 'go');
   }
 }
 
