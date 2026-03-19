@@ -3479,12 +3479,10 @@ function runGex(){
   var gexTickers = sourceTickers.slice(0, 35); // expanded for full GO coverage
   eid('gex-ts').textContent = 'Fetching 30DTE options flow for ' + gexTickers.length + ' tickers...';
 
-  // Step 1: get expirations for all tickers, find nearest 25-35 day expiry each
+  // Step 1: get expirations for all tickers, find nearest 25-50 calendar day expiry each
   var today = new Date();
-  function marketDays(d1, d2){
-    var count=0, cur=new Date(d1);
-    while(cur<d2){ cur.setDate(cur.getDate()+1); var d=cur.getDay(); if(d>=1&&d<=5)count++; }
-    return count;
+  function calendarDays(d1, d2){
+    return Math.round((d2 - d1) / 864e5); // same as fetchOptionContract \u2014 calendar days
   }
 
   var expPromises = gexTickers.map(function(t){
@@ -3495,14 +3493,14 @@ function runGex(){
     .then(function(d){
       var dates = [];
       try{ dates = d.expirations.date; if(!Array.isArray(dates)) dates=[dates]; }catch(e){}
-      // Find nearest expiry in 25-45 market days
+      // Find nearest expiry in 25-50 calendar days (matches fetchOptionContract range)
       var best = null, bestDiff = 999;
       dates.forEach(function(dt){
-        var dte = marketDays(today, new Date(dt));
-        var diff = Math.abs(dte - 30);
-        if(dte >= 20 && dte <= 50 && diff < bestDiff){ bestDiff=diff; best={date:dt, dte:dte}; }
+        var dte = calendarDays(today, new Date(dt));
+        var diff = Math.abs(dte - 35);
+        if(dte >= 20 && dte <= 70 && diff < bestDiff){ bestDiff=diff; best={date:dt, dte:dte}; }
       });
-      if(!best && dates.length) best = {date:dates[0], dte:30};
+      if(!best && dates.length) best = {date:dates[0], dte:calendarDays(today, new Date(dates[0]))};
       return {ticker:t, expiry:best};
     })
     .catch(function(){ return {ticker:t, expiry:null}; });
