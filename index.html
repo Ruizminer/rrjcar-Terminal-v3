@@ -1586,7 +1586,7 @@ var UNIVERSE=[
 var G={results:[],filtered:[],gexData:[],wlTickers:[],positions:[],alerts:[],
   sortCol:'score',sortDir:-1,selTicker:null,scanRunning:false,acctId:'',detailOpt:null,
   liveQuote:null,stepFillActive:false,stepFillCancel:false,quoteRefreshTimer:null,
-  tsActive:false,tsTimer:null,tsState:{},tsTriggered:{},tsConfig:{}};
+  tsActive:false,tsTimer:null,tsState:{},tsTriggered:{},tsConfig:{},posRefreshTimer:null};
 
 function eid(id){return document.getElementById(id);}
 function fmt2(n){return isNaN(n)?'--':(+n).toFixed(2);}
@@ -1619,6 +1619,19 @@ function switchTab(id){
   if(id==='order'){
     var sym=eid('ord-sym').value.trim();
     if(sym)fetchLiveQuote();
+  }
+  // Positions tab: start periodic 60s auto-refresh while tab is active
+  if(G.posRefreshTimer){ clearInterval(G.posRefreshTimer); G.posRefreshTimer=null; }
+  if(id==='pos'){
+    if(G.acctId) fetchPositions();
+    G.posRefreshTimer = setInterval(function(){
+      var activePane = document.querySelector('.tab-pane.active');
+      if(activePane && activePane.id === 'tab-pos' && G.acctId){
+        fetchPositions();
+      } else {
+        clearInterval(G.posRefreshTimer); G.posRefreshTimer=null;
+      }
+    }, 60000);
   }
 }
 
@@ -2352,6 +2365,8 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
   G.stepFillActive=false;
   bar.style.width='100%';
   setTimeout(function(){prog.classList.remove('show');},3000);
+  // Auto-refresh positions after step fill completes
+  setTimeout(function(){ if(G.acctId) fetchPositions(); }, 3500);
 }
 
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
@@ -2541,6 +2556,8 @@ function submitOrder(){
         res.style.borderColor='var(--blu)';
         addAlert(sym,'Order: '+side+' x'+qty+' '+occSym,'go');
         toast('Order submitted: '+data.order.id);
+        // Auto-refresh positions after broker processes the order
+        setTimeout(function(){ if(G.acctId) fetchPositions(); }, 3000);
       } else if(data.errors){
         var errs=data.errors.error;if(!Array.isArray(errs))errs=[errs];
         res.innerHTML='<span style="color:var(--wrn)">Error: '+errs.join(' | ')+
@@ -4303,7 +4320,9 @@ function executeTsClose(p,closeMode,creds){
       headers:{Authorization:'Bearer '+creds.key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
       body:body
     }).then(function(r){return r.json();}).then(function(d){
-      if(d.order&&d.order.id){tsLog(p.underlying+': MARKET close submitted \u2014 order #'+d.order.id,'triggered');}
+      if(d.order&&d.order.id){tsLog(p.underlying+': MARKET close submitted \u2014 order #'+d.order.id,'triggered');
+        setTimeout(function(){ if(G.acctId) fetchPositions(); }, 3000);
+      }
       else{var e=d.errors?d.errors.error:'unknown';tsLog(p.underlying+': close error \u2014 '+e,'warn');}
     }).catch(function(e){tsLog(p.underlying+': close error \u2014 '+e.message,'warn');});
   } else {
