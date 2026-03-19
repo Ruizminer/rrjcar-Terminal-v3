@@ -397,8 +397,10 @@ tr.sel-row td{background:var(--blu3);}
     <div style="display:flex;align-items:center;gap:6px;margin-left:8px;border-left:1px solid var(--gry2);padding-left:10px;">
       <span style="color:var(--gry);font-size:10px;letter-spacing:.5px;">SCREENER</span>
       <label style="font-size:11px;color:var(--gry);">Min Price $<input type="number" id="sc-minprice" value="20" min="1" style="width:52px;font-size:11px;" title="Only include stocks above this price"></label>
+      <label style="font-size:11px;color:var(--gry);">Max Price $<input type="number" id="sc-maxprice" placeholder="any" min="1" style="width:62px;font-size:11px;" title="Only include stocks below this price — leave blank for no limit"></label>
       <label style="font-size:11px;color:var(--gry);">Min AvgVol <input type="number" id="sc-minavgvol" value="500000" min="100000" step="100000" style="width:80px;font-size:11px;" title="Min average daily volume"></label>
       <label style="font-size:11px;color:var(--gry);">Today Vol % <input type="number" id="sc-volratio" value="10" min="0" max="200" style="width:46px;font-size:11px;" title="Today volume must be at least X% of avg volume. Lower this if scanning early in the day.">%</label>
+      <label style="font-size:11px;color:var(--gry);" title="Filter OUT tickers where the option contract costs more than this amount. Uses last scanned option price.">Max Opt $ <input type="number" id="sc-maxoptprice" placeholder="any" min="0" step="0.50" style="width:58px;font-size:11px;"></label>
     </div>
     <span id="sc-universe-label" style="font-size:10px;color:var(--gry);font-family:var(--ff-mono);margin-left:4px;"></span>
     <div style="display:flex;align-items:center;gap:6px;margin-left:auto;border-left:1px solid var(--gry2);padding-left:10px;">
@@ -632,7 +634,13 @@ tr.sel-row td{background:var(--blu3);}
             <option value="SELL">SELL</option>
           </select>
         </div>
-        <div class="ord-field"><label>QTY (CONTRACTS)</label><input id="ord-qty" type="number" value="1" min="1" onchange="updateOrdChart()" oninput="updateOrdChart()"></div>
+        <div class="ord-field"><label>QTY (CONTRACTS)</label><input id="ord-qty" type="number" value="1" min="1" onchange="updateOrdChart();clearBudget()" oninput="updateOrdChart();clearBudget()"></div>
+        <div class="ord-field">
+          <label>UP TO $ <span style="color:var(--gry);font-size:9px;" id="ord-budget-hint"></span></label>
+          <input id="ord-budget" type="number" placeholder="e.g. 500" min="0" step="50"
+            title="Set a max spend — QTY auto-calculates from budget / (limit price x 100)"
+            oninput="calcQtyFromBudget()" onchange="calcQtyFromBudget()">
+        </div>
       </div>
 
       <!-- ORDER TYPE + LIMIT -->
@@ -646,7 +654,7 @@ tr.sel-row td{background:var(--blu3);}
         </div>
         <div class="ord-field">
           <label>LIMIT PRICE <span id="lmt-hint" style="color:var(--grn);font-size:9px;"></span></label>
-          <input id="ord-lmt" type="number" placeholder="0.00" step="0.01" onchange="updateOrdChart()" oninput="updateOrdChart()">
+          <input id="ord-lmt" type="number" placeholder="0.00" step="0.01" onchange="updateOrdChart();calcQtyFromBudget()" oninput="updateOrdChart();calcQtyFromBudget()">
         </div>
         <div class="ord-field" style="flex:0.5;display:flex;align-items:flex-end;">
           <button class="btn" style="font-size:10px;padding:3px 8px;width:100%;" onclick="setLimitToBid()" title="Set limit price to current bid">SET BID</button>
@@ -2210,6 +2218,35 @@ function buildOccSym(sym,type,strike,expRaw){
   return sym;
 }
 
+function calcQtyFromBudget(){
+  var budget = parseFloat(eid('ord-budget').value) || 0;
+  if(!budget){ eid('ord-budget-hint').textContent = ''; return; }
+  var lmt = parseFloat(eid('ord-lmt').value) || 0;
+  if(!lmt){
+    // Try to use live quote mid as fallback
+    lmt = G.liveQuote ? (G.liveQuote.mid || G.liveQuote.ask || 0) : 0;
+  }
+  if(!lmt){
+    eid('ord-budget-hint').textContent = 'set limit price first';
+    return;
+  }
+  var costPerContract = lmt * 100; // 1 contract = 100 shares
+  var maxContracts = Math.floor(budget / costPerContract);
+  if(maxContracts < 1) maxContracts = 1;
+  eid('ord-qty').value = maxContracts;
+  var totalCost = (maxContracts * costPerContract).toFixed(2);
+  eid('ord-budget-hint').textContent = maxContracts + ' contracts @ $' + fmt2(totalCost);
+  updateOrdChart();
+}
+
+function clearBudget(){
+  // When user manually edits QTY, clear the budget field to avoid confusion
+  if(document.activeElement && document.activeElement.id === 'ord-qty'){
+    if(eid('ord-budget')) eid('ord-budget').value = '';
+    if(eid('ord-budget-hint')) eid('ord-budget-hint').textContent = '';
+  }
+}
+
 function previewOrder(){
   var sym=eid('ord-sym').value.trim().toUpperCase();
   if(!sym){toast('Enter a symbol first');return;}
@@ -2375,6 +2412,8 @@ function submitOrder(){
 function clearOrder(){
   ['ord-sym','ord-strike','ord-exp','ord-lmt'].forEach(function(id){eid(id).value='';});
   eid('ord-qty').value='1';
+  if(eid('ord-budget')){ eid('ord-budget').value=''; }
+  if(eid('ord-budget-hint')){ eid('ord-budget-hint').textContent=''; }
   eid('ord-result').className='ord-result';
   eid('step-fill-log').innerHTML='';
   eid('step-fill-log').classList.remove('show');
@@ -2922,6 +2961,7 @@ function setScanProgress(pct, label){
 async function fetchDynamicUniverse(key, mode){
   var host = mode === 'live' ? 'https://api.tradier.com' : 'https://sandbox.tradier.com';
   var minPrice   = parseFloat(eid('sc-minprice')   ? eid('sc-minprice').value   : 20)  || 20;
+  var maxPrice   = parseFloat(eid('sc-maxprice')   ? eid('sc-maxprice').value   : 0)   || 0; // 0 = no limit
   var minAvgVol  = parseFloat(eid('sc-minavgvol')  ? eid('sc-minavgvol').value  : 500000) || 500000;
   var volRatioPct= parseFloat(eid('sc-volratio')   ? eid('sc-volratio').value   : 30)  || 30;
 
@@ -2980,6 +3020,7 @@ async function fetchDynamicUniverse(key, mode){
     var changePct= parseFloat(q.change_percentage) || 0;
 
     if(price < minPrice) return;
+    if(maxPrice > 0 && price > maxPrice) return;
     if(avgVol < minAvgVol) return;
     if(avgVol > 0 && (todayVol / avgVol) * 100 < volRatioPct) return;
 
@@ -3207,6 +3248,7 @@ function applyFilters(){
   var sect    = eid('sc-sect').value;
   var sig     = eid('sc-sig').value;
   var minsc   = +eid('sc-minscore').value||0;
+  var maxOptPr= parseFloat(eid('sc-maxoptprice') ? eid('sc-maxoptprice').value : 0) || 0;
 
   // Indicator filter checkboxes
   var needAnalyst = getIndFilter('filt-analyst');
@@ -3232,6 +3274,8 @@ function applyFilters(){
     if(sig === 'GO' && !r.isGo) return false;
     if(sig === 'NO-GO' && r.isGo) return false;
     if(r.score < minsc) return false;
+    // Max option price filter \u2014 uses last known option price from scan or detail fetch
+    if(maxOptPr > 0 && r.opt && r.opt.optPr > 0 && r.opt.optPr > maxOptPr) return false;
 
     // Indicator filters \u2014 check rule scorecards
     if(needAnalyst || needInsider || needGex || needProven ||
@@ -3275,9 +3319,10 @@ function applyFilters(){
 
 function clearFilters(){
   // Reset dropdowns
-  if(eid('sc-sect'))     eid('sc-sect').value = '';
-  if(eid('sc-sig'))      eid('sc-sig').value  = '';
-  if(eid('sc-minscore')) eid('sc-minscore').value = '0';
+  if(eid('sc-sect'))        eid('sc-sect').value = '';
+  if(eid('sc-sig'))         eid('sc-sig').value  = '';
+  if(eid('sc-minscore'))    eid('sc-minscore').value = '0';
+  if(eid('sc-maxoptprice')) eid('sc-maxoptprice').value = '';
   // Uncheck all indicator filters
   ['filt-analyst','filt-insider','filt-gex','filt-proven',
    'filt-52hi','filt-rs','filt-macd','filt-tf','filt-ema200','filt-vol'].forEach(function(id){
