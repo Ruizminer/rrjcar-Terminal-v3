@@ -353,7 +353,7 @@ tr.sel-row td{background:var(--blu3);}
     <div class="stat-box"><div class="stat-label">NO-GO</div><div class="stat-val nogo" id="bs-nogo">--</div></div>
     <div class="stat-box"><div class="stat-label">AVG SCORE</div><div class="stat-val amb" id="bs-avg">--</div></div>
     <div class="stat-box"><div class="stat-label">TOP SECTOR</div><div class="stat-val amb" id="bs-sect">--</div></div>
-    <div class="stat-box"><div class="stat-label">SECTOR PF</div><div class="stat-val amb" id="bs-pf">--</div></div>
+    <div class="stat-box"><div class="stat-label">SECTOR GOs</div><div class="stat-val amb" id="bs-pf">--</div></div>
     <div class="stat-box"><div class="stat-label">SCANNED</div><div class="stat-val amb" id="bs-scan">--</div></div>
   </div>
   <div class="split">
@@ -2897,10 +2897,15 @@ function viewDetail(ticker,detId,emptyId){
 function renderBuySig(){
   var goList=eid('bs-go-list'),noList=eid('bs-nogo-list');
   goList.innerHTML='';noList.innerHTML='';
-  var goCount=0,noCount=0,scoreSum=0,topSect='',topPF=0;
-  Object.keys(SECTOR_PF).forEach(function(sk){if(SECTOR_PF[sk]>topPF){topPF=SECTOR_PF[sk];topSect=sk;}});
+  var goCount=0,noCount=0,scoreSum=0;
+
+  // Derive top sector from actual GO signals \u2014 matches Market Breadth
+  var sectorGoCounts={}, sectorAllCounts={};
   G.results.forEach(function(r){
-    if(r.isGo)goCount++;else noCount++;scoreSum+=r.score;
+    if(r.isGo) goCount++; else noCount++;
+    scoreSum += r.score;
+    sectorAllCounts[r.sector] = (sectorAllCounts[r.sector]||0) + 1;
+    if(r.isGo) sectorGoCounts[r.sector] = (sectorGoCounts[r.sector]||0) + 1;
     var card=document.createElement('div');
     card.className='sig-card'+(r.isGo?'':' nogo-card');card.dataset.ticker=r.ticker;
     var tk=r.ticker;
@@ -2910,11 +2915,30 @@ function renderBuySig(){
       +'<div class="sc-r"><div class="pr">$'+fmt2(r.price)+'</div>'
       +'<div class="ind">RSI '+r.ind.rsi+' | ADX '+r.ind.adx+'</div></div>';
     card.onclick=function(){viewDetail(tk,'bs-detail','bs-empty');};
-    if(r.isGo)goList.appendChild(card);else noList.appendChild(card);
+    if(r.isGo) goList.appendChild(card); else noList.appendChild(card);
   });
+
+  // Top sector = most GO signals (same logic as Market Breadth)
+  var topSect='--', topGoCount=0;
+  Object.keys(sectorGoCounts).forEach(function(s){
+    if(sectorGoCounts[s] > topGoCount){ topGoCount=sectorGoCounts[s]; topSect=s; }
+  });
+  // Show GO count / total for that sector as the PF value
+  var topSectTotal = sectorAllCounts[topSect] || 0;
+  var topSectLabel = topGoCount > 0 ? topGoCount+' / '+topSectTotal+' GO' : '--';
+
   var avg=G.results.length?+(scoreSum/G.results.length).toFixed(1):0;
-  eid('bs-go').textContent=goCount;eid('bs-nogo').textContent=noCount;eid('bs-avg').textContent=avg;
-  eid('bs-sect').textContent=topSect||'--';eid('bs-pf').textContent=topPF||'--';eid('bs-scan').textContent=G.results.length;
+  eid('bs-go').textContent=goCount;
+  eid('bs-nogo').textContent=noCount;
+  eid('bs-avg').textContent=avg;
+  eid('bs-sect').textContent=topSect;
+  eid('bs-pf').textContent=topSectLabel;
+  eid('bs-scan').textContent=G.results.length;
+
+  // Update the stat label to reflect what's actually being shown
+  var pfLabelEl = eid('bs-pf') ? eid('bs-pf').previousElementSibling : null;
+  if(pfLabelEl && pfLabelEl.className==='stat-label') pfLabelEl.textContent='SECTOR GOs';
+
   if(G.results.length>0&&!G.selTicker){viewDetail(G.results[0].ticker,'bs-detail','bs-empty');}
 }
 
