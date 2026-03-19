@@ -867,6 +867,89 @@ tr.sel-row td{background:var(--blu3);}
         Tradier: <a href="https://developer.tradier.com" target="_blank">developer.tradier.com</a>
       </div>
     </div></div>
+
+    <!-- ── TV CHART SETTINGS ── -->
+    <div class="card"><div class="card-hdr">&#9654; TRADINGVIEW CHART SETTINGS</div>
+    <div class="card-body api-form">
+      <div class="api-row">
+        <label>DEFAULT TIMEFRAME</label>
+        <select id="tv-interval" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:12px;padding:5px 8px;border-radius:3px;width:100%;" onchange="saveTvSettings()">
+          <option value="1">1 Minute</option>
+          <option value="3">3 Minute</option>
+          <option value="5" selected>5 Minute</option>
+          <option value="15">15 Minute</option>
+          <option value="30">30 Minute</option>
+          <option value="60">1 Hour</option>
+          <option value="120">2 Hour</option>
+          <option value="240">4 Hour</option>
+          <option value="D">Daily</option>
+          <option value="W">Weekly</option>
+        </select>
+      </div>
+      <div class="api-row">
+        <label>CHART STYLE</label>
+        <select id="tv-style" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:12px;padding:5px 8px;border-radius:3px;width:100%;" onchange="saveTvSettings()">
+          <option value="1" selected>Candlesticks</option>
+          <option value="0">Bars</option>
+          <option value="2">Line</option>
+          <option value="3">Area</option>
+          <option value="8">Heiken Ashi</option>
+          <option value="9">Hollow Candles</option>
+        </select>
+      </div>
+      <div class="api-row">
+        <label>TIMEZONE</label>
+        <select id="tv-timezone" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:12px;padding:5px 8px;border-radius:3px;width:100%;" onchange="saveTvSettings()">
+          <option value="America/New_York" selected>Eastern (New York)</option>
+          <option value="America/Chicago">Central (Chicago)</option>
+          <option value="America/Denver">Mountain (Denver)</option>
+          <option value="America/Los_Angeles">Pacific (Los Angeles)</option>
+          <option value="UTC">UTC</option>
+        </select>
+      </div>
+      <div class="api-row">
+        <label>INDICATORS (check all to show)</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="tv-ind-macd" checked onchange="saveTvSettings()" style="width:auto;accent-color:var(--amb);">
+            <span style="color:var(--wht);font-size:12px;">MACD</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="tv-ind-rsi" checked onchange="saveTvSettings()" style="width:auto;accent-color:var(--amb);">
+            <span style="color:var(--wht);font-size:12px;">RSI</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="tv-ind-adx" checked onchange="saveTvSettings()" style="width:auto;accent-color:var(--amb);">
+            <span style="color:var(--wht);font-size:12px;">ADX</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="tv-ind-vol" onchange="saveTvSettings()" style="width:auto;accent-color:var(--amb);">
+            <span style="color:var(--wht);font-size:12px;">Volume</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="tv-ind-bb" onchange="saveTvSettings()" style="width:auto;accent-color:var(--amb);">
+            <span style="color:var(--wht);font-size:12px;">Bollinger Bands</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="tv-ind-vwap" onchange="saveTvSettings()" style="width:auto;accent-color:var(--amb);">
+            <span style="color:var(--wht);font-size:12px;">VWAP</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="tv-ind-ema" onchange="saveTvSettings()" style="width:auto;accent-color:var(--amb);">
+            <span style="color:var(--wht);font-size:12px;">EMA (20/50/200)</span>
+          </label>
+        </div>
+      </div>
+      <div class="api-row">
+        <label>HIDE TOP TOOLBAR</label>
+        <select id="tv-hidetoolbar" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:12px;padding:5px 8px;border-radius:3px;width:100%;" onchange="saveTvSettings()">
+          <option value="false" selected>Show toolbar</option>
+          <option value="true">Hide toolbar (more chart space)</option>
+        </select>
+      </div>
+      <div class="api-note" style="margin-top:8px;">Settings saved to your browser and applied to all charts automatically. Changes take effect on next ticker click.</div>
+    </div></div>
+
   </div>
 </div>
 </div>
@@ -2596,13 +2679,71 @@ function scoreIt(ticker, ind, opt){
   };
 }
 
+function getTvSettings(){
+  try{ var raw=localStorage.getItem('rrjcar_tv_settings'); if(raw) return JSON.parse(raw); }catch(e){}
+  return {interval:'5',style:'1',timezone:'America/New_York',hideToolbar:false,
+    indicators:{macd:true,rsi:true,adx:true,vol:false,bb:false,vwap:false,ema:false}};
+}
+
+function saveTvSettings(){
+  var settings={
+    interval:    eid('tv-interval')     ? eid('tv-interval').value     : '5',
+    style:       eid('tv-style')        ? eid('tv-style').value        : '1',
+    timezone:    eid('tv-timezone')     ? eid('tv-timezone').value     : 'America/New_York',
+    hideToolbar: eid('tv-hidetoolbar')  ? eid('tv-hidetoolbar').value==='true' : false,
+    indicators:{
+      macd: eid('tv-ind-macd') ? eid('tv-ind-macd').checked : true,
+      rsi:  eid('tv-ind-rsi')  ? eid('tv-ind-rsi').checked  : true,
+      adx:  eid('tv-ind-adx')  ? eid('tv-ind-adx').checked  : true,
+      vol:  eid('tv-ind-vol')  ? eid('tv-ind-vol').checked   : false,
+      bb:   eid('tv-ind-bb')   ? eid('tv-ind-bb').checked    : false,
+      vwap: eid('tv-ind-vwap') ? eid('tv-ind-vwap').checked  : false,
+      ema:  eid('tv-ind-ema')  ? eid('tv-ind-ema').checked   : false,
+    }
+  };
+  try{ localStorage.setItem('rrjcar_tv_settings', JSON.stringify(settings)); }catch(e){}
+  toast('Chart settings saved');
+}
+
+function loadTvSettings(){
+  var s=getTvSettings();
+  if(eid('tv-interval'))    eid('tv-interval').value    = s.interval    || '5';
+  if(eid('tv-style'))       eid('tv-style').value       = s.style       || '1';
+  if(eid('tv-timezone'))    eid('tv-timezone').value    = s.timezone    || 'America/New_York';
+  if(eid('tv-hidetoolbar')) eid('tv-hidetoolbar').value = s.hideToolbar ? 'true' : 'false';
+  var ind=s.indicators||{};
+  if(eid('tv-ind-macd')) eid('tv-ind-macd').checked = ind.macd!==false;
+  if(eid('tv-ind-rsi'))  eid('tv-ind-rsi').checked  = ind.rsi !==false;
+  if(eid('tv-ind-adx'))  eid('tv-ind-adx').checked  = ind.adx !==false;
+  if(eid('tv-ind-vol'))  eid('tv-ind-vol').checked   = !!ind.vol;
+  if(eid('tv-ind-bb'))   eid('tv-ind-bb').checked    = !!ind.bb;
+  if(eid('tv-ind-vwap')) eid('tv-ind-vwap').checked  = !!ind.vwap;
+  if(eid('tv-ind-ema'))  eid('tv-ind-ema').checked   = !!ind.ema;
+}
+
 function renderTV(cid,ticker){
   var c=eid(cid);if(!c)return;
   c.innerHTML='';
   var wrap=document.createElement('div');wrap.style.cssText='width:100%;height:100%;';c.appendChild(wrap);
-  var s=document.createElement('script');s.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';s.async=true;
-  s.innerHTML=JSON.stringify({autosize:true,symbol:ticker,interval:'5',timezone:'America/New_York',theme:'dark',style:'1',locale:'en',backgroundColor:'#0d1117',gridColor:'#21262d',hide_top_toolbar:false,save_image:false,withdateranges:true,studies:['MACD@tv-screener','RSI@tv-screener','ADX@tv-screener']});
-  wrap.appendChild(s);
+  var s=getTvSettings();
+  var studies=[];
+  if(s.indicators){
+    if(s.indicators.macd) studies.push('MACD@tv-screener');
+    if(s.indicators.rsi)  studies.push('RSI@tv-screener');
+    if(s.indicators.adx)  studies.push('ADX@tv-screener');
+    if(s.indicators.vol)  studies.push('Volume@tv-screener');
+    if(s.indicators.bb)   studies.push('BB@tv-screener');
+    if(s.indicators.vwap) studies.push('VWAP@tv-screener');
+    if(s.indicators.ema)  studies.push('MAExp@tv-screener');
+  }
+  if(!studies.length) studies=['MACD@tv-screener','RSI@tv-screener','ADX@tv-screener'];
+  var cfg={autosize:true,symbol:ticker,interval:s.interval||'5',style:s.style||'1',
+    timezone:s.timezone||'America/New_York',theme:'dark',locale:'en',
+    backgroundColor:'#0d1117',gridColor:'#21262d',
+    hide_top_toolbar:s.hideToolbar||false,save_image:false,withdateranges:true,studies:studies};
+  var sc=document.createElement('script');
+  sc.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  sc.async=true;sc.innerHTML=JSON.stringify(cfg);wrap.appendChild(sc);
 }
 
 function buildDetail(r,detId,emptyId){
@@ -5000,6 +5141,7 @@ function init(){
   loadKeys();
   loadWL();
   loadAppSettings();
+  loadTvSettings();
   showVersionBanner();
   updateClock();
   updateHeaderQuotes();
