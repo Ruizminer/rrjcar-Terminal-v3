@@ -790,7 +790,94 @@ tr.sel-row td{background:var(--blu3);}
 </div>
 <div class="tab-pane" id="tab-al">
   <div class="page-wrap">
-    <div class="card"><div class="card-hdr">SYSTEM ALERTS</div><div id="alerts-list"></div></div>
+
+    <!-- ── NOTIFICATION SETTINGS ── -->
+    <div class="card"><div class="card-hdr">&#9650; HIGH-CONVICTION ALERT SETTINGS</div>
+    <div class="card-body api-form">
+      <div style="font-family:var(--ff-mono);font-size:10px;color:var(--gry);margin-bottom:14px;line-height:1.7;">
+        Fires when a ticker matches: <span style="color:var(--grn);">PROVEN + Score &ge;90 + Analyst Revisions &uarr; + GEX Call Heavy</span><br>
+        Alert triggers on scan completion and auto-scan (if enabled). Browser must be open.
+      </div>
+
+      <!-- Browser notifications -->
+      <div class="api-row" style="align-items:center;">
+        <label style="flex:0 0 180px;">BROWSER NOTIFICATIONS</label>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <input type="checkbox" id="notif-browser" style="width:auto;accent-color:var(--grn);" onchange="saveNotifSettings()">
+          <span style="color:var(--gry);font-size:11px;">Show desktop/mobile popup when signal fires</span>
+          <button class="btn" style="font-size:10px;padding:2px 10px;" onclick="requestNotifPermission()">ENABLE</button>
+          <span id="notif-perm-status" style="font-size:10px;font-family:var(--ff-mono);color:var(--gry);"></span>
+        </div>
+      </div>
+
+      <!-- Email via EmailJS -->
+      <div class="api-row" style="align-items:center;">
+        <label style="flex:0 0 180px;">EMAIL ALERTS</label>
+        <input type="checkbox" id="notif-email" style="width:auto;accent-color:var(--grn);" onchange="saveNotifSettings()">
+        <span style="color:var(--gry);font-size:11px;margin-left:8px;">Send email via EmailJS (free, 200/mo)</span>
+      </div>
+      <div class="api-row" style="flex-wrap:wrap;gap:8px;">
+        <div class="ord-field">
+          <label>EMAILJS SERVICE ID</label>
+          <input id="notif-ejs-service" placeholder="service_xxxxxxx" oninput="saveNotifSettings()">
+        </div>
+        <div class="ord-field">
+          <label>EMAILJS TEMPLATE ID</label>
+          <input id="notif-ejs-template" placeholder="template_xxxxxxx" oninput="saveNotifSettings()">
+        </div>
+        <div class="ord-field">
+          <label>EMAILJS PUBLIC KEY</label>
+          <input id="notif-ejs-pubkey" placeholder="xxxxxxxxxxxxxx" oninput="saveNotifSettings()">
+        </div>
+      </div>
+      <div class="api-row">
+        <div class="ord-field">
+          <label>ALERT EMAIL ADDRESS</label>
+          <input id="notif-email-to" type="email" placeholder="you@example.com" oninput="saveNotifSettings()">
+        </div>
+        <div class="ord-field" style="flex:0.5;display:flex;align-items:flex-end;">
+          <button class="btn blu" style="font-size:10px;padding:3px 10px;" onclick="testEmailAlert()">SEND TEST</button>
+        </div>
+      </div>
+      <div class="api-note">
+        EmailJS is free (200 emails/mo). Setup: <a href="https://www.emailjs.com" target="_blank" style="color:var(--blub);">emailjs.com</a> &rarr; create account &rarr; add Email Service &rarr; create Template &rarr; copy IDs above.<br>
+        Template variables available: <span style="color:var(--ambb);">{{ticker}}</span>, <span style="color:var(--ambb);">{{score}}</span>, <span style="color:var(--ambb);">{{sector}}</span>, <span style="color:var(--ambb);">{{price}}</span>, <span style="color:var(--ambb);">{{signal_time}}</span>, <span style="color:var(--ambb);">{{rules_passed}}</span>
+      </div>
+
+      <!-- Alert threshold -->
+      <div class="api-row" style="align-items:center;margin-top:8px;">
+        <label style="flex:0 0 180px;">MIN SCORE THRESHOLD</label>
+        <input type="number" id="notif-min-score" value="90" min="72" max="122" style="width:70px;" oninput="saveNotifSettings()">
+        <span style="color:var(--gry);font-size:11px;margin-left:8px;">/ 122 — GO signals above this score trigger alerts</span>
+      </div>
+
+      <!-- Cooldown -->
+      <div class="api-row" style="align-items:center;">
+        <label style="flex:0 0 180px;">ALERT COOLDOWN</label>
+        <input type="number" id="notif-cooldown" value="60" min="5" style="width:70px;" oninput="saveNotifSettings()">
+        <span style="color:var(--gry);font-size:11px;margin-left:8px;">minutes — prevents repeat alerts for same ticker</span>
+      </div>
+
+    </div></div>
+
+    <!-- ── STRATEGY MODE ── -->
+    <div class="card"><div class="card-hdr">&#9650; STRATEGY MODE — QUICK FILTERS</div>
+    <div class="card-body" style="padding:12px 14px;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+        <button class="btn blu" style="font-size:11px;" onclick="applyStrategyMode('highConviction')">&#9733; HIGH CONVICTION</button>
+        <button class="btn" style="font-size:11px;" onclick="applyStrategyMode('breakout')">&#9650; BREAKOUT</button>
+        <button class="btn" style="font-size:11px;" onclick="applyStrategyMode('momentum')">&#9654; MOMENTUM</button>
+        <button class="btn" style="font-size:11px;" onclick="applyStrategyMode('institutional')">&#9670; INSTITUTIONAL</button>
+        <button class="btn" style="font-size:11px;border-color:var(--gry2);color:var(--gry);" onclick="applyStrategyMode('clear')">CLEAR ALL</button>
+      </div>
+      <div id="strategy-desc" style="font-family:var(--ff-mono);font-size:10px;color:var(--gry);line-height:1.7;min-height:32px;"></div>
+    </div></div>
+
+    <!-- ── SYSTEM ALERTS LOG ── -->
+    <div class="card"><div class="card-hdr">SYSTEM ALERTS LOG <button class="btn" style="font-size:10px;padding:2px 8px;float:right;" onclick="G.alerts=[];renderAlerts();">CLEAR</button></div>
+    <div id="alerts-list"></div>
+    </div>
+
   </div>
 </div>
 <div class="tab-pane" id="tab-ex">
@@ -3251,6 +3338,8 @@ function finishScan(){
   addAlert('SYS', 'Scan complete: ' + G.results.length + ' tickers | ' + goCount + ' GO', 'go');
   toast('Scan complete \u2014 ' + G.results.length + ' tickers');
   if(G.results.length > 0 && !G.selTicker){ viewDetail(G.results[0].ticker, 'bs-detail', 'bs-empty'); }
+  // Check for high-conviction signals after scan
+  checkHighConvictionSignals(G.results);
   // Refresh market breadth with new scan data
   setTimeout(runMarketBreadth, 500);
 
@@ -3614,6 +3703,8 @@ function runGex(){
       G.filtered = G.results.slice();
       renderBuySig(); renderScan();
       toast('GEX loaded \u2014 scores updated');
+      // Re-check high-conviction signals now that GEX bonus is applied
+      checkHighConvictionSignals(G.results);
     });
   })
   .catch(function(e){
@@ -4969,6 +5060,270 @@ async function runMarketBreadth(){
 
 function renderBreadth(){ runMarketBreadth(); }
 
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+//  NOTIFICATION ENGINE
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+var G_NOTIF_COOLDOWNS = {}; // ticker -> timestamp of last alert
+
+function saveNotifSettings(){
+  try{
+    localStorage.setItem('rrjcar_notif', JSON.stringify({
+      browser:    eid('notif-browser')     ? eid('notif-browser').checked     : false,
+      email:      eid('notif-email')       ? eid('notif-email').checked       : false,
+      ejsService: eid('notif-ejs-service') ? eid('notif-ejs-service').value   : '',
+      ejsTemplate:eid('notif-ejs-template')? eid('notif-ejs-template').value  : '',
+      ejsPubKey:  eid('notif-ejs-pubkey')  ? eid('notif-ejs-pubkey').value    : '',
+      emailTo:    eid('notif-email-to')    ? eid('notif-email-to').value      : '',
+      minScore:   eid('notif-min-score')   ? parseInt(eid('notif-min-score').value)||90 : 90,
+      cooldown:   eid('notif-cooldown')    ? parseInt(eid('notif-cooldown').value)||60  : 60,
+    }));
+  }catch(e){}
+}
+
+function loadNotifSettings(){
+  try{
+    var raw = localStorage.getItem('rrjcar_notif');
+    if(!raw) return;
+    var s = JSON.parse(raw);
+    if(eid('notif-browser'))      eid('notif-browser').checked      = !!s.browser;
+    if(eid('notif-email'))        eid('notif-email').checked        = !!s.email;
+    if(eid('notif-ejs-service'))  eid('notif-ejs-service').value    = s.ejsService  || '';
+    if(eid('notif-ejs-template')) eid('notif-ejs-template').value   = s.ejsTemplate || '';
+    if(eid('notif-ejs-pubkey'))   eid('notif-ejs-pubkey').value     = s.ejsPubKey   || '';
+    if(eid('notif-email-to'))     eid('notif-email-to').value       = s.emailTo     || '';
+    if(eid('notif-min-score'))    eid('notif-min-score').value      = s.minScore    || 90;
+    if(eid('notif-cooldown'))     eid('notif-cooldown').value       = s.cooldown    || 60;
+  }catch(e){}
+  updateNotifPermStatus();
+}
+
+function getNotifSettings(){
+  try{
+    var raw = localStorage.getItem('rrjcar_notif');
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return {browser:false, email:false, minScore:90, cooldown:60};
+}
+
+function updateNotifPermStatus(){
+  var el = eid('notif-perm-status');
+  if(!el) return;
+  if(!('Notification' in window)){
+    el.textContent = 'Not supported in this browser';
+    el.style.color = 'var(--gry)';
+  } else if(Notification.permission === 'granted'){
+    el.textContent = '\u2713 Enabled';
+    el.style.color = 'var(--grn)';
+  } else if(Notification.permission === 'denied'){
+    el.textContent = '\u2717 Blocked \u2014 enable in browser settings';
+    el.style.color = 'var(--red)';
+  } else {
+    el.textContent = 'Click ENABLE to allow notifications';
+    el.style.color = 'var(--amb)';
+  }
+}
+
+function requestNotifPermission(){
+  if(!('Notification' in window)){ toast('Browser notifications not supported'); return; }
+  Notification.requestPermission().then(function(perm){
+    updateNotifPermStatus();
+    if(perm === 'granted'){
+      toast('Browser notifications enabled');
+      if(eid('notif-browser')) eid('notif-browser').checked = true;
+      saveNotifSettings();
+      // Send test notification
+      new Notification('RRJCAR Terminal', {
+        body: 'Notifications enabled \u2014 high-conviction signals will appear here',
+        icon: 'https://ruizminer.github.io/rrjcar-Terminal-v3/favicon.ico'
+      });
+    } else {
+      toast('Notification permission denied');
+    }
+  });
+}
+
+function fireBrowserNotif(ticker, score, sector, price, rulesSummary){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  var s = getNotifSettings();
+  if(!s.browser) return;
+  var n = new Notification('\u2605 HIGH CONVICTION: ' + ticker, {
+    body: 'Score: ' + score + '/122 | ' + sector + ' | $' + price.toFixed(2) + '\n' + rulesSummary,
+    icon: 'https://ruizminer.github.io/rrjcar-Terminal-v3/favicon.ico',
+    tag:  'rrjcar-' + ticker, // replaces previous notification for same ticker
+    requireInteraction: true  // stays until user dismisses
+  });
+  n.onclick = function(){
+    window.focus();
+    switchTab('bs');
+    n.close();
+  };
+}
+
+function fireEmailAlert(ticker, score, sector, price, rulesSummary){
+  var s = getNotifSettings();
+  if(!s.email || !s.ejsService || !s.ejsTemplate || !s.ejsPubKey || !s.emailTo) return;
+
+  // Load EmailJS SDK dynamically if not already loaded
+  if(typeof emailjs === 'undefined'){
+    var script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js';
+    script.onload = function(){
+      emailjs.init(s.ejsPubKey);
+      sendEmailJsAlert(s, ticker, score, sector, price, rulesSummary);
+    };
+    document.head.appendChild(script);
+  } else {
+    sendEmailJsAlert(s, ticker, score, sector, price, rulesSummary);
+  }
+}
+
+function sendEmailJsAlert(s, ticker, score, sector, price, rulesSummary){
+  emailjs.send(s.ejsService, s.ejsTemplate, {
+    ticker:       ticker,
+    score:        score + '/122',
+    sector:       sector,
+    price:        '$' + price.toFixed(2),
+    signal_time:  new Date().toLocaleString(),
+    rules_passed: rulesSummary,
+    to_email:     s.emailTo
+  }).then(function(){
+    addAlert('NOTIF', 'Email sent for ' + ticker, 'go');
+  }).catch(function(err){
+    addAlert('NOTIF', 'Email failed: ' + JSON.stringify(err), 'warn');
+  });
+}
+
+function testEmailAlert(){
+  var s = getNotifSettings();
+  if(!s.ejsService || !s.ejsTemplate || !s.ejsPubKey || !s.emailTo){
+    toast('Fill in all EmailJS fields first');
+    return;
+  }
+  fireEmailAlert('TEST', 999, 'Technology', 123.45, 'PROVEN + Score 90+ + Analyst Revisions \u2191 + GEX Call Heavy');
+  toast('Test email sending...');
+}
+
+// \u2500\u2500 HIGH CONVICTION DETECTION \u2014 runs after every scan + GEX load \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function checkHighConvictionSignals(results){
+  var s = getNotifSettings();
+  var minScore = s.minScore || 90;
+  var cooldownMs = (s.cooldown || 60) * 60000;
+  var now = Date.now();
+
+  if(!results || !results.length) return;
+
+  var fired = [];
+  results.forEach(function(r){
+    if(!r.isGo) return;
+    if(r.score < minScore) return;
+
+    // Check all 4 high-conviction conditions via rule scorecard
+    var passed = {};
+    if(r.rules) r.rules.forEach(function(rule){ if(rule.pass) passed[rule.n] = true; });
+
+    var isProven    = passed['PROVEN ticker'];
+    var hasAnalyst  = passed['Analyst Revisions \u2191'];
+    var hasGex      = passed['GEX Call Heavy'];
+    // Score >= minScore already checked above
+
+    if(!isProven || !hasAnalyst || !hasGex) return;
+
+    // Cooldown check \u2014 don't spam the same ticker
+    if(G_NOTIF_COOLDOWNS[r.ticker] && (now - G_NOTIF_COOLDOWNS[r.ticker]) < cooldownMs) return;
+    G_NOTIF_COOLDOWNS[r.ticker] = now;
+
+    var rulesSummary = 'PROVEN \u2713  Analyst Rev \u2191 \u2713  GEX Call Heavy \u2713  Score ' + r.score;
+    var price = r.price || 0;
+
+    // Add to system alerts log
+    addAlert(r.ticker,
+      '\u2605 HIGH CONVICTION \u2014 Score ' + r.score + '/122 | ' + r.sector + ' | $' + price.toFixed(2),
+      'go');
+
+    // Fire notifications
+    fireBrowserNotif(r.ticker, r.score, r.sector, price, rulesSummary);
+    fireEmailAlert(r.ticker, r.score, r.sector, price, rulesSummary);
+    fired.push(r.ticker);
+  });
+
+  if(fired.length > 0){
+    toast('\u2605 High-conviction signals: ' + fired.join(', '));
+    // Switch to alerts tab to show the signals
+    if(fired.length >= 1) addAlert('SYS', fired.length + ' high-conviction signal(s) detected', 'go');
+  }
+}
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+//  STRATEGY MODE \u2014 pre-configured filter combinations
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+var STRATEGY_MODES = {
+  highConviction: {
+    label: '\u2605 HIGH CONVICTION',
+    desc: 'PROVEN ticker + Score \u226590 + Analyst Revisions \u2191 + GEX Call Heavy \u2014 the rarest, highest-quality setups',
+    filters: {sig:'GO', minScore:90, analyst:true, proven:true, gex:true}
+  },
+  breakout: {
+    label: '\u25b2 BREAKOUT',
+    desc: 'Near 52-week high + RS > SPY + MACD + + TF Aligned 2/3 \u2014 stocks breaking out with market leadership',
+    filters: {sig:'GO', minScore:72, hi52:true, rs:true, macd:true, tf:true}
+  },
+  momentum: {
+    label: '\u25b6 MOMENTUM',
+    desc: 'MACD + + Above EMA200 + Vol > Avg + RS > SPY \u2014 strong trending stocks with volume confirmation',
+    filters: {sig:'GO', minScore:72, macd:true, ema200:true, vol:true, rs:true}
+  },
+  institutional: {
+    label: '\u25c6 INSTITUTIONAL',
+    desc: 'Analyst Revisions \u2191 + Insider Buying + PROVEN ticker \u2014 smart money signals active',
+    filters: {sig:'GO', minScore:72, analyst:true, insider:true, proven:true}
+  }
+};
+
+function applyStrategyMode(mode){
+  if(mode === 'clear'){
+    clearFilters();
+    switchTab('sc');
+    if(eid('strategy-desc')) eid('strategy-desc').textContent = '';
+    return;
+  }
+
+  var sm = STRATEGY_MODES[mode];
+  if(!sm) return;
+
+  // Apply signal and score filters
+  if(eid('sc-sig'))      eid('sc-sig').value = sm.filters.sig || 'GO';
+  if(eid('sc-minscore')) eid('sc-minscore').value = sm.filters.minScore || 72;
+
+  // Clear all indicator checkboxes first
+  ['filt-analyst','filt-insider','filt-gex','filt-proven',
+   'filt-52hi','filt-rs','filt-macd','filt-tf','filt-ema200','filt-vol'].forEach(function(id){
+    var el = eid(id); if(el) el.checked = false;
+  });
+
+  // Apply strategy-specific checkboxes
+  var f = sm.filters;
+  if(f.analyst  && eid('filt-analyst'))  eid('filt-analyst').checked  = true;
+  if(f.insider  && eid('filt-insider'))  eid('filt-insider').checked  = true;
+  if(f.gex      && eid('filt-gex'))      eid('filt-gex').checked      = true;
+  if(f.proven   && eid('filt-proven'))   eid('filt-proven').checked   = true;
+  if(f.hi52     && eid('filt-52hi'))     eid('filt-52hi').checked     = true;
+  if(f.rs       && eid('filt-rs'))       eid('filt-rs').checked       = true;
+  if(f.macd     && eid('filt-macd'))     eid('filt-macd').checked     = true;
+  if(f.tf       && eid('filt-tf'))       eid('filt-tf').checked       = true;
+  if(f.ema200   && eid('filt-ema200'))   eid('filt-ema200').checked   = true;
+  if(f.vol      && eid('filt-vol'))      eid('filt-vol').checked      = true;
+
+  // Show description in alerts tab
+  if(eid('strategy-desc')) eid('strategy-desc').textContent = sm.desc;
+
+  // Apply filters and switch to Full Scanner to see results
+  applyFilters();
+  switchTab('sc');
+  toast(sm.label + ' mode applied');
+}
+
 function renderAlerts(){
   var list=eid('alerts-list');
   if(!G.alerts.length){list.innerHTML='<div style="padding:12px;color:var(--gry);font-size:11px;">No alerts yet</div>';return;}
@@ -5209,6 +5564,7 @@ function init(){
   loadWL();
   loadAppSettings();
   loadTvSettings();
+  loadNotifSettings();
   showVersionBanner();
   updateClock();
   updateHeaderQuotes();
