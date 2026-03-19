@@ -2696,9 +2696,7 @@ function saveFmpCache(ticker, data){
 }
 
 async function fetchFmpData(ticker){
-  // Check memory cache first
   if(G_FMP_CACHE[ticker]) return G_FMP_CACHE[ticker];
-  // Check localStorage cache
   var cached = loadFmpCache(ticker);
   if(cached){ G_FMP_CACHE[ticker] = cached; return cached; }
 
@@ -2707,53 +2705,41 @@ async function fetchFmpData(ticker){
   if(!fmpKey && typeof FMP_KEY_DEFAULT !== 'undefined') fmpKey = FMP_KEY_DEFAULT;
   if(!fmpKey) return null;
 
-  var base = 'https://financialmodelingprep.com/api/v3';
+  // FMP migrated to /stable/ endpoints Aug 31 2025 \u2014 v3 legacy endpoints blocked for new keys
+  var base = 'https://financialmodelingprep.com/stable';
   try{
-    // Fetch analyst estimates (revisions) and insider transactions in parallel
-    var [estRes, insRes] = await Promise.all([
-      fetch(base+'/analyst-estimates/'+ticker+'?limit=2&apikey='+fmpKey).then(function(r){return r.json();}),
-      fetch(base+'/insider-trading?symbol='+ticker+'&limit=20&apikey='+fmpKey).then(function(r){return r.json();})
+    // Fetch analyst estimates + grades in parallel
+    var results = await Promise.all([
+      fetch(base+'/analyst-estimates?symbol='+ticker+'&period=annual&limit=5&apikey='+fmpKey).then(function(r){return r.json();}),
+      fetch(base+'/grades?symbol='+ticker+'&limit=20&apikey='+fmpKey).then(function(r){return r.json();})
     ]);
+    var estRes = results[0], gradesRes = results[1];
 
-    // Analyst revisions: count how many estimates were revised UP in last 30 days
+    // Revision detection: use numAnalystsEps from estimate record (active analyst count)
     var revisionsUp = 0;
     var thirtyDaysAgo = Date.now() - (30 * 86400000);
-    if(Array.isArray(estRes)){
-      estRes.forEach(function(est){
-        var estDate = new Date(est.date).getTime();
-        if(estDate >= thirtyDaysAgo){
-          // Compare EPS estimate to prior \u2014 if higher, it's a revision up
-          if(est.estimatedEpsAvg && est.estimatedEpsAvgLast){
-            if(est.estimatedEpsAvg > est.estimatedEpsAvgLast) revisionsUp++;
-          } else if(est.numberAnalystEstimatedEps && est.numberAnalystEstimatedEps >= 2){
-            revisionsUp++; // analysts covering = proxy for active coverage
-          }
-        }
-      });
+    if(Array.isArray(estRes) && estRes.length > 0){
+      var numAnalysts = estRes[0].numAnalystsEps || estRes[0].numAnalystsRevenue || 0;
+      if(numAnalysts >= 2) revisionsUp = Math.min(numAnalysts, 5);
     }
 
-    // Insider buying: non-CEO buys >= $100K in last 90 days, no selling cluster
-    var insiderBuyValue = 0;
-    var insiderSellValue = 0;
-    var ninetyDaysAgo = Date.now() - (90 * 86400000);
-    if(Array.isArray(insRes)){
-      insRes.forEach(function(tx){
-        var txDate = new Date(tx.transactionDate).getTime();
-        if(txDate < ninetyDaysAgo) return;
-        var title = (tx.reportingName || '').toUpperCase();
-        var isCeo = title.includes('CEO') || title.includes('CHIEF EXECUTIVE');
-        var val = Math.abs((tx.securitiesTransacted || 0) * (tx.price || 0));
-        if(tx.transactionType === 'P-Purchase' && !isCeo) insiderBuyValue += val;
-        if(tx.transactionType === 'S-Sale') insiderSellValue += val;
+    // Analyst upgrades in last 30 days = direct revision-up signal
+    var upgradesLast30 = 0;
+    if(Array.isArray(gradesRes)){
+      gradesRes.forEach(function(g){
+        if(new Date(g.date).getTime() >= thirtyDaysAgo && g.action === 'upgrade') upgradesLast30++;
       });
     }
+    if(upgradesLast30 > 0) revisionsUp = Math.max(revisionsUp, upgradesLast30 * 2);
 
     var data = {
-      revisionsUp: revisionsUp,
-      insiderBuyValue: insiderBuyValue,
-      insiderSellValue: insiderSellValue,
+      revisionsUp:        revisionsUp,
+      upgradesLast30:     upgradesLast30,
+      numAnalysts:        (estRes && estRes[0]) ? (estRes[0].numAnalystsEps || 0) : 0,
+      insiderBuyValue:    0,
+      insiderSellValue:   0,
       analystRevisionsOk: revisionsUp >= 2,
-      insiderBuyingOk: insiderBuyValue >= 100000 && insiderSellValue < insiderBuyValue * 2
+      insiderBuyingOk:    false  // requires FMP Premium plan \u2014 empty on Starter
     };
     saveFmpCache(ticker, data);
     return data;
@@ -2823,11 +2809,9 @@ function scoreIt(ticker, ind, opt){
   var insiderOk = fmp ? fmp.insiderBuyingOk    : false;
 
   var analystVal = fmp
-    ? (fmp.revisionsUp >= 2 ? fmp.revisionsUp+' revisions up' : fmp.revisionsUp+' (need \u22652)')
+    ? (fmp.revisionsUp >= 2 ? fmp.revisionsUp+' analysts / '+fmp.upgradesLast30+' upgrades' : fmp.revisionsUp+' analysts (need \u22652)')
     : 'No FMP key';
-  var insiderVal = fmp
-    ? (insiderOk ? '$'+Math.round(fmp.insiderBuyValue/1000)+'K buys' : 'No qualifying buys')
-    : 'No FMP key';
+  var insiderVal = fmp ? (insiderOk ? '$'+Math.round(fmp.insiderBuyValue/1000)+'K buys' : 'Requires Premium plan') : 'No FMP key';
 
   var fmpChecks = [
     {ok:analystOk, n:'Analyst Revisions \u2191', val:analystVal, pts:12},
@@ -5070,19 +5054,29 @@ async function runMarketBreadth(){
   // \u2500\u2500 FMP Sector performance \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   if(fmpKey){
     try{
-      var sectRes=await fetch('https://financialmodelingprep.com/api/v3/sectors-performance?apikey='+fmpKey)
-        .then(function(r){return r.json();});
+      // FMP stable sector performance \u2014 try both endpoints, fall back to scan-derived
+      var sectRes = await fetch('https://financialmodelingprep.com/stable/market-sector-performance?apikey='+fmpKey)
+        .then(function(r){return r.json();}).catch(function(){return [];});
+      // If empty (Starter plan limitation), try historical endpoint with today's date
+      if(!Array.isArray(sectRes)||!sectRes.length){
+        var today=new Date().toISOString().split('T')[0];
+        sectRes = await fetch('https://financialmodelingprep.com/stable/historical-market-sector-performance?from='+today+'&to='+today+'&apikey='+fmpKey)
+          .then(function(r){return r.json();}).catch(function(){return [];});
+      }
       if(Array.isArray(sectRes)&&sectRes.length>0){
         breadthHtml+='<div style="font-family:var(--ff-mono);font-size:10px;color:var(--amb);letter-spacing:1px;margin-top:14px;margin-bottom:6px;">SECTOR PERFORMANCE TODAY \u2014 FMP</div>';
-        sectRes.sort(function(a,b){return parseFloat(b.changesPercentage)-parseFloat(a.changesPercentage);});
+        sectRes.sort(function(a,b){return parseFloat(b.changesPercentage||b.change||0)-parseFloat(a.changesPercentage||a.change||0);});
         sectRes.forEach(function(s){
-          var pct=parseFloat(s.changesPercentage)||0;
+          var pct=parseFloat(s.changesPercentage||s.change)||0;
           var cls=pct>=0?'pnl-pos':'pnl-neg';
           breadthHtml+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--bg3);">'
-            +'<span style="font-size:11px;color:var(--gry);">'+s.sector+'</span>'
+            +'<span style="font-size:11px;color:var(--gry);">'+(s.sector||s.sectorName||'--')+'</span>'
             +'<span class="'+cls+'" style="font-family:var(--ff-mono);font-size:11px;">'+(pct>=0?'+':'')+pct.toFixed(2)+'%</span>'
             +'</div>';
         });
+      } else {
+        // Starter plan \u2014 sector perf endpoint may require Premium
+        breadthHtml+='<div style="font-family:var(--ff-mono);font-size:10px;color:var(--gry);margin-top:10px;">FMP sector performance requires Premium plan \u2014 sector data derived from scan results above</div>';
       }
     }catch(e){}
   }
@@ -5810,4 +5804,5 @@ function init(){
 window.addEventListener('DOMContentLoaded',init);
 </script>
 </body>
+
 </html>
