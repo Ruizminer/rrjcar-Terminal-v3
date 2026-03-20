@@ -4341,16 +4341,32 @@ async function runTsCheck(){
       if(st.status==='armed')tsLog(p.underlying+': new peak +'+fmt2(ret)+'%','armed');
     }
 
-    // Disable guards
-    var disabledByRet=disRet&&ret<disRet;
-    var pullFromHigh=st.peakPct>0?((st.peakPct-ret)/st.peakPct*100):0;
-    var disabledByPull=disPull&&pullFromHigh>disPull;
-    if(disabledByRet||disabledByPull){
-      if(st.status!=='disabled'){
-        st.status='disabled';
-        tsLog(p.underlying+': DISABLED ('+(disabledByRet?'ret '+fmt2(ret)+'% < '+disRet+'%':'')+(disabledByPull?'pullback '+fmt2(pullFromHigh)+'% > '+disPull+'%':'')+')','warn');
+    // Disable guards \u2014 only apply AFTER trail stop is watching/armed
+    // disRet: disable if return drops below threshold (prevents arming on weak moves)
+    // disPull: disable if pullback from peak exceeds % (prevents premature closure)
+    var disabledByRet  = disRet  && ret < disRet;
+    var pullFromHigh   = st.peakPct > 0 ? ((st.peakPct - ret) / st.peakPct * 100) : 0;
+    var disabledByPull = disPull && pullFromHigh > disPull;
+
+    // CRITICAL FIX: disRet should only disable if position has NOT yet reached activate threshold
+    // Once armed (ret >= activateAt), disRet no longer applies \u2014 pullback handles exit
+    // This prevents the disable guard from blocking positions that dip below disRet
+    // before they get a chance to reach the activation threshold
+    var alreadyArmedOrHigher = st.status === 'armed' || st.status === 'triggered';
+    if(alreadyArmedOrHigher) disabledByRet = false; // armed positions use pullback only
+
+    if(disabledByRet || disabledByPull){
+      if(st.status !== 'disabled'){
+        st.status = 'disabled';
+        tsLog(p.underlying+': DISABLED ('+(disabledByRet?'ret '+fmt2(ret)+'% < '+disRet+'% (pre-activation)':'')+(disabledByPull?'pullback '+fmt2(pullFromHigh)+'% > '+disPull+'%':'')+')','warn');
       }
       continue;
+    }
+
+    // If previously disabled by disRet but ret has climbed back above disRet \u2014 re-enable watching
+    if(st.status === 'disabled' && disRet && ret >= disRet && !disabledByPull){
+      st.status = 'watching';
+      tsLog(p.underlying+': re-watching (ret recovered above '+disRet+'%)','info');
     }
 
     // Watching -> Armed
@@ -6189,10 +6205,17 @@ function loadAppSettings(){
     var tsStateRaw = localStorage.getItem('rrjcar_ts_state');
     if(tsStateRaw){
       var savedState = JSON.parse(tsStateRaw);
-      // Merge into G.tsState \u2014 don't overwrite any state already in memory
+      // Merge into G.tsState \u2014 reset 'disabled' states that never reached activate threshold
+      // (disabled by disRet pre-activation) so they get a fresh watching cycle
       Object.keys(savedState).forEach(function(sym){
         if(!G.tsState[sym]){
-          G.tsState[sym] = savedState[sym];
+          var st = savedState[sym];
+          var cfg = G.tsConfig[sym] || {};
+          var activateAt = cfg.activate || 6;
+          if(st.status === 'disabled' && (st.peakPct || 0) < activateAt){
+            st = {status:'watching', peak:0, peakPct:0};
+          }
+          G.tsState[sym] = st;
         }
       });
     }
