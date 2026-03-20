@@ -1834,14 +1834,23 @@ async function autoSelectContract(){
         var opts = [];
         try{ opts=chainRes.options.option; if(!Array.isArray(opts))opts=[opts]; }catch(e){}
 
-        // Filter to correct type, min OI, volume > 0
+        // Filter to correct type, min OI>=100, volume>=100, valid greeks
         var filtered = opts.filter(function(o){
           return o.option_type===(type==='CALL'?'call':'put')
-            && (o.open_interest||0) >= 150
-            && (o.volume||0) > 0
+            && (o.open_interest||0) >= 100
+            && (o.volume||0) >= 100
             && o.greeks
             && o.greeks.delta;
         });
+        // Fallback: relax volume to >=10 if nothing passes
+        if(!filtered.length){
+          filtered = opts.filter(function(o){
+            return o.option_type===(type==='CALL'?'call':'put')
+              && (o.open_interest||0) >= 100
+              && (o.volume||0) >= 10
+              && o.greeks && o.greeks.delta;
+          });
+        }
 
         if(!filtered.length) continue;
 
@@ -1889,7 +1898,7 @@ async function autoSelectContract(){
     }
 
     if(!candidates.length){
-      statusEl.textContent = 'No contracts met criteria (OI>150, vol>avg). Try a different symbol.';
+      statusEl.textContent = 'No contracts met criteria (OI>=100, vol>=100). Try a different symbol or check back later in the session.';
       return;
     }
 
@@ -2739,18 +2748,49 @@ function fetchOptionContract(ticker,simPrice,callback){
   .then(function(cdata){
    var opts=[];try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
    if(!opts.length){callback(null);return;}
-   var calls=opts.filter(function(o){return o.option_type==='call'&&o.greeks&&o.greeks.delta>0.05&&o.greeks.delta<0.99;});
-   if(!calls.length)calls=opts.filter(function(o){return o.option_type==='call'&&o.greeks&&o.greeks.delta>0;});
+   // Base filter: calls with valid greeks
+   var calls=opts.filter(function(o){
+     return o.option_type==='call'&&o.greeks&&o.greeks.delta>0.05&&o.greeks.delta<0.99;
+   });
    if(!calls.length){callback(null);return;}
-   calls.sort(function(a,b){return Math.abs(a.greeks.delta-0.75)-Math.abs(b.greeks.delta-0.75);});
-   var bo=calls[0];
+   // Liquidity filter tiers - try strict first, fall back progressively
+   function sprdPctOf(o){var mid=(o.bid+o.ask)/2;return mid>0?((o.ask-o.bid)/mid*100):999;}
+   // Tier 1: OI>=100, vol>=100, spread<=10%
+   var t1=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=100&&sprdPctOf(o)<=10;});
+   // Tier 2: OI>=100, vol>=10, spread<=15%
+   var t2=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=10&&sprdPctOf(o)<=15;});
+   // Tier 3: OI>=100 only (low volume early in session)
+   var t3=calls.filter(function(o){return (o.open_interest||0)>=100;});
+   // Tier 4: any delta-valid call (last resort)
+   var pool=t1.length?t1:t2.length?t2:t3.length?t3:calls;
+   var tierUsed=t1.length?1:t2.length?2:t3.length?3:4;
+   // Score: delta target 0.55-0.75 (momentum ITM), volume, OI, spread tightness
+   pool.forEach(function(o){
+     var delta=Math.abs(o.greeks.delta||0);
+     var vol=o.volume||0;var oi=o.open_interest||0;
+     var mid=(o.bid+o.ask)/2;var sprd=mid>0?((o.ask-o.bid)/mid*100):99;
+     var dScore=delta>=0.55&&delta<=0.75?40:delta>=0.45&&delta<=0.85?20:5;
+     var vScore=Math.min(vol/50,30);
+     var oScore=Math.min(oi/200,20);
+     var sScore=sprd<3?10:sprd<5?7:sprd<8?4:sprd<12?1:0;
+     o._score=dScore+vScore+oScore+sScore;
+   });
+   pool.sort(function(a,b){return b._score-a._score;});
+   var bo=pool[0];
    var mid=(bo.bid+bo.ask)/2;
    var spread=bo.ask-bo.bid;
-   var spreadPct=price>0?((spread/price)*100):0;
+   var spreadPct=mid>0?((spread/mid)*100):0;
    var intrinsic=Math.max(price-bo.strike,0);
    var extrinsic=Math.max(mid-intrinsic,0);
    var extPct=mid>0?((extrinsic/mid)*100):0;
-   callback({strike:bo.strike,spread:+(spread.toFixed(2)),spreadPct:+(spreadPct.toFixed(2)),delta:+(bo.greeks.delta.toFixed(2)),ext:+(extPct.toFixed(1)),dte:best.dte,optPr:+(mid.toFixed(2)),oi:bo.open_interest||0,vol:bo.volume||0,exp:best.date,iv:bo.greeks?bo.greeks.smv_vol:0,symbol:bo.symbol,livePrice:price,live:true});
+   callback({
+     strike:bo.strike,spread:+(spread.toFixed(2)),spreadPct:+(spreadPct.toFixed(2)),
+     delta:+(bo.greeks.delta.toFixed(2)),ext:+(extPct.toFixed(1)),dte:best.dte,
+     optPr:+(mid.toFixed(2)),bid:bo.bid,ask:bo.ask,
+     oi:bo.open_interest||0,vol:bo.volume||0,
+     exp:best.date,iv:bo.greeks?bo.greeks.smv_vol:0,
+     symbol:bo.symbol,livePrice:price,live:true,tierUsed:tierUsed
+   });
   }).catch(function(){callback(null);});
  }).catch(function(){callback(null);});
 }
