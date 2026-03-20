@@ -4747,7 +4747,7 @@ function fetchBalances(){
 //  CLOSED POSITIONS ENGINE
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
-var G_closed = { raw:[], trades:[] };
+var G_closed = { raw:[], trades:[], openFilled:[] };
 
 function parseOccSymbolFull(sym){
   var m=sym.match(/^([A-Z1-9]+)(\d{6})([CP])(\d{8})$/);
@@ -4812,6 +4812,7 @@ function matchTrades(orders){
         pnlPct:pnlPct,
         holdDays:holdDays,
         closeOrderId:o.id,
+        openOrderId:openLots.length>0?openLots[0].id:null,
         side:isLong?'LONG':'SHORT'
       });
       // Remove matched open lot
@@ -4844,19 +4845,37 @@ function fetchClosedPositions(){
     var orders=[];
     try{
       var od=data.orders.order;
-      if(!Array.isArray(od))od=[od];
+      if(!Array.isArray(od)) od = od ? [od] : [];
       orders=od.filter(function(o){return o&&o.status;});
     }catch(e){}
 
-    // Filter to filled close-side orders and their paired opens
-    var filled=orders.filter(function(o){
-      return o.status==='filled';
-    }).slice(0, limit*2); // grab extra to ensure pairing works
+    if(!orders.length){
+      wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div>'
+        +'<p>No order history found for this account.</p></div>';
+      src.textContent='['+creds.mode.toUpperCase()+'] 0 orders';
+      return;
+    }
 
-    G_closed.raw=filled;
-    G_closed.trades=matchTrades(filled);
+    var allFilled=orders.filter(function(o){return o.status==='filled';});
+    var matched=matchTrades(allFilled);
 
-    src.textContent='['+creds.mode.toUpperCase()+'] '+G_closed.trades.length+' closed trades | Updated: '+new Date().toLocaleTimeString();
+    // Also collect unmatched open-side filled orders (positions still open, no close yet)
+    var matchedOpenIds={};
+    matched.forEach(function(t){ if(t.openOrderId) matchedOpenIds[t.openOrderId]=true; });
+    var openFilled=allFilled.filter(function(o){
+      var side=(o.side||'').toLowerCase();
+      var isOpen=side==='buy_to_open'||side==='sell_to_open'||side==='buy';
+      return isOpen && !matchedOpenIds[o.id];
+    }).slice(0,limit);
+
+    G_closed.raw=allFilled;
+    G_closed.trades=matched;
+    G_closed.openFilled=openFilled;
+
+    src.textContent='['+creds.mode.toUpperCase()+'] '
+      +matched.length+' closed trade'+(matched.length!==1?'s':'')
+      +(openFilled.length?' | '+openFilled.length+' open position'+(openFilled.length!==1?'s':''):'')
+      +' | Updated: '+new Date().toLocaleTimeString();
     renderClosedTable();
   })
   .catch(function(e){
@@ -4941,6 +4960,30 @@ function renderClosedTable(){
   });
 
   html+='</tbody></table>';
+
+  // Append open (unmatched) filled positions section
+  var openFilled = G_closed.openFilled || [];
+  if(openFilled.length > 0){
+    html+='<div style="font-family:var(--ff-mono);font-size:10px;color:var(--amb);letter-spacing:1px;margin:20px 0 8px;">OPEN POSITIONS \u2014 FILLED BUT NOT YET CLOSED ('+ openFilled.length +')</div>';
+    html+='<table><thead><tr>'
+      +'<th>SYMBOL</th><th>TYPE</th><th>SIDE</th><th>QTY</th>'
+      +'<th>OPEN DATE</th><th>FILL PRICE</th><th>STATUS</th>'
+      +'</tr></thead><tbody>';
+    openFilled.forEach(function(o){
+      var parsed = parseOccSymbolFull(o.option_symbol||o.symbol);
+      html+='<tr>'
+        +'<td><b>'+(parsed.underlying||o.symbol)+'</b></td>'
+        +'<td>'+(parsed.type||'--')+'</td>'
+        +'<td style="color:var(--grn);">'+(o.side||'').replace(/_/g,' ').toUpperCase()+'</td>'
+        +'<td>'+o.exec_quantity+'</td>'
+        +'<td style="color:var(--gry);">'+(o.create_date||'').slice(0,10)+'</td>'
+        +'<td>$'+fmt2(o.avg_fill_price)+'</td>'
+        +'<td><span class="badge go">OPEN</span></td>'
+        +'</tr>';
+    });
+    html+='</tbody></table>';
+  }
+
   wrap.innerHTML=html;
   updateClosedStats(trades);
 }
