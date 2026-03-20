@@ -894,6 +894,79 @@ tr.sel-row td{background:var(--blu3);}
 
     </div></div>
 
+    </div></div>
+
+    <!-- ── AUTO-TRADER ── -->
+    <div class="card" id="at-card">
+      <div class="card-hdr" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>&#9889; AUTO-TRADER — FULLY AUTOMATED EXECUTION</span>
+        <span id="at-status-badge" style="font-family:var(--ff-mono);font-size:10px;padding:2px 10px;border-radius:2px;background:var(--redd);color:var(--red);">OFF</span>
+      </div>
+      <div class="card-body api-form">
+
+        <!-- Master toggle -->
+        <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--bg3);margin-bottom:16px;">
+          <button id="at-master-btn" class="btn" style="font-size:14px;font-weight:700;padding:8px 28px;border-color:var(--gry2);color:var(--gry);min-width:140px;" onclick="toggleAutoTrader()">&#9654; ENABLE</button>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--wht);">Auto-Trader Master Switch</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--gry);margin-top:2px;">Scans every 60s &bull; Opens positions on High Conviction signals &bull; Arms trail stop on fill</div>
+          </div>
+        </div>
+
+        <!-- Settings grid -->
+        <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 200px;">MAX POSITION SIZE ($)</label>
+          <input type="number" id="at-budget" value="500" min="100" step="50" style="width:90px;" oninput="saveAutoTraderSettings()">
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">per trade — passed to step fill as budget limit</span>
+        </div>
+        <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 200px;">DAILY LOSS LIMIT ($)</label>
+          <input type="number" id="at-daily-loss" value="500" min="0" step="50" style="width:90px;" oninput="saveAutoTraderSettings()">
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">auto-disarms if cumulative loss on auto-trades exceeds this</span>
+        </div>
+        <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 200px;">MIN SCORE THRESHOLD</label>
+          <input type="number" id="at-min-score" value="90" min="72" max="122" style="width:70px;" oninput="saveAutoTraderSettings()">
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">/ 122 — must also pass PROVEN + Analyst Rev + GEX</span>
+        </div>
+        <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 200px;">MARKET HOURS ONLY</label>
+          <input type="checkbox" id="at-hours-gate" checked style="width:auto;accent-color:var(--grn);" onchange="saveAutoTraderSettings()">
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">9:45 AM – 3:45 PM ET only (recommended)</span>
+        </div>
+        <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 200px;">MAX OPEN AUTO-POSITIONS</label>
+          <input type="number" id="at-max-positions" value="3" min="1" max="10" style="width:60px;" oninput="saveAutoTraderSettings()">
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">stop opening new positions when this many are already open</span>
+        </div>
+
+        <!-- Status display -->
+        <div style="border-top:1px solid var(--bg3);margin-top:14px;padding-top:14px;">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--amb);letter-spacing:.5px;margin-bottom:8px;">LIVE STATUS</div>
+          <div id="at-status-log" style="font-family:var(--mono);font-size:11px;color:var(--gry);line-height:1.8;min-height:40px;">Auto-trader is OFF.</div>
+          <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;">
+            <div style="background:var(--bg2);border:1px solid var(--bg3);border-radius:3px;padding:6px 12px;font-family:var(--mono);font-size:11px;">
+              <span style="color:var(--gry);">SCANS TODAY</span> &nbsp;<span id="at-scan-count" style="color:var(--wht);font-weight:700;">0</span>
+            </div>
+            <div style="background:var(--bg2);border:1px solid var(--bg3);border-radius:3px;padding:6px 12px;font-family:var(--mono);font-size:11px;">
+              <span style="color:var(--gry);">SIGNALS TODAY</span> &nbsp;<span id="at-signal-count" style="color:var(--ambb);font-weight:700;">0</span>
+            </div>
+            <div style="background:var(--bg2);border:1px solid var(--bg3);border-radius:3px;padding:6px 12px;font-family:var(--mono);font-size:11px;">
+              <span style="color:var(--gry);">ORDERS TODAY</span> &nbsp;<span id="at-order-count" style="color:var(--grn);font-weight:700;">0</span>
+            </div>
+            <div style="background:var(--bg2);border:1px solid var(--bg3);border-radius:3px;padding:6px 12px;font-family:var(--mono);font-size:11px;">
+              <span style="color:var(--gry);">DAILY P&L</span> &nbsp;<span id="at-daily-pnl" style="color:var(--wht);font-weight:700;">$0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="api-note" style="border-color:rgba(239,68,68,0.4);background:rgba(239,68,68,0.06);margin-top:12px;">
+          &#9888; <b>LIVE MODE WARNING:</b> When enabled in Live mode, the Auto-Trader will automatically submit real orders at your broker without further confirmation. Ensure your position size limit and daily loss limit are set correctly. The browser tab must remain open. Orders use step fill: 11 attempts, 110% bid-ask coverage. Trail stop is armed automatically on fill.
+        </div>
+
+      </div>
+    </div>
+
     <!-- ── STRATEGY MODE ── -->
     <div class="card"><div class="card-hdr">&#9650; STRATEGY MODE — QUICK FILTERS</div>
     <div class="card-body" style="padding:12px 14px;">
@@ -5514,6 +5587,262 @@ function checkHighConvictionSignals(results){
   }
 }
 
+
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+//  AUTO-TRADER ENGINE
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+
+var G_AT = {
+  enabled:false, timer:null, scanCount:0, signalCount:0, orderCount:0,
+  dailyPnl:0, inFlightTickers:{}, openedToday:{}, lastGexReady:0, disarmedByLoss:false
+};
+
+function saveAutoTraderSettings(){
+  try{
+    localStorage.setItem('rrjcar_at', JSON.stringify({
+      budget:       +(eid('at-budget')?.value||500),
+      dailyLoss:    +(eid('at-daily-loss')?.value||500),
+      minScore:     +(eid('at-min-score')?.value||90),
+      hoursGate:    eid('at-hours-gate')?.checked !== false,
+      maxPositions: +(eid('at-max-positions')?.value||3),
+    }));
+  }catch(e){}
+}
+
+function loadAutoTraderSettings(){
+  try{
+    var raw = localStorage.getItem('rrjcar_at');
+    if(!raw) return;
+    var s = JSON.parse(raw);
+    if(eid('at-budget'))        eid('at-budget').value        = s.budget       || 500;
+    if(eid('at-daily-loss'))    eid('at-daily-loss').value    = s.dailyLoss    || 500;
+    if(eid('at-min-score'))     eid('at-min-score').value     = s.minScore     || 90;
+    if(eid('at-hours-gate'))    eid('at-hours-gate').checked  = s.hoursGate !== false;
+    if(eid('at-max-positions')) eid('at-max-positions').value = s.maxPositions || 3;
+  }catch(e){}
+}
+
+function getAutoTraderSettings(){
+  try{
+    var raw = localStorage.getItem('rrjcar_at');
+    var s = raw ? JSON.parse(raw) : {};
+    return {
+      budget:       +(s.budget       || (eid('at-budget')      ? eid('at-budget').value       : 0) || 500),
+      dailyLoss:    +(s.dailyLoss    || (eid('at-daily-loss')  ? eid('at-daily-loss').value   : 0) || 500),
+      minScore:     +(s.minScore     || (eid('at-min-score')   ? eid('at-min-score').value    : 0) || 90),
+      hoursGate:    s.hoursGate !== false,
+      maxPositions: +(s.maxPositions || (eid('at-max-positions')? eid('at-max-positions').value: 0) || 3),
+    };
+  }catch(e){ return {budget:500,dailyLoss:500,minScore:90,hoursGate:true,maxPositions:3}; }
+}
+
+function atLog(msg, cls){
+  var el = eid('at-status-log');
+  if(!el) return;
+  var ts = new Date().toLocaleTimeString();
+  var color = cls==='ok'?'var(--grn)':cls==='warn'?'var(--ambb)':cls==='err'?'var(--red)':'var(--gry3)';
+  var line = '<div><span style="color:var(--gry);">['+ts+']</span> <span style="color:'+color+';">'+msg+'</span></div>';
+  el.innerHTML = line + (el.innerHTML||'');
+  // Keep last 8 entries
+  var divs = el.querySelectorAll('div');
+  if(divs.length > 8) for(var i=8;i<divs.length;i++) divs[i].remove();
+}
+
+function atUpdateStats(){
+  if(eid('at-scan-count'))   eid('at-scan-count').textContent   = G_AT.scanCount;
+  if(eid('at-signal-count')) eid('at-signal-count').textContent = G_AT.signalCount;
+  if(eid('at-order-count'))  eid('at-order-count').textContent  = G_AT.orderCount;
+  if(eid('at-daily-pnl')){
+    var pnl = G_AT.dailyPnl;
+    eid('at-daily-pnl').textContent = (pnl>=0?'+':'')+fmtD(pnl);
+    eid('at-daily-pnl').style.color = pnl>=0?'var(--grn)':'var(--red)';
+  }
+}
+
+function isMarketHours(){
+  var now = new Date();
+  var et = new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  var mins = et.getHours()*60 + et.getMinutes();
+  return mins >= (9*60+45) && mins <= (15*60+45);
+}
+
+function atHasOpenPosition(ticker){
+  if(G.positions && G.positions.some(function(p){ return p.underlying===ticker; })) return true;
+  if(G_AT.inFlightTickers[ticker]) return true;
+  return false;
+}
+
+function atCountAutoPositions(){
+  if(!G.positions) return 0;
+  return G.positions.filter(function(p){ return !!G_AT.openedToday[p.underlying]; }).length;
+}
+
+function toggleAutoTrader(){
+  if(G_AT.enabled) stopAutoTrader(); else startAutoTrader();
+}
+
+function startAutoTrader(){
+  if(G_AT.disarmedByLoss){
+    toast('\u26a0 Auto-trader disarmed by daily loss limit');
+    atLog('Disarmed by daily loss limit. Increase limit or reset to re-enable.','err');
+    return;
+  }
+  G_AT.enabled = true;
+  var btn=eid('at-master-btn'), badge=eid('at-status-badge');
+  if(btn){  btn.textContent='\u25a0 DISABLE'; btn.style.borderColor='var(--red)'; btn.style.color='var(--red)'; }
+  if(badge){ badge.textContent='ON'; badge.style.background='var(--grn2)'; badge.style.color='var(--grn)'; }
+  if(eid('at-card')) eid('at-card').style.borderColor='var(--grn)';
+  var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
+  atLog('Auto-trader ENABLED ['+mode.toUpperCase()+'] \u2014 scanning every 60s','ok');
+  toast('\u26a1 Auto-trader enabled');
+  runAutoScanCycle();
+  G_AT.timer = setInterval(runAutoScanCycle, 60000);
+  saveAutoTraderState();
+}
+
+function stopAutoTrader(){
+  G_AT.enabled = false;
+  if(G_AT.timer){ clearInterval(G_AT.timer); G_AT.timer=null; }
+  var btn=eid('at-master-btn'), badge=eid('at-status-badge');
+  if(btn){  btn.textContent='\u25b6 ENABLE'; btn.style.borderColor='var(--gry2)'; btn.style.color='var(--gry)'; }
+  if(badge){ badge.textContent='OFF'; badge.style.background='var(--redd)'; badge.style.color='var(--red)'; }
+  if(eid('at-card')) eid('at-card').style.borderColor='';
+  atLog('Auto-trader DISABLED','warn');
+  toast('Auto-trader disabled');
+  saveAutoTraderState();
+}
+
+function saveAutoTraderState(){
+  try{
+    localStorage.setItem('rrjcar_at_state', JSON.stringify({
+      enabled:G_AT.enabled, scanCount:G_AT.scanCount, signalCount:G_AT.signalCount,
+      orderCount:G_AT.orderCount, dailyPnl:G_AT.dailyPnl,
+      disarmedByLoss:G_AT.disarmedByLoss, openedToday:G_AT.openedToday,
+      stateDate:new Date().toDateString()
+    }));
+  }catch(e){}
+}
+
+function loadAutoTraderState(){
+  try{
+    var raw = localStorage.getItem('rrjcar_at_state');
+    if(!raw) return;
+    var s = JSON.parse(raw);
+    if(s.stateDate !== new Date().toDateString()){
+      G_AT.scanCount=0;G_AT.signalCount=0;G_AT.orderCount=0;
+      G_AT.dailyPnl=0;G_AT.disarmedByLoss=false;G_AT.openedToday={};
+      atLog('New trading day \u2014 daily stats reset','ok');
+      return;
+    }
+    G_AT.scanCount=s.scanCount||0; G_AT.signalCount=s.signalCount||0;
+    G_AT.orderCount=s.orderCount||0; G_AT.dailyPnl=s.dailyPnl||0;
+    G_AT.disarmedByLoss=!!s.disarmedByLoss; G_AT.openedToday=s.openedToday||{};
+    atUpdateStats();
+    if(s.enabled && !G_AT.disarmedByLoss){ setTimeout(startAutoTrader, 2500); }
+  }catch(e){}
+}
+
+async function runAutoScanCycle(){
+  if(!G_AT.enabled) return;
+  var s = getAutoTraderSettings();
+  if(s.hoursGate && !isMarketHours()){ atLog('Outside market hours (9:45\u20133:45 ET) \u2014 skipping',''); return; }
+  if(G.scanRunning){ atLog('Scan already running \u2014 skipping cycle',''); return; }
+  if(s.dailyLoss>0 && G_AT.dailyPnl <= -Math.abs(s.dailyLoss)){
+    if(!G_AT.disarmedByLoss){
+      G_AT.disarmedByLoss=true; stopAutoTrader();
+      addAlert('AUTO-TRADER','DISARMED \u2014 daily loss $'+s.dailyLoss+' reached','nogo');
+      atLog('Daily loss limit reached \u2014 auto-trader disarmed','err');
+    }
+    return;
+  }
+  G_AT.scanCount++;
+  atLog('Scanning... (cycle #'+G_AT.scanCount+')','');
+  atUpdateStats();
+  runScan();
+  // Wait for scan (~5s) + GEX auto-load (2s) + buffer = 12s
+  await new Promise(function(r){ setTimeout(r,12000); });
+  if(!G_AT.enabled) return;
+  var results = G.results||[];
+  if(!results.length){ atLog('Scan returned no results','warn'); return; }
+  var autoPositionCount = atCountAutoPositions();
+  if(autoPositionCount >= s.maxPositions){
+    atLog('Max positions ('+s.maxPositions+') held \u2014 no new entries','');
+    return;
+  }
+  var cooldownMs = 4*3600000;
+  var candidates = [];
+  results.forEach(function(r){
+    if(!r.isGo||r.score<s.minScore) return;
+    var passed={};
+    if(r.rules) r.rules.forEach(function(rule){ if(rule.pass) passed[rule.n]=true; });
+    if(!passed['PROVEN ticker'])            return;
+    if(!passed['Analyst Revisions \u2191']) return;
+    if(!passed['GEX Call Heavy'])           return;
+    if(atHasOpenPosition(r.ticker))         return;
+    var lastTs = G_AT.openedToday[r.ticker+'_ts']||0;
+    if(Date.now()-lastTs < cooldownMs)      return;
+    candidates.push(r);
+  });
+  if(!candidates.length){ atLog('No new high conviction signals this cycle',''); return; }
+  candidates.sort(function(a,b){ return b.score-a.score; });
+  var signal = candidates[0];
+  G_AT.signalCount++;
+  atUpdateStats();
+  atLog('\u2605 Signal: '+signal.ticker+' | score '+signal.score+' | '+signal.sector,'warn');
+  addAlert(signal.ticker,'\u26a1 AUTO-TRADER: '+signal.ticker+' score '+signal.score+' | '+signal.sector+' | $'+fmt2(signal.price),'go');
+  if(atCountAutoPositions() >= s.maxPositions){ atLog('Position cap reached \u2014 skipping '+signal.ticker,'warn'); return; }
+  atExecuteTrade(signal, s.budget);
+}
+
+function atExecuteTrade(signal, budget){
+  var creds=getTradierCreds();
+  var acct=G.acctId||localStorage.getItem('rrjcar_acct')||'';
+  if(!creds||!acct){ atLog('No API key/account \u2014 cannot execute','err'); return; }
+  G_AT.inFlightTickers[signal.ticker]=true;
+  atLog('Fetching best contract for '+signal.ticker+'...','');
+  fetchOptionContract(signal.ticker, signal.price, function(optData){
+    if(!optData){
+      delete G_AT.inFlightTickers[signal.ticker];
+      atLog(signal.ticker+': no contract available \u2014 skipping','err'); return;
+    }
+    var limitPrice = optData.optPr||optData.mid||0;
+    if(!limitPrice){
+      delete G_AT.inFlightTickers[signal.ticker];
+      atLog(signal.ticker+': price unavailable \u2014 skipping','err'); return;
+    }
+    var qty = Math.max(1, Math.floor(budget/(limitPrice*100)));
+    var occSym = buildOccSym(signal.ticker,'CALL',optData.strike,optData.exp);
+    var bid = optData.bid||limitPrice*0.98;
+    var ask = optData.ask||limitPrice*1.02;
+    var spread = ask-bid;
+    var stepSize = calcEffectiveStepSize(bid,ask,11);
+    var startPx = bid;
+    var limitPx = +((ask + spread*0.10).toFixed(2));
+    atLog(signal.ticker+': BUY '+qty+'x '+occSym+' start=$'+fmt2(startPx)+' limit=$'+fmt2(limitPx),'ok');
+    // Pre-fill order ticket for reference
+    if(eid('ord-sym'))    eid('ord-sym').value    = signal.ticker;
+    if(eid('ord-type'))   eid('ord-type').value   = 'CALL';
+    if(eid('ord-action')) eid('ord-action').value = 'BUY_TO_OPEN';
+    if(eid('ord-otype'))  eid('ord-otype').value  = 'limit';
+    if(eid('ord-strike')) eid('ord-strike').value = optData.strike;
+    if(eid('ord-exp'))    eid('ord-exp').value    = optData.exp;
+    if(eid('ord-qty'))    eid('ord-qty').value    = qty;
+    if(eid('ord-lmt'))    eid('ord-lmt').value    = fmt2(startPx);
+    G.liveQuote = {bid:bid,ask:ask,mid:((bid+ask)/2)};
+    G_AT.orderCount++;
+    G_AT.openedToday[signal.ticker] = true;
+    G_AT.openedToday[signal.ticker+'_ts'] = Date.now();
+    saveAutoTraderState();
+    atUpdateStats();
+    runStepFill(creds,acct,occSym,signal.ticker,'buy_to_open',qty,startPx,limitPx,stepSize,11,5,'up');
+    // Clear in-flight after max step fill duration (11 attempts x 5s + 10s buffer)
+    setTimeout(function(){
+      delete G_AT.inFlightTickers[signal.ticker];
+      atLog(signal.ticker+': step fill window closed \u2014 positions refreshing','ok');
+    }, (11*5+10)*1000);
+  });
+}
+
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 //  STRATEGY MODE \u2014 pre-configured filter combinations
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
@@ -5864,6 +6193,8 @@ function init(){
   loadAppSettings();
   loadTvSettings();
   loadNotifSettings();
+  loadAutoTraderSettings();
+  loadAutoTraderState();
   showVersionBanner();
   updateClock();
   updateHeaderQuotes();
