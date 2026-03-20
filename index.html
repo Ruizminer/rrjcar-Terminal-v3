@@ -939,6 +939,11 @@ tr.sel-row td{background:var(--blu3);}
           <input type="number" id="at-max-positions" value="3" min="1" max="10" style="width:60px;" oninput="saveAutoTraderSettings()">
           <span style="color:var(--gry);font-size:11px;margin-left:8px;">stop opening new positions when this many are already open</span>
         </div>
+        <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 200px;">MARKET ORDER FALLBACK</label>
+          <input type="checkbox" id="at-market-fallback" style="width:auto;accent-color:var(--amb);" onchange="saveAutoTraderSettings()">
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">if step fill doesn't fill after 11 attempts, submit a market order to guarantee entry</span>
+        </div>
 
         <!-- Status display -->
         <div style="border-top:1px solid var(--bg3);margin-top:14px;padding-top:14px;">
@@ -961,7 +966,7 @@ tr.sel-row td{background:var(--blu3);}
         </div>
 
         <div class="api-note" style="border-color:rgba(239,68,68,0.4);background:rgba(239,68,68,0.06);margin-top:12px;">
-          &#9888; <b>LIVE MODE WARNING:</b> When enabled in Live mode, the Auto-Trader will automatically submit real orders at your broker without further confirmation. Ensure your position size limit and daily loss limit are set correctly. The browser tab must remain open. Orders use step fill: 11 attempts, 110% bid-ask coverage. Trail stop is armed automatically on fill.
+          &#9888; <b>LIVE MODE WARNING:</b> When enabled in Live mode, the Auto-Trader will automatically submit real orders at your broker without further confirmation. Ensure your position size limit and daily loss limit are set correctly. The browser tab must remain open. Orders use step fill: 11 attempts, 110% bid-ask coverage. If Market Order Fallback is enabled, a market order fires automatically when the step fill doesn't fill. Trail stop is armed automatically on fill.
         </div>
 
       </div>
@@ -4455,14 +4460,17 @@ function executeTsClose(p,closeMode,creds){
       else{var e=d.errors?d.errors.error:'unknown';tsLog(p.underlying+': close error \u2014 '+e,'warn');}
     }).catch(function(e){tsLog(p.underlying+': close error \u2014 '+e.message,'warn');});
   } else {
-    // Step fill close (ask->bid)
+    // Step fill close (ask->bid) \u2014 11 attempts, 110% bid-ask coverage
     var bid=p.bid||p.last*0.98;var ask=p.ask||p.last*1.02;
-    var maxAtt=parseInt(eid('sf-max').value)||10;
-    var stepSize=calcEffectiveStepSize(bid, ask, maxAtt);
-    var delaySec=parseInt(eid('sf-delay').value)||5;
+    var maxAtt=11;
     var spread=+(ask-bid).toFixed(2);
-    tsLog(p.underlying+': launching step fill close @ ask $'+fmt2(ask)+' bid $'+fmt2(bid)+' | spread $'+fmt2(spread)+' | step $'+fmt2(stepSize)+' x'+maxAtt+' attempts','triggered');
-    runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),ask,bid,stepSize,maxAtt,delaySec,'down');
+    // 110% coverage: start at ask+10% of spread, limit at bid-10% of spread
+    var startPx=+(ask + spread*0.10).toFixed(2);
+    var limitPx=+(bid - spread*0.10).toFixed(2);
+    var stepSize=calcEffectiveStepSize(limitPx, startPx, maxAtt);
+    var delaySec=parseInt(eid('sf-delay').value)||5;
+    tsLog(p.underlying+': launching step fill close @ $'+fmt2(startPx)+' \u2192 $'+fmt2(limitPx)+' | spread $'+fmt2(spread)+' | step $'+fmt2(stepSize)+' x'+maxAtt+' attempts (110% coverage)','triggered');
+    runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),startPx,limitPx,stepSize,maxAtt,delaySec,'down');
     switchTab('order');
   }
 }
@@ -5656,11 +5664,12 @@ var G_AT = {
 function saveAutoTraderSettings(){
   try{
     localStorage.setItem('rrjcar_at', JSON.stringify({
-      budget:       +(eid('at-budget')?.value||500),
-      dailyLoss:    +(eid('at-daily-loss')?.value||500),
-      minScore:     +(eid('at-min-score')?.value||90),
-      hoursGate:    eid('at-hours-gate')?.checked !== false,
-      maxPositions: +(eid('at-max-positions')?.value||3),
+      budget:         +(eid('at-budget')?.value||500),
+      dailyLoss:      +(eid('at-daily-loss')?.value||500),
+      minScore:       +(eid('at-min-score')?.value||90),
+      hoursGate:      eid('at-hours-gate')?.checked !== false,
+      maxPositions:   +(eid('at-max-positions')?.value||3),
+      marketFallback: eid('at-market-fallback')?.checked || false,
     }));
   }catch(e){}
 }
@@ -5670,11 +5679,12 @@ function loadAutoTraderSettings(){
     var raw = localStorage.getItem('rrjcar_at');
     if(!raw) return;
     var s = JSON.parse(raw);
-    if(eid('at-budget'))        eid('at-budget').value        = s.budget       || 500;
-    if(eid('at-daily-loss'))    eid('at-daily-loss').value    = s.dailyLoss    || 500;
-    if(eid('at-min-score'))     eid('at-min-score').value     = s.minScore     || 90;
-    if(eid('at-hours-gate'))    eid('at-hours-gate').checked  = s.hoursGate !== false;
-    if(eid('at-max-positions')) eid('at-max-positions').value = s.maxPositions || 3;
+    if(eid('at-budget'))          eid('at-budget').value          = s.budget       || 500;
+    if(eid('at-daily-loss'))      eid('at-daily-loss').value      = s.dailyLoss    || 500;
+    if(eid('at-min-score'))       eid('at-min-score').value       = s.minScore     || 90;
+    if(eid('at-hours-gate'))      eid('at-hours-gate').checked    = s.hoursGate !== false;
+    if(eid('at-max-positions'))   eid('at-max-positions').value   = s.maxPositions || 3;
+    if(eid('at-market-fallback')) eid('at-market-fallback').checked = !!s.marketFallback;
   }catch(e){}
 }
 
@@ -5683,13 +5693,14 @@ function getAutoTraderSettings(){
     var raw = localStorage.getItem('rrjcar_at');
     var s = raw ? JSON.parse(raw) : {};
     return {
-      budget:       +(s.budget       || (eid('at-budget')      ? eid('at-budget').value       : 0) || 500),
-      dailyLoss:    +(s.dailyLoss    || (eid('at-daily-loss')  ? eid('at-daily-loss').value   : 0) || 500),
-      minScore:     +(s.minScore     || (eid('at-min-score')   ? eid('at-min-score').value    : 0) || 90),
-      hoursGate:    s.hoursGate !== false,
-      maxPositions: +(s.maxPositions || (eid('at-max-positions')? eid('at-max-positions').value: 0) || 3),
+      budget:         +(s.budget         || (eid('at-budget')          ? eid('at-budget').value          : 0) || 500),
+      dailyLoss:      +(s.dailyLoss      || (eid('at-daily-loss')      ? eid('at-daily-loss').value      : 0) || 500),
+      minScore:       +(s.minScore       || (eid('at-min-score')        ? eid('at-min-score').value       : 0) || 90),
+      hoursGate:      s.hoursGate !== false,
+      maxPositions:   +(s.maxPositions   || (eid('at-max-positions')   ? eid('at-max-positions').value   : 0) || 3),
+      marketFallback: !!s.marketFallback,
     };
-  }catch(e){ return {budget:500,dailyLoss:500,minScore:90,hoursGate:true,maxPositions:3}; }
+  }catch(e){ return {budget:500,dailyLoss:500,minScore:90,hoursGate:true,maxPositions:3,marketFallback:false}; }
 }
 
 function atLog(msg, cls){
@@ -5890,7 +5901,20 @@ function atExecuteTrade(signal, budget){
     G_AT.openedToday[signal.ticker+'_ts'] = Date.now();
     saveAutoTraderState();
     atUpdateStats();
+
+    // Set sf-fallback based on auto-trader setting, restore after
+    var prevFallback = eid('sf-fallback') ? eid('sf-fallback').value : 'none';
+    var useMktFallback = getAutoTraderSettings().marketFallback;
+    if(eid('sf-fallback')) eid('sf-fallback').value = useMktFallback ? 'market' : 'none';
+    if(useMktFallback) atLog(signal.ticker+': market fallback enabled \u2014 will fire if step fill misses','warn');
+
     runStepFill(creds,acct,occSym,signal.ticker,'buy_to_open',qty,startPx,limitPx,stepSize,11,5,'up');
+
+    // Restore sf-fallback after step fill launches (step fill reads it asynchronously)
+    // Restore after max step fill duration so it doesn't affect other step fills
+    setTimeout(function(){
+      if(eid('sf-fallback')) eid('sf-fallback').value = prevFallback;
+    }, (11*5+15)*1000);
     // Clear in-flight after max step fill duration (11 attempts x 5s + 10s buffer)
     setTimeout(function(){
       delete G_AT.inFlightTickers[signal.ticker];
