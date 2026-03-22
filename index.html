@@ -920,6 +920,11 @@ tr.sel-row td{background:var(--blu3);}
           <span style="color:var(--gry);font-size:11px;margin-left:8px;">per trade — passed to step fill as budget limit</span>
         </div>
         <div class="api-row" style="align-items:center;">
+          <label style="flex:0 0 200px;">MAX CONTRACTS PER TRADE</label>
+          <input type="number" id="at-max-contracts" value="3" min="1" max="50" style="width:70px;" oninput="saveAutoTraderSettings()">
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">hard cap — prevents over-buying cheap options (budget still applies)</span>
+        </div>
+        <div class="api-row" style="align-items:center;">
           <label style="flex:0 0 200px;">DAILY LOSS LIMIT ($)</label>
           <input type="number" id="at-daily-loss" value="500" min="0" step="50" style="width:90px;" oninput="saveAutoTraderSettings()">
           <span style="color:var(--gry);font-size:11px;margin-left:8px;">auto-disarms if cumulative loss on auto-trades exceeds this</span>
@@ -5665,6 +5670,7 @@ function saveAutoTraderSettings(){
   try{
     localStorage.setItem('rrjcar_at', JSON.stringify({
       budget:         +(eid('at-budget')?.value||500),
+      maxContracts:   +(eid('at-max-contracts')?.value||3),
       dailyLoss:      +(eid('at-daily-loss')?.value||500),
       minScore:       +(eid('at-min-score')?.value||90),
       hoursGate:      eid('at-hours-gate')?.checked !== false,
@@ -5679,8 +5685,9 @@ function loadAutoTraderSettings(){
     var raw = localStorage.getItem('rrjcar_at');
     if(!raw) return;
     var s = JSON.parse(raw);
-    if(eid('at-budget'))          eid('at-budget').value          = s.budget       || 500;
-    if(eid('at-daily-loss'))      eid('at-daily-loss').value      = s.dailyLoss    || 500;
+    if(eid('at-budget'))          eid('at-budget').value          = s.budget        || 500;
+    if(eid('at-max-contracts'))   eid('at-max-contracts').value   = s.maxContracts  || 3;
+    if(eid('at-daily-loss'))      eid('at-daily-loss').value      = s.dailyLoss     || 500;
     if(eid('at-min-score'))       eid('at-min-score').value       = s.minScore     || 90;
     if(eid('at-hours-gate'))      eid('at-hours-gate').checked    = s.hoursGate !== false;
     if(eid('at-max-positions'))   eid('at-max-positions').value   = s.maxPositions || 3;
@@ -5693,14 +5700,15 @@ function getAutoTraderSettings(){
     var raw = localStorage.getItem('rrjcar_at');
     var s = raw ? JSON.parse(raw) : {};
     return {
-      budget:         +(s.budget         || (eid('at-budget')          ? eid('at-budget').value          : 0) || 500),
-      dailyLoss:      +(s.dailyLoss      || (eid('at-daily-loss')      ? eid('at-daily-loss').value      : 0) || 500),
+      budget:       +(s.budget       || (eid('at-budget')        ? eid('at-budget').value        : 0) || 500),
+      maxContracts: +(s.maxContracts || (eid('at-max-contracts') ? eid('at-max-contracts').value : 0) || 3),
+      dailyLoss:    +(s.dailyLoss    || (eid('at-daily-loss')     ? eid('at-daily-loss').value    : 0) || 500),
       minScore:       +(s.minScore       || (eid('at-min-score')        ? eid('at-min-score').value       : 0) || 90),
       hoursGate:      s.hoursGate !== false,
       maxPositions:   +(s.maxPositions   || (eid('at-max-positions')   ? eid('at-max-positions').value   : 0) || 3),
       marketFallback: !!s.marketFallback,
     };
-  }catch(e){ return {budget:500,dailyLoss:500,minScore:90,hoursGate:true,maxPositions:3,marketFallback:false}; }
+  }catch(e){ return {budget:500,maxContracts:3,dailyLoss:500,minScore:90,hoursGate:true,maxPositions:3,marketFallback:false}; }
 }
 
 function atLog(msg, cls){
@@ -5877,7 +5885,15 @@ function atExecuteTrade(signal, budget){
       delete G_AT.inFlightTickers[signal.ticker];
       atLog(signal.ticker+': price unavailable \u2014 skipping','err'); return;
     }
-    var qty = Math.max(1, Math.floor(budget/(limitPrice*100)));
+    // Qty = budget / cost-per-contract, capped by maxContracts setting
+    // This ensures expensive options aren't ruled out ($15 opt = 1 contract = $1500, fine)
+    // while preventing over-buying cheap options ($3 opt without cap = 6 contracts)
+    var s = getAutoTraderSettings();
+    var maxContracts = s.maxContracts || 3;
+    var qtyByBudget = Math.floor(budget/(limitPrice*100));
+    var qty = Math.max(1, Math.min(qtyByBudget, maxContracts));
+    var actualCost = (qty * limitPrice * 100).toFixed(0);
+    atLog(signal.ticker+': $'+fmt2(limitPrice)+'/contract \u2192 '+qty+' contract'+(qty>1?'s':'')+' ($'+actualCost+') [budget cap: $'+budget+', contract cap: '+maxContracts+']','');
     var occSym = buildOccSym(signal.ticker,'CALL',optData.strike,optData.exp);
     var bid = optData.bid||limitPrice*0.98;
     var ask = optData.ask||limitPrice*1.02;
