@@ -3994,7 +3994,7 @@ function fetchPositionsDirect(key,mode,host,acct){
     var pd=data.positions;
     if(!pd||pd==='null'){renderPositionsTable([],(mode==='live'?'[TRADIER LIVE]':'[TRADIER SANDBOX]')+' \u2014 No open positions');return;}
     var arr=pd.position;if(!Array.isArray(arr))arr=[arr];
-    var pos=arr.map(function(p){var parsed=parseOccSymbol(p.symbol);return{symbol:p.symbol,underlying:parsed.underlying,type:parsed.type,strike:parsed.strike,exp:parsed.exp,qty:parseInt(p.quantity)||0,cost:parseFloat(p.cost_basis)||0,last:0,pnl:0,pnlPct:0};});
+    var pos=arr.map(function(p){var parsed=parseOccSymbol(p.symbol);return{symbol:p.symbol,underlying:parsed.underlying,type:parsed.type,strike:parsed.strike,exp:parsed.exp,qty:parseInt(p.quantity)||0,cost:parseFloat(p.cost_basis)||0,last:0,pnl:0,pnlPct:0,dateAcquired:p.date_acquired||null};});
     var syms=arr.map(function(p){return p.symbol;}).join(',');
     fetch(host+'/v1/markets/quotes?symbols='+encodeURIComponent(syms),{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
     .then(function(r){return r.json();})
@@ -4104,7 +4104,7 @@ function renderPositionsTable(pos,srcLabel){
   var wrap=eid('pos-tbl-wrap');
   if(!pos.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>No open positions</p></div>';return;}
   var totalPnl=0,totalCost=0;pos.forEach(function(p){totalPnl+=p.pnl;totalCost+=p.cost;});
-  var colCount = 14; // total columns
+  var colCount = 16; // total columns
 
   // Auto-apply default trail stop config to any unconfigured positions
   var symbols = pos.map(function(p){ return p.symbol; });
@@ -4120,7 +4120,7 @@ function renderPositionsTable(pos,srcLabel){
     tsLog('Trail stop auto-armed for ' + pos.length + ' position(s)', 'info');
   }
   var html='<table><thead><tr>'
-    +'<th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th><th>QTY</th>'
+    +'<th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th><th>DIT</th><th>DTE</th><th>QTY</th>'
     +'<th>AVG COST</th><th>LAST</th><th>P&L $</th><th>P&L %</th>'
     +'<th>TRAIL STOP</th><th>STATUS</th><th>ACTION</th><th></th><th></th>'
     +'</tr></thead><tbody>';
@@ -4153,11 +4153,58 @@ function renderPositionsTable(pos,srcLabel){
     var cfgCloseMode = cfg.closeMode || 'step';
     var cfgEnabled   = cfg.enabled   || false;
 
+
+    // DIT \u2014 days since position was opened (date_acquired from Tradier)
+    var ditDays = '--';
+    if(p.dateAcquired){
+      var entryDate = new Date(p.dateAcquired);
+      var today = new Date();
+      var msPerDay = 86400000;
+      ditDays = Math.max(0, Math.round((today - entryDate) / msPerDay));
+    }
+
+    // DTE \u2014 calendar days until expiry (parsed from p.exp 'YYYY-MM-DD' or OCC symbol)
+    var dteDays = '--';
+    var expStr = p.exp || '';
+    if(!expStr && sym){
+      // Parse from OCC symbol: e.g. NVDA260501C00175000 \u2192 2026-05-01
+      var occMatch = sym.match(/[A-Z]+(d{2})(d{2})(d{2})[CP]/);
+      if(occMatch) expStr = '20'+occMatch[1]+'-'+occMatch[2]+'-'+occMatch[3];
+    }
+    if(expStr){
+      var expDate = new Date(expStr + 'T16:00:00'); // options expire at 4pm ET
+      var todayMs = new Date().setHours(0,0,0,0);
+      dteDays = Math.max(0, Math.round((expDate - todayMs) / 86400000));
+    }
+    var dteCls = dteDays !== '--' && dteDays <= 7 ? 'color:var(--red)' : dteDays !== '--' && dteDays <= 14 ? 'color:var(--ambb)' : 'color:var(--gry3)';
+    var ditCls = 'color:var(--gry3)';
+
+    // DIT \u2014 days since position was opened
+    var ditDays = '--';
+    if(p.dateAcquired){
+      var msPerDay = 86400000;
+      ditDays = Math.max(0, Math.round((Date.now() - new Date(p.dateAcquired)) / msPerDay));
+    }
+    // DTE \u2014 calendar days to expiry, parsed from p.exp or OCC symbol
+    var dteDays = '--';
+    var expStr = p.exp||'';
+    if(!expStr && sym){
+      var occMatch = sym.match(/[A-Z]+(d{2})(d{2})(d{2})[CP]/);
+      if(occMatch) expStr = '20'+occMatch[1]+'-'+occMatch[2]+'-'+occMatch[3];
+    }
+    if(expStr){
+      var expDate = new Date(expStr+'T21:00:00Z');
+      dteDays = Math.max(0, Math.round((expDate - Date.now()) / 86400000));
+    }
+    var dteCls = dteDays!=='--'&&dteDays<=7?'color:var(--red)':dteDays!=='--'&&dteDays<=14?'color:var(--ambb)':'color:var(--gry3)';
+    var ditCls = 'color:var(--gry3)';
     html += '<tr data-tk="'+tk+'" data-tp="'+tp+'" data-st="'+st+'" data-ex="'+ex+'" data-qty="'+qty+'" data-sym="'+sym+'">'
       +'<td><b>'+sym+'</b></td>'
       +'<td>'+p.type+'</td>'
       +'<td>$'+fmt2(p.strike)+'</td>'
       +'<td>'+p.exp+'</td>'
+      +'<td style="'+ditCls+';">'+(ditDays!=='--'?ditDays+'d':'--')+'</td>'
+      +'<td style="'+dteCls+';">'+(dteDays!=='--'?dteDays+'d':'--')+'</td>'
       +'<td>'+p.qty+'</td>'
       +'<td>$'+fmt2(p.cost)+'</td>'
       +'<td>$'+fmt2(p.last)+'</td>'
