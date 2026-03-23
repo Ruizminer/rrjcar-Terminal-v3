@@ -4980,14 +4980,33 @@ function fetchClosedPositions(){
 
   fetch(creds.host+'/v1/accounts/'+acct+'/orders?includeTags=true',{
     headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}
-  }).then(function(r){return r.json();})
+  }).then(function(r){
+    if(!r.ok){
+      return r.text().then(function(t){
+        throw new Error('HTTP '+r.status+': '+(t.substring(0,120).replace(/<[^>]+>/g,' ').trim()||'server error'));
+      });
+    }
+    return r.json();
+  })
   .then(function(data){
     var orders=[];
     try{
+      // Tradier returns {"orders": null} when account has no order history
+      if(!data || !data.orders){
+        wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div>'
+          +'<p>No order history found for this account.</p></div>';
+        src.textContent='['+creds.mode.toUpperCase()+'] 0 orders';
+        return;
+      }
       var od=data.orders.order;
       if(!Array.isArray(od)) od = od ? [od] : [];
       orders=od.filter(function(o){return o&&o.status;});
-    }catch(e){}
+    }catch(e){
+      wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div>'
+        +'<p style="color:var(--wrn);">Parse error: '+e.message+'</p></div>';
+      src.textContent='[PARSE ERROR]';
+      return;
+    }
 
     if(!orders.length){
       wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div>'
@@ -4995,7 +5014,6 @@ function fetchClosedPositions(){
       src.textContent='['+creds.mode.toUpperCase()+'] 0 orders';
       return;
     }
-
     var allFilled=orders.filter(function(o){return o.status==='filled';});
     var matched=matchTrades(allFilled);
 
@@ -5891,7 +5909,16 @@ function atExecuteTrade(signal, budget){
     var qtyByBudget = Math.floor(budget/(limitPrice*100));
     var qty = Math.max(1, Math.min(qtyByBudget, maxContracts));
     var actualCost = (qty * limitPrice * 100).toFixed(0);
-    atLog(signal.ticker+': $'+fmt2(limitPrice)+'/contract \u2192 '+qty+' contract'+(qty>1?'s':'')+' ($'+actualCost+') [budget cap: $'+budget+', contract cap: '+maxContracts+']','');
+
+    // Skip if even 1 contract exceeds the budget
+    if(limitPrice * 100 > budget){
+      delete G_AT.inFlightTickers[signal.ticker];
+      atLog(signal.ticker+': SKIPPED \u2014 1 contract costs $'+fmt2(limitPrice*100)+' which exceeds budget $'+budget,'warn');
+      addAlert(signal.ticker, 'Auto-trader skipped: $'+fmt2(limitPrice*100)+'/contract exceeds $'+budget+' budget', 'nogo');
+      return;
+    }
+
+    atLog(signal.ticker+': $'+fmt2(limitPrice)+'/contract \u2192 '+qty+' contract'+(qty>1?'s':'')+' ($'+actualCost+') [budget: $'+budget+', max contracts: '+maxContracts+']','');
     var occSym = buildOccSym(signal.ticker,'CALL',optData.strike,optData.exp);
     var bid = optData.bid||limitPrice*0.98;
     var ask = optData.ask||limitPrice*1.02;
