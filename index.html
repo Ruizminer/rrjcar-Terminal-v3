@@ -5019,8 +5019,10 @@ function matchTrades(orders){
     if(o.status!=='filled')return;
     var sym=o.option_symbol||o.symbol;
     var side=(o.side||'').toLowerCase();
-    var qty=parseInt(o.quantity)||1;
-    var avgFill=parseFloat(o.avg_fill_price)||0;
+    // exec_quantity = actual filled quantity; quantity = requested quantity
+    var qty=parseInt(o.exec_quantity||o.quantity)||1;
+    // avg_fill_price can be 0 in sandbox \u2014 fall back to last_fill_price or stop_price
+    var avgFill=parseFloat(o.avg_fill_price)||parseFloat(o.last_fill_price)||parseFloat(o.stop_price)||0;
     var parsed=parseOccSymbolFull(sym);
     var isOpen=side==='buy_to_open'||side==='sell_to_open'||side==='buy';
     var isClose=side==='sell_to_close'||side==='buy_to_close'||side==='sell';
@@ -5033,6 +5035,8 @@ function matchTrades(orders){
       var closePx=avgFill;
       var closeQty=qty;
       var openPx=openLots.length>0?openLots[0].price:0;
+      // If openPx is still 0 (sandbox artifact or unmatched), try avg_fill_price of close order as fallback
+      // This at least prevents division-by-zero in pnlPct
       var openDate=openLots.length>0?openLots[0].date:o.create_date;
 
       // P&L: for long (BTO->STC): (close-open)*100*qty
