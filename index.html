@@ -5162,7 +5162,7 @@ function fetchClosedPositions(){
       var side=(o.side||'').toLowerCase();
       var isOpen=side==='buy_to_open'||side==='sell_to_open'||side==='buy';
       return isOpen && !matchedOpenIds[o.id];
-    }).slice(0,limit);
+    });
 
     G_closed.raw=allFilled;
     G_closed.trades=matched;
