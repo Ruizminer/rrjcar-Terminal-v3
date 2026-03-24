@@ -1027,12 +1027,16 @@ tr.sel-row td{background:var(--blu3);}
   </div>
   <div class="flt-bar">
     <button class="btn blu" onclick="fetchClosedPositions()">&#8635; REFRESH</button>
-    <label>Show <select id="cl-limit" onchange="fetchClosedPositions()" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:11px;padding:3px 6px;border-radius:3px;">
-      <option value="25">Last 25</option>
-      <option value="50" selected>Last 50</option>
-      <option value="100">Last 100</option>
-      <option value="250">Last 250</option>
-    </select> orders</label>
+    <label>Period <select id="cl-days" onchange="fetchClosedPositions()" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:11px;padding:3px 6px;border-radius:3px;">
+      <option value="1">Today</option>
+      <option value="7" selected>Last 7 days</option>
+      <option value="14">Last 14 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="60">Last 60 days</option>
+      <option value="90">Last 90 days</option>
+      <option value="180">Last 6 months</option>
+      <option value="365">Last year</option>
+    </select></label>
     <label>Filter <select id="cl-filter" onchange="renderClosedTable()" style="background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff);font-size:11px;padding:3px 6px;border-radius:3px;">
       <option value="">All</option>
       <option value="WIN">Winners</option>
@@ -5079,7 +5083,9 @@ function matchTrades(orders){
 function fetchClosedPositions(){
   var creds=getTradierCreds();
   var acct=G.acctId||localStorage.getItem('rrjcar_acct')||'';
-  var limit=parseInt(eid('cl-limit').value)||50;
+  var days=parseInt(eid('cl-days')?.value||'7');
+  var endDate=new Date().toISOString().split('T')[0];
+  var startDate=new Date(Date.now()-days*86400000).toISOString().split('T')[0];
   var wrap=eid('cl-tbl-wrap');
   var src=eid('cl-src');
 
@@ -5092,7 +5098,7 @@ function fetchClosedPositions(){
   src.textContent='Loading...';
   wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>Fetching order history...</p></div>';
 
-  fetch(creds.host+'/v1/accounts/'+acct+'/orders?includeTags=true',{
+  fetch(creds.host+'/v1/accounts/'+acct+'/orders?includeTags=true&start_date='+startDate+'&end_date='+endDate,{
     headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}
   }).then(function(r){
     if(!r.ok){
@@ -5165,6 +5171,7 @@ function fetchClosedPositions(){
     src.textContent='['+creds.mode.toUpperCase()+'] '
       +matched.length+' closed trade'+(matched.length!==1?'s':'')
       +(openFilled.length?' | '+openFilled.length+' open position'+(openFilled.length!==1?'s':''):'')
+      +' | '+startDate+' \u2192 '+endDate
       +' | Updated: '+new Date().toLocaleTimeString();
     renderClosedTable();
   })
