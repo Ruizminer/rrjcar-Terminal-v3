@@ -6055,10 +6055,14 @@ function atExecuteTrade(signal, budget){
     var bid = optData.bid||limitPrice*0.98;
     var ask = optData.ask||limitPrice*1.02;
     var spread = ask-bid;
-    var stepSize = calcEffectiveStepSize(bid,ask,11);
-    var startPx = bid;
-    var limitPx = +((ask + spread*0.10).toFixed(2));
-    atLog(signal.ticker+': BUY '+qty+'x '+occSym+' start=$'+fmt2(startPx)+' limit=$'+fmt2(limitPx),'ok');
+    var mid = +((bid+ask)/2).toFixed(2);
+    var stepSize = calcEffectiveStepSize(mid,ask,11);
+    // Start at mid \u2014 realistic first attempt that can fill immediately.
+    // Starting at bid (old behaviour) rarely fills on attempt 1 and drifts to ask anyway.
+    var startPx = mid;
+    var limitPx = +((ask + spread*0.05).toFixed(2));  // 5% buffer above ask (was 10%)
+    var DS4 = String.fromCharCode(36);
+    atLog(signal.ticker+': BUY '+qty+'x '+occSym+' mid='+DS4+fmt2(mid)+' bid='+DS4+fmt2(bid)+' ask='+DS4+fmt2(ask)+' | start='+DS4+fmt2(startPx)+' limit='+DS4+fmt2(limitPx),'ok');
     // Pre-fill order ticket for reference
     if(eid('ord-sym'))    eid('ord-sym').value    = signal.ticker;
     if(eid('ord-type'))   eid('ord-type').value   = 'CALL';
@@ -6081,7 +6085,7 @@ function atExecuteTrade(signal, budget){
     if(eid('sf-fallback')) eid('sf-fallback').value = useMktFallback ? 'market' : 'none';
     if(useMktFallback) atLog(signal.ticker+': market fallback enabled \u2014 will fire if step fill misses','warn');
 
-    runStepFill(creds,acct,occSym,signal.ticker,'buy_to_open',qty,startPx,limitPx,stepSize,11,5,'up');
+    runStepFill(creds,acct,occSym,signal.ticker,'buy_to_open',qty,startPx,limitPx,stepSize,11,3,'up');
 
     // Restore sf-fallback after step fill launches (step fill reads it asynchronously)
     // Restore after max step fill duration so it doesn't affect other step fills
