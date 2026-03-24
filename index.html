@@ -4017,6 +4017,8 @@ function fetchPositionsDirect(key,mode,host,acct){
             G.posOpenData[p.symbol]={
               openTs: now,
               underlyingAtOpen: uQuotes[p.underlying]||0,
+              costBasis: p.cost||0,
+              qty: Math.abs(p.qty)||0,
             };
             try{localStorage.setItem('rrjcar_pos_open',JSON.stringify(G.posOpenData));}catch(e){}
           }
@@ -5128,6 +5130,24 @@ function fetchClosedPositions(){
     }
     var allFilled=orders.filter(function(o){return o.status==='filled';});
     var matched=matchTrades(allFilled);
+    // Recovery pass: if openPrice=0 (no matching BTO in order history),
+    // reconstruct from posOpenData cost basis stored at position open time
+    matched.forEach(function(t){
+      if(t.openPrice > 0) return;
+      // Try posOpenData \u2014 stored when position was first loaded
+      var pod = G.posOpenData && G.posOpenData[t.symbol];
+      if(pod && pod.costBasis && pod.qty){
+        t.openPrice = pod.costBasis / pod.qty / 100;
+      }
+      // Recalculate P&L with recovered open price
+      if(t.openPrice > 0){
+        var isLong = t.side === 'LONG';
+        t.pnl = isLong
+          ? (t.closePrice - t.openPrice) * 100 * t.qty
+          : (t.openPrice - t.closePrice) * 100 * t.qty;
+        t.pnlPct = (t.closePrice - t.openPrice) / t.openPrice * 100 * (isLong ? 1 : -1);
+      }
+    });
 
     // Also collect unmatched open-side filled orders (positions still open, no close yet)
     var matchedOpenIds={};
