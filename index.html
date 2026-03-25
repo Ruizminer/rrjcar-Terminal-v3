@@ -317,7 +317,7 @@ tr.sel-row td{background:var(--blu3);}
 </head>
 <body>
 <div id="hdr">
-  <div id="hdr-logo">&#9632; RRJCAR TERMINAL v3.5</div>
+  <div id="hdr-logo">&#9632; RRJCAR TERMINAL v3.6</div>
   <div id="hdr-tickers">
     <span class="htick"><span class="ts">SPY </span><span class="tv" id="h-spy">--</span> <span class="tc" id="h-spy-c"></span></span>
     <span class="htick"><span class="ts">QQQ </span><span class="tv" id="h-qqq">--</span> <span class="tc" id="h-qqq-c"></span></span>
@@ -847,7 +847,7 @@ tr.sel-row td{background:var(--blu3);}
       <!-- Alert threshold -->
       <div class="api-row" style="align-items:center;margin-top:8px;">
         <label style="flex:0 0 180px;">MIN SCORE THRESHOLD</label>
-        <input type="number" id="notif-min-score" value="90" min="72" max="122" style="width:70px;" oninput="saveNotifSettings()">
+        <input type="number" id="notif-min-score" value="111" min="89" max="150" style="width:70px;" oninput="saveNotifSettings()">
         <span style="color:var(--gry);font-size:11px;margin-left:8px;">/ 122 — GO signals above this score trigger alerts</span>
       </div>
 
@@ -929,7 +929,7 @@ tr.sel-row td{background:var(--blu3);}
         </div>
         <div class="api-row" style="align-items:center;">
           <label style="flex:0 0 200px;">MIN SCORE THRESHOLD</label>
-          <input type="number" id="at-min-score" value="90" min="72" max="122" style="width:70px;" oninput="saveAutoTraderSettings()">
+          <input type="number" id="at-min-score" value="111" min="89" max="150" style="width:70px;" oninput="saveAutoTraderSettings()">
           <span style="color:var(--gry);font-size:11px;margin-left:8px;">/ 122 — must also pass PROVEN + Analyst Rev + GEX</span>
         </div>
         <div class="api-row" style="align-items:center;">
@@ -2740,82 +2740,266 @@ function fetchOptionContract(ticker,simPrice,callback){
  if(!key){callback(null);return;}
  var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
- var priceP=fetch(host+'/v1/markets/quotes?symbols='+ticker,{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-  .then(function(r){return r.json();})
-  .then(function(d){
-   try{var q=d.quotes.quote;var p=q.last||(q.bid&&q.ask?(q.bid+q.ask)/2:0)||q.prevclose||simPrice;return parseFloat(p)||simPrice;}catch(e){return simPrice;}
-  }).catch(function(){return simPrice;});
- var expP=fetch(host+'/v1/markets/options/expirations?symbol='+ticker,{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-  .then(function(r){return r.json();})
-  .then(function(d){var dates=[];try{dates=d.expirations.date;if(!Array.isArray(dates))dates=[dates];}catch(e){}return dates;})
-  .catch(function(){return [];});
+
+ // Delta ladder (Option Alpha bot strategy) — preferred strike first, fall back in 0.02 steps
+ var DELTA_LADDER = [0.45, 0.43, 0.41, 0.39, 0.37];
+ var VOL_THRESHOLD = 130; // minimum contract volume (Option Alpha bot value)
+
+ // Market days helper — count Mon-Fri between two dates
+ function marketDaysBetween(d1, d2){
+   var count=0, cur=new Date(d1);
+   while(cur<d2){ cur.setDate(cur.getDate()+1); var day=cur.getDay(); if(day>0&&day<6) count++; }
+   return count;
+ }
+
+ // Get live price + all expirations in parallel
+ var priceP = fetch(host+'/v1/markets/quotes?symbols='+ticker,
+   {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+   .then(function(r){return r.json();})
+   .then(function(d){
+     try{var q=d.quotes.quote;return parseFloat(q.last||(q.bid&&q.ask?(q.bid+q.ask)/2:0)||q.prevclose||simPrice)||simPrice;}
+     catch(e){return simPrice;}
+   }).catch(function(){return simPrice;});
+
+ var expP = fetch(host+'/v1/markets/options/expirations?symbol='+ticker,
+   {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+   .then(function(r){return r.json();})
+   .then(function(d){
+     var dates=[];
+     try{dates=d.expirations.date;if(!Array.isArray(dates))dates=[dates];}catch(e){}
+     return dates;
+   }).catch(function(){return [];});
+
  Promise.all([priceP,expP]).then(function(res){
-  var price=res[0],dates=res[1];
-  if(!dates.length){callback(null);return;}
-  var today=new Date();
-  var best=null,bestDiff=999;
-  dates.forEach(function(d){var dte=Math.round((new Date(d)-today)/864e5);var diff=Math.abs(dte-35);if(dte>=20&&dte<=70&&diff<bestDiff){bestDiff=diff;best={date:d,dte:dte};}});
-  if(!best){best={date:dates[0],dte:Math.round((new Date(dates[0])-today)/864e5)};}
-  fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+best.date+'&greeks=true',{headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-  .then(function(r){return r.json();})
-  .then(function(cdata){
-   var opts=[];try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
-   if(!opts.length){callback(null);return;}
-   // Base filter: calls with valid greeks
-   var calls=opts.filter(function(o){
-     return o.option_type==='call'&&o.greeks&&o.greeks.delta>0.05&&o.greeks.delta<0.99;
-   });
-   if(!calls.length){callback(null);return;}
-   // Liquidity filter tiers - try strict first, fall back progressively
-   function sprdPctOf(o){var mid=(o.bid+o.ask)/2;return mid>0?((o.ask-o.bid)/mid*100):999;}
-   // Tier 1: OI>=100, vol>=100, spread<=10%
-   var t1=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=100&&sprdPctOf(o)<=10;});
-   // Tier 2: OI>=100, vol>=10, spread<=15%
-   var t2=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=10&&sprdPctOf(o)<=15;});
-   // Tier 3: OI>=100 only (low volume early in session)
-   var t3=calls.filter(function(o){return (o.open_interest||0)>=100;});
-   // Tier 4: any delta-valid call (last resort)
-   var pool=t1.length?t1:t2.length?t2:t3.length?t3:calls;
-   var tierUsed=t1.length?1:t2.length?2:t3.length?3:4;
-   // Score: delta target 0.55-0.75 (momentum ITM), volume, OI, spread tightness
-   pool.forEach(function(o){
-     var delta=Math.abs(o.greeks.delta||0);
-     var vol=o.volume||0;var oi=o.open_interest||0;
-     var mid=(o.bid+o.ask)/2;var sprd=mid>0?((o.ask-o.bid)/mid*100):99;
-     var dScore=delta>=0.55&&delta<=0.75?40:delta>=0.45&&delta<=0.85?20:5;
-     var vScore=Math.min(vol/50,30);
-     var oScore=Math.min(oi/200,20);
-     var sScore=sprd<3?10:sprd<5?7:sprd<8?4:sprd<12?1:0;
-     o._score=dScore+vScore+oScore+sScore;
-   });
-   pool.sort(function(a,b){return b._score-a._score;});
-   var bo=pool[0];
-   var mid=(bo.bid+bo.ask)/2;
-   var spread=bo.ask-bo.bid;
-   var spreadPct=mid>0?((spread/mid)*100):0;
-   var intrinsic=Math.max(price-bo.strike,0);
-   var extrinsic=Math.max(mid-intrinsic,0);
-   var extPct=mid>0?((extrinsic/mid)*100):0;
-   callback({
-     strike:bo.strike,spread:+(spread.toFixed(2)),spreadPct:+(spreadPct.toFixed(2)),
-     delta:+(bo.greeks.delta.toFixed(2)),ext:+(extPct.toFixed(1)),dte:best.dte,
-     optPr:+(mid.toFixed(2)),bid:bo.bid,ask:bo.ask,
-     oi:bo.open_interest||0,vol:bo.volume||0,
-     exp:best.date,iv:bo.greeks?bo.greeks.smv_vol:0,
-     symbol:bo.symbol,livePrice:price,live:true,tierUsed:tierUsed
-   });
-  }).catch(function(){callback(null);});
+   var price=res[0], dates=res[1];
+   if(!dates.length){callback(null);return;}
+
+   var today = new Date();
+
+   // DTE waterfall: find best expiry for each minimum market-day threshold
+   // Try 10 mkt days min → 15 min → 20 min (Option Alpha bot DTE branches)
+   var DTE_MINS = [10, 15, 20];
+   var branchExpiry = null;
+
+   for(var bi=0; bi<DTE_MINS.length; bi++){
+     var minMktDays = DTE_MINS[bi];
+     var best=null, bestMktDays=9999;
+     dates.forEach(function(d){
+       var mktDays = marketDaysBetween(today, new Date(d));
+       // Must meet minimum AND stay under 50 market days (~70 cal days)
+       if(mktDays >= minMktDays && mktDays <= 50 && mktDays < bestMktDays){
+         bestMktDays = mktDays;
+         best = {date:d, mktDays:mktDays};
+       }
+     });
+     if(best){ branchExpiry = best; break; }
+   }
+
+   // Final fallback: nearest expiry with any reasonable DTE
+   if(!branchExpiry){
+     var fallback=null, fallDiff=9999;
+     dates.forEach(function(d){
+       var calDays=Math.round((new Date(d)-today)/864e5);
+       var diff=Math.abs(calDays-35);
+       if(calDays>=10&&calDays<=90&&diff<fallDiff){fallDiff=diff;fallback={date:d,mktDays:Math.round(calDays*5/7)};}
+     });
+     branchExpiry = fallback || {date:dates[0], mktDays:0};
+   }
+
+   // Fetch chain for selected expiry
+   fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+branchExpiry.date+'&greeks=true',
+     {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+   .then(function(r){return r.json();})
+   .then(function(cdata){
+     var opts=[];
+     try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
+     if(!opts.length){callback(null);return;}
+
+     // Base filter: calls only, valid greeks
+     var calls = opts.filter(function(o){
+       return o.option_type==='call' && o.greeks && o.greeks.delta>0.05 && o.greeks.delta<0.99;
+     });
+     if(!calls.length){callback(null);return;}
+
+     function sprdPct(o){var mid=(o.bid+o.ask)/2;return mid>0?((o.ask-o.bid)/mid*100):999;}
+
+     // Delta ladder: walk 0.45 → 0.43 → 0.41 → 0.39 → 0.37
+     // For each delta target, find nearest call AND check volume >= 130
+     // First strike that passes volume threshold wins
+     var chosen = null;
+     var DELTA_TOL = 0.03; // +/- tolerance for matching delta target
+
+     for(var di=0; di<DELTA_LADDER.length; di++){
+       var target = DELTA_LADDER[di];
+       // Find calls nearest to this delta target
+       var candidates = calls.filter(function(o){
+         return Math.abs(Math.abs(o.greeks.delta) - target) <= DELTA_TOL;
+       });
+       // Sort by closeness to target delta
+       candidates.sort(function(a,b){
+         return Math.abs(Math.abs(a.greeks.delta)-target) - Math.abs(Math.abs(b.greeks.delta)-target);
+       });
+       // Walk candidates: first one with volume >= threshold wins
+       for(var ci=0; ci<candidates.length; ci++){
+         if((candidates[ci].volume||0) >= VOL_THRESHOLD){
+           chosen = candidates[ci];
+           chosen._strikeNum = di+1; // which step in ladder fired (1st=0.45, 2nd=0.43...)
+           break;
+         }
+       }
+       if(chosen) break;
+     }
+
+     // Fallback: if no ladder strike cleared volume threshold,
+     // use liquidity tiers (original logic) to avoid returning null
+     if(!chosen){
+       var t1=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=50&&sprdPct(o)<=10;});
+       var t2=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=10&&sprdPct(o)<=15;});
+       var t3=calls.filter(function(o){return (o.open_interest||0)>=100;});
+       var pool=t1.length?t1:t2.length?t2:t3.length?t3:calls;
+       pool.forEach(function(o){
+         var delta=Math.abs(o.greeks.delta||0);
+         var dScore=delta>=0.40&&delta<=0.50?40:delta>=0.35&&delta<=0.55?20:5;
+         var vScore=Math.min((o.volume||0)/50,30);
+         var oScore=Math.min((o.open_interest||0)/200,20);
+         var sScore=sprdPct(o)<3?10:sprdPct(o)<5?7:sprdPct(o)<8?4:1;
+         o._score=dScore+vScore+oScore+sScore;
+       });
+       pool.sort(function(a,b){return b._score-a._score;});
+       chosen=pool[0];
+       chosen._strikeNum=0; // 0 = fallback tier selection
+     }
+
+     var mid=(chosen.bid+chosen.ask)/2;
+     var spread=chosen.ask-chosen.bid;
+     var spreadPct=mid>0?(spread/mid*100):0;
+     var intrinsic=Math.max(price-chosen.strike,0);
+     var extrinsic=Math.max(mid-intrinsic,0);
+     var extPct=mid>0?(extrinsic/mid*100):0;
+
+     callback({
+       strike:     chosen.strike,
+       spread:     +(spread.toFixed(2)),
+       spreadPct:  +(spreadPct.toFixed(2)),
+       delta:      +(chosen.greeks.delta.toFixed(2)),
+       ext:        +(extPct.toFixed(1)),
+       mktDays:    branchExpiry.mktDays,
+       dte:        branchExpiry.mktDays, // keep dte field for compatibility
+       optPr:      +(mid.toFixed(2)),
+       bid:        chosen.bid,
+       ask:        chosen.ask,
+       oi:         chosen.open_interest||0,
+       vol:        chosen.volume||0,
+       exp:        branchExpiry.date,
+       iv:         chosen.greeks?chosen.greeks.smv_vol:0,
+       symbol:     chosen.symbol,
+       livePrice:  price,
+       live:       true,
+       strikeNum:  chosen._strikeNum, // which delta ladder step fired
+       volThresh:  VOL_THRESHOLD,
+       tierUsed:   chosen._strikeNum > 0 ? ('delta-'+DELTA_LADDER[chosen._strikeNum-1]) : 'fallback'
+     });
+   }).catch(function(){callback(null);});
  }).catch(function(){callback(null);});
 }
-// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-//  v3.5 SCORING ENGINE
-//  Section A: Technical Momentum  (8 rules, 69 pts max)
-//  Section B: Momentum Quality    (4 rules, 38 pts max, Tradier-only)
-//  Section C: FMP Daily Signals   (2 rules, 20 pts max, requires FMP key)
-//  PROVEN bonus +8 | AVOID penalty -15 | Max: 116 pts | GO: >= 72 (62%)
-// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// ══════════════════════════════════════════════════════════════════════════════
+//  INDICATOR HISTORY CACHE + CALCULATIONS (RSI Accel, MFI, CMO)
+//  Single 25-day Tradier history fetch per ticker, 24hr localStorage TTL
+// ══════════════════════════════════════════════════════════════════════════════
 
-// \u2500\u2500 FMP fundamental cache (24hr TTL per ticker) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+var G_HIST_CACHE = {};
+
+function histCacheKey(ticker){ return 'rrjcar_hist_' + ticker; }
+
+function loadHistCache(ticker){
+  try{
+    var raw = localStorage.getItem(histCacheKey(ticker));
+    if(!raw) return null;
+    var obj = JSON.parse(raw);
+    if(Date.now() - (obj.ts||0) > 86400000) return null;
+    return obj.days;
+  } catch(e){ return null; }
+}
+
+function saveHistCache(ticker, days){
+  try{
+    localStorage.setItem(histCacheKey(ticker), JSON.stringify({days:days, ts:Date.now()}));
+    G_HIST_CACHE[ticker] = days;
+  } catch(e){}
+}
+
+async function fetchIndicatorHistory(ticker){
+  if(G_HIST_CACHE[ticker]) return G_HIST_CACHE[ticker];
+  var cached = loadHistCache(ticker);
+  if(cached){ G_HIST_CACHE[ticker] = cached; return cached; }
+  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  if(!key) return null;
+  var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
+  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+  var end  = new Date().toISOString().split('T')[0];
+  var start= new Date(Date.now()-25*864e5).toISOString().split('T')[0];
+  try{
+    var r = await fetch(host+'/v1/markets/history?symbol='+ticker+'&interval=daily&start='+start+'&end='+end,
+      {headers:{Authorization:'Bearer '+key,Accept:'application/json'}});
+    var d = await r.json();
+    var days = d.history && d.history.day ? d.history.day : [];
+    if(!Array.isArray(days)) days = [days];
+    if(days.length < 3) return null;
+    saveHistCache(ticker, days);
+    return days;
+  } catch(e){ return null; }
+}
+
+function calcRSIatIndex(days, period, idx){
+  if(idx < period) return 50;
+  var gains=0, losses=0;
+  for(var i=idx-period+1; i<=idx; i++){
+    var chg = parseFloat(days[i].close) - parseFloat(days[i-1].close);
+    if(chg>0) gains+=chg; else losses+=Math.abs(chg);
+  }
+  var avgG=gains/period, avgL=losses/period;
+  if(avgL===0) return 100;
+  return 100-(100/(1+avgG/avgL));
+}
+
+function calcRSIAccel(days, period){
+  period = period||7;
+  if(!days||days.length<period+2) return {rsiToday:50,rsiYest:50,accel:false};
+  var last = days.length-1;
+  var rsiToday = calcRSIatIndex(days, period, last);
+  var rsiYest  = calcRSIatIndex(days, period, last-1);
+  return {rsiToday:+rsiToday.toFixed(1), rsiYest:+rsiYest.toFixed(1), accel: rsiToday > rsiYest};
+}
+
+function calcMFI(days, period){
+  period = period||7;
+  if(!days||days.length<period+2) return 50;
+  var posFlow=0, negFlow=0;
+  var start = days.length-period;
+  for(var i=start; i<days.length; i++){
+    var tp     = (parseFloat(days[i].high)+parseFloat(days[i].low)+parseFloat(days[i].close))/3;
+    var tpPrev = (parseFloat(days[i-1].high)+parseFloat(days[i-1].low)+parseFloat(days[i-1].close))/3;
+    var raw    = tp * parseFloat(days[i].volume);
+    if(tp>tpPrev) posFlow+=raw; else negFlow+=raw;
+  }
+  if(negFlow===0) return 100;
+  return +(100-(100/(1+posFlow/negFlow))).toFixed(1);
+}
+
+function calcCMO(days, period){
+  period = period||10;
+  if(!days||days.length<period+2) return 0;
+  var sumUp=0, sumDn=0;
+  var start = days.length-period;
+  for(var i=start; i<days.length; i++){
+    var chg = parseFloat(days[i].close)-parseFloat(days[i-1].close);
+    if(chg>0) sumUp+=chg; else sumDn+=Math.abs(chg);
+  }
+  var total=sumUp+sumDn;
+  if(total===0) return 0;
+  return +(((sumUp-sumDn)/total)*100).toFixed(1);
+}
+
 var G_FMP_CACHE = {};
 
 function fmpCacheKey(ticker){ return 'rrjcar_fmp_' + ticker; }
@@ -2966,6 +3150,33 @@ function scoreIt(ticker, ind, opt){
     res.push({n:c.n, pass:c.ok, val:c.val, filter:false, pts:c.pts, isFmp:true});
   });
 
+  // ── SECTION D: Momentum Acceleration (3 rules, 28 pts, Tradier history) ──────────
+  // Uses G_HIST_CACHE populated async by fetchIndicatorHistory() during detail load
+  var histDays = G_HIST_CACHE[ticker] || null;
+
+  // Rule: RSI Accelerating (+12) — RSI(7) today > RSI(7) yesterday
+  var rsiAccelData = calcRSIAccel(histDays, 7);
+  var rsiAccelOk   = rsiAccelData.accel;
+  var rsiAccelVal  = histDays
+    ? (rsiAccelData.rsiYest + ' → ' + rsiAccelData.rsiToday + (rsiAccelOk ? ' ↑' : ' ↓'))
+    : 'Load detail to calculate';
+  if(rsiAccelOk){ score += 12; techScore += 12; }
+  res.push({n:'RSI Accelerating', pass:rsiAccelOk, val:rsiAccelVal, filter:false, pts:12, isHist:true});
+
+  // Rule: MFI Bullish (+9) — MFI(7) > 40, volume-weighted buying pressure
+  var mfiVal_raw = calcMFI(histDays, 7);
+  var mfiOk      = histDays ? mfiVal_raw > 40 : false;
+  var mfiVal     = histDays ? ('MFI(7) ' + mfiVal_raw + (mfiOk ? ' > 40' : ' ≤ 40')) : 'Load detail to calculate';
+  if(mfiOk){ score += 9; techScore += 9; }
+  res.push({n:'MFI Bullish', pass:mfiOk, val:mfiVal, filter:false, pts:9, isHist:true});
+
+  // Rule: CMO Positive (+7) — CMO(10) > 0, net upward momentum across all bars
+  var cmoVal_raw = calcCMO(histDays, 10);
+  var cmoOk      = histDays ? cmoVal_raw > 0 : false;
+  var cmoVal     = histDays ? ('CMO(10) ' + cmoVal_raw + (cmoOk ? ' > 0' : ' ≤ 0')) : 'Load detail to calculate';
+  if(cmoOk){ score += 7; techScore += 7; }
+  res.push({n:'CMO Positive', pass:cmoOk, val:cmoVal, filter:false, pts:7, isHist:true});
+
   // \u2500\u2500 GO DECISION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   // \u2500\u2500 SECTION C: GEX Confirmation (bonus rule, +6 pts, no penalty) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   // Looks up G.gexData populated by the GEX/Flow tab after runGex() is called
@@ -2983,8 +3194,8 @@ function scoreIt(ticker, ind, opt){
   res.push({n:'GEX Call Heavy', pass:gexCallHeavy, val:gexVal, filter:false, pts:6, isGex:true});
 
   // \u2500\u2500 GO DECISION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  var total = clamp(score, 0, 122); // 116 base + 6 GEX bonus
-  var isGo  = total >= 72 && !avoidBad;
+  var total = clamp(score, 0, 150); // 144 base + 6 GEX bonus
+  var isGo  = total >= 89 && !avoidBad;
 
   return {
     score:      total,
@@ -3084,7 +3295,7 @@ function buildDetail(r,detId,emptyId){
     '<div class="det-hdr"><span class="det-tk">'+r.ticker+'</span>'
     +'<span class="det-pr">$'+fmt2(r.price)+'</span>'
     +'<span class="det-sig '+sigCls+'">'+sigLbl+'</span>'
-    +'<span class="det-meta">'+r.sector+' | Score: <b>'+r.score+'</b>/122 | Tech: '+techScore+' Fund: '+fundScore+' | Passes: '+r.passes+'/14</span>'
+    +'<span class="det-meta">'+r.sector+' | Score: <b>'+r.score+'</b>/150 | Tech: '+techScore+' Fund: '+fundScore+' | Passes: '+r.passes+'/14</span>'
     +'</div>'
     +'<div class="det-tv" id="tv-'+r.ticker+'"></div>'
     +'<div class="det-scroll">'
@@ -3118,7 +3329,7 @@ function buildDetail(r,detId,emptyId){
     +'<button class="btn" style="font-size:12px;padding:5px 14px;border-color:var(--gry2);color:var(--gry);" onclick="doBuyPut()">\u25bc BUY PUT</button>'
     +'<span style="color:var(--gry);font-size:10px;">Strike: $'+fmt2(opt.strike)+'  |  Exp: '+opt.exp+'</span>'
     +'</div>'
-    +'<div class="s-hdr">RULE SCORECARD v3.5 <span style="font-size:10px;color:var(--gry);font-weight:400;">Tech '+techScore+' + Fund '+fundScore+' = '+r.score+'/122</span></div>'
+    +'<div class="s-hdr">RULE SCORECARD v3.5 <span style="font-size:10px;color:var(--gry);font-weight:400;">Tech '+techScore+' + Fund '+fundScore+' = '+r.score+'/150</span></div>'
     +'<div class="rules-grid">'+rulesHtml+'</div>'
     +'</div>';
   renderTV('tv-'+r.ticker,r.ticker);
@@ -3150,25 +3361,35 @@ function viewDetail(ticker,detId,emptyId){
    G.detailOpt={ticker:ticker,strike:optData.strike,exp:optData.exp};
    buildDetail(r,detId,emptyId);
 
-   // After options load, fetch FMP data and re-score again if key set
-   if(fmpKey){
-    fetchFmpData(ticker).then(function(fmpData){
-     if(!fmpData)return;
-     var updated=scoreIt(ticker,r.ind,r.opt);
-     r.score=updated.score;r.techScore=updated.techScore;r.fundScore=updated.fundScore;
-     r.isGo=updated.isGo;r.rules=updated.rules;r.passes=updated.passes;
-     buildDetail(r,detId,emptyId);
-    });
-   }
+   // After options load, fetch history indicators then FMP, re-score after each
+   fetchIndicatorHistory(ticker).then(function(days){
+    if(days){ G_HIST_CACHE[ticker]=days; }
+    var s1=scoreIt(ticker,r.ind,r.opt);
+    r.score=s1.score;r.techScore=s1.techScore;r.fundScore=s1.fundScore;
+    r.isGo=s1.isGo;r.rules=s1.rules;r.passes=s1.passes;
+    buildDetail(r,detId,emptyId);
+    if(fmpKey){
+     fetchFmpData(ticker).then(function(fmpData){
+      if(!fmpData)return;
+      var s2=scoreIt(ticker,r.ind,r.opt);
+      r.score=s2.score;r.techScore=s2.techScore;r.fundScore=s2.fundScore;
+      r.isGo=s2.isGo;r.rules=s2.rules;r.passes=s2.passes;
+      buildDetail(r,detId,emptyId);
+     });
+    }
+   });
   });
  } else if(fmpKey){
-  // No Tradier but has FMP \u2014 still fetch FMP data
-  fetchFmpData(ticker).then(function(fmpData){
-   if(!fmpData)return;
-   var updated=scoreIt(ticker,r.ind,r.opt);
-   r.score=updated.score;r.techScore=updated.techScore;r.fundScore=updated.fundScore;
-   r.isGo=updated.isGo;r.rules=updated.rules;r.passes=updated.passes;
-   buildDetail(r,detId,emptyId);
+  // No Tradier but has FMP + history — fetch both
+  fetchIndicatorHistory(ticker).then(function(days){
+   if(days){ G_HIST_CACHE[ticker]=days; }
+   fetchFmpData(ticker).then(function(fmpData){
+    if(!fmpData)return;
+    var updated=scoreIt(ticker,r.ind,r.opt);
+    r.score=updated.score;r.techScore=updated.techScore;r.fundScore=updated.fundScore;
+    r.isGo=updated.isGo;r.rules=updated.rules;r.passes=updated.passes;
+    buildDetail(r,detId,emptyId);
+   });
   });
  }
 }
@@ -3698,7 +3919,7 @@ function renderScan(){
     var fund=r.fundScore||0;
 
     // Score bar \u2014 visual fill showing score out of 122
-    var scorePct=Math.round((r.score/122)*100);
+    var scorePct=Math.round((r.score/150)*100);
     var scoreBar='<div style="display:inline-flex;align-items:center;gap:5px;">'
       +'<b>'+r.score+'</b>'
       +'<div style="width:36px;height:4px;background:var(--bg3);border-radius:2px;display:inline-block;vertical-align:middle;">'
@@ -5456,7 +5677,7 @@ async function runMarketBreadth(){
     G.results.filter(function(r){return r.isGo;}).forEach(function(r){sectorScores[r.sector]=(sectorScores[r.sector]||0)+1;});
     var maxS=0;Object.keys(sectorScores).forEach(function(s){if(sectorScores[s]>maxS){maxS=sectorScores[s];topSector=s;}});
     scanHtml='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
-    [{label:'Total Scanned',val:total},{label:'GO Signals',val:goCount},{label:'Avg Score',val:avgScore+'/122'},
+    [{label:'Total Scanned',val:total},{label:'GO Signals',val:goCount},{label:'Avg Score',val:avgScore+'/150'},
      {label:'Avg Tech',val:avgTech},{label:'Avg Fund',val:avgFund},{label:'PROVEN GO',val:provenGo},
      {label:'Top Sector',val:topSector||'--'},{label:'GO Rate',val:Math.round((goCount/total)*100)+'%'}
     ].forEach(function(item){
@@ -5514,7 +5735,7 @@ function saveNotifSettings(){
       ejsTemplate:   eid('notif-ejs-template')    ? eid('notif-ejs-template').value     : '',
       ejsPubKey:     eid('notif-ejs-pubkey')      ? eid('notif-ejs-pubkey').value       : '',
       emailTo:       eid('notif-email-to')        ? eid('notif-email-to').value         : '',
-      minScore:      eid('notif-min-score')       ? parseInt(eid('notif-min-score').value)||90   : 90,
+      minScore:      eid('notif-min-score')       ? parseInt(eid('notif-min-score').value)||111  : 111,
       cooldown:      eid('notif-cooldown')        ? parseInt(eid('notif-cooldown').value)||60    : 60,
       autoFill:      eid('notif-autofill')        ? eid('notif-autofill').checked       : false,
       autoQty:       eid('notif-autoqty')         ? parseInt(eid('notif-autoqty').value)||1      : 1,
@@ -5535,7 +5756,7 @@ function loadNotifSettings(){
     if(eid('notif-ejs-template'))  eid('notif-ejs-template').value    = s.ejsTemplate  || '';
     if(eid('notif-ejs-pubkey'))    eid('notif-ejs-pubkey').value      = s.ejsPubKey    || '';
     if(eid('notif-email-to'))      eid('notif-email-to').value        = s.emailTo      || '';
-    if(eid('notif-min-score'))     eid('notif-min-score').value       = s.minScore     || 90;
+    if(eid('notif-min-score'))     eid('notif-min-score').value       = s.minScore     || 111;
     if(eid('notif-cooldown'))      eid('notif-cooldown').value        = s.cooldown     || 60;
     if(eid('notif-autofill'))      eid('notif-autofill').checked      = !!s.autoFill;
     if(eid('notif-autoqty'))       eid('notif-autoqty').value         = s.autoQty      || 1;
@@ -5550,7 +5771,7 @@ function getNotifSettings(){
     var raw = localStorage.getItem('rrjcar_notif');
     if(raw) return JSON.parse(raw);
   }catch(e){}
-  return {browser:false, email:false, minScore:90, cooldown:60};
+  return {browser:false, email:false, minScore:111, cooldown:60};
 }
 
 function updateNotifPermStatus(){
@@ -5595,7 +5816,7 @@ function fireBrowserNotif(ticker, score, sector, price, rulesSummary){
   var s = getNotifSettings();
   if(!s.browser) return;
   var n = new Notification('\u2605 HIGH CONVICTION: ' + ticker, {
-    body: 'Score: ' + score + '/122 | ' + sector + ' | $' + price.toFixed(2) + '\n' + rulesSummary,
+    body: 'Score: ' + score + '/150 | ' + sector + ' | $' + price.toFixed(2) + '\n' + rulesSummary,
     icon: 'https://ruizminer.github.io/rrjcar-Terminal-v3/favicon.ico',
     tag:  'rrjcar-' + ticker, // replaces previous notification for same ticker
     requireInteraction: true  // stays until user dismisses
@@ -5628,7 +5849,7 @@ function fireEmailAlert(ticker, score, sector, price, rulesSummary){
 function sendEmailJsAlert(s, ticker, score, sector, price, rulesSummary){
   emailjs.send(s.ejsService, s.ejsTemplate, {
     ticker:       ticker,
-    score:        score + '/122',
+    score:        score + '/150',
     sector:       sector,
     price:        '$' + price.toFixed(2),
     signal_time:  new Date().toLocaleString(),
@@ -5683,7 +5904,7 @@ function autoFillHighConviction(r, optData){
         + '<b>' + r.ticker + ' CALL</b>'
         + (optData && optData.strike ? ' &nbsp;$' + fmt2(optData.strike) : '')
         + (optData && optData.exp    ? ' &nbsp;Exp: ' + optData.exp : '')
-        + '<br>Score: <b>' + r.score + '/122</b> | ' + r.sector + ' | $' + fmt2(r.price)
+        + '<br>Score: <b>' + r.score + '/150</b> | ' + r.sector + ' | $' + fmt2(r.price)
         + '<br><span style="color:var(--gry);font-size:10px;">Review fields then click SUBMIT ORDER</span>';
       res.className = 'ord-result show';
       res.style.borderColor = 'var(--grn)';
@@ -5701,7 +5922,7 @@ function showAutoSubmitModal(r, optData){
   var tickerEl = eid('hc-modal-ticker'), detailEl = eid('hc-modal-details'), orderEl = eid('hc-modal-order');
   if(tickerEl) tickerEl.textContent = r.ticker + ' \u2605 HIGH CONVICTION';
   if(detailEl) detailEl.innerHTML =
-    'Score: <b style="color:var(--grn);">' + r.score + '/122</b>'
+    'Score: <b style="color:var(--grn);">' + r.score + '/150</b>'
     + ' &nbsp;|&nbsp; Sector: ' + r.sector
     + ' &nbsp;|&nbsp; Price: $' + fmt2(r.price) + '<br>'
     + 'PROVEN \u2713 &nbsp; Analyst Revisions \u2191 \u2713 &nbsp; GEX Call Heavy \u2713';
@@ -5765,7 +5986,7 @@ function hcModalSkip(){
 
 function checkHighConvictionSignals(results){
   var s = getNotifSettings();
-  var minScore   = s.minScore    || 90;
+  var minScore   = s.minScore    || 111;
   var cooldownMs = (s.cooldown   || 60) * 60000;
   var doAutoFill   = !!s.autoFill;
   var doAutoSubmit = !!s.autoSubmit;
@@ -5783,7 +6004,7 @@ function checkHighConvictionSignals(results){
     G_NOTIF_COOLDOWNS[r.ticker] = now;
     var rulesSummary = 'PROVEN \u2713  Analyst Rev \u2191 \u2713  GEX Call Heavy \u2713  Score ' + r.score;
     var price = r.price || 0;
-    addAlert(r.ticker, '\u2605 HIGH CONVICTION \u2014 Score ' + r.score + '/122 | ' + r.sector + ' | $' + price.toFixed(2), 'go');
+    addAlert(r.ticker, '\u2605 HIGH CONVICTION \u2014 Score ' + r.score + '/150 | ' + r.sector + ' | $' + price.toFixed(2), 'go');
     fireBrowserNotif(r.ticker, r.score, r.sector, price, rulesSummary);
     fireEmailAlert(r.ticker, r.score, r.sector, price, rulesSummary);
     fired.push(r.ticker);
@@ -5827,7 +6048,7 @@ function saveAutoTraderSettings(){
       budget:         +(eid('at-budget')?.value||500),
       maxContracts:   +(eid('at-max-contracts')?.value||3),
       dailyLoss:      +(eid('at-daily-loss')?.value||500),
-      minScore:       +(eid('at-min-score')?.value||90),
+      minScore:       +(eid('at-min-score')?.value||111),
       hoursGate:      eid('at-hours-gate')?.checked !== false,
       maxPositions:   +(eid('at-max-positions')?.value||3),
       marketFallback: eid('at-market-fallback')?.checked || false,
@@ -5843,7 +6064,7 @@ function loadAutoTraderSettings(){
     if(eid('at-budget'))          eid('at-budget').value          = s.budget        || 500;
     if(eid('at-max-contracts'))   eid('at-max-contracts').value   = s.maxContracts  || 3;
     if(eid('at-daily-loss'))      eid('at-daily-loss').value      = s.dailyLoss     || 500;
-    if(eid('at-min-score'))       eid('at-min-score').value       = s.minScore     || 90;
+    if(eid('at-min-score'))       eid('at-min-score').value       = s.minScore     || 111;
     if(eid('at-hours-gate'))      eid('at-hours-gate').checked    = s.hoursGate !== false;
     if(eid('at-max-positions'))   eid('at-max-positions').value   = s.maxPositions || 3;
     if(eid('at-market-fallback')) eid('at-market-fallback').checked = !!s.marketFallback;
@@ -5858,12 +6079,12 @@ function getAutoTraderSettings(){
       budget:       +(s.budget       || (eid('at-budget')        ? eid('at-budget').value        : 0) || 500),
       maxContracts: +(s.maxContracts || (eid('at-max-contracts') ? eid('at-max-contracts').value : 0) || 3),
       dailyLoss:    +(s.dailyLoss    || (eid('at-daily-loss')     ? eid('at-daily-loss').value    : 0) || 500),
-      minScore:       +(s.minScore       || (eid('at-min-score')        ? eid('at-min-score').value       : 0) || 90),
+      minScore:       +(s.minScore       || (eid('at-min-score')        ? eid('at-min-score').value       : 0) || 111),
       hoursGate:      s.hoursGate !== false,
       maxPositions:   +(s.maxPositions   || (eid('at-max-positions')   ? eid('at-max-positions').value   : 0) || 3),
       marketFallback: !!s.marketFallback,
     };
-  }catch(e){ return {budget:500,maxContracts:3,dailyLoss:500,minScore:90,hoursGate:true,maxPositions:3,marketFallback:false}; }
+  }catch(e){ return {budget:500,maxContracts:3,dailyLoss:500,minScore:111,hoursGate:true,maxPositions:3,marketFallback:false}; }
 }
 
 function atLog(msg, cls){
@@ -6115,22 +6336,22 @@ var STRATEGY_MODES = {
   highConviction: {
     label: '\u2605 HIGH CONVICTION',
     desc: 'PROVEN ticker + Score \u226590 + Analyst Revisions \u2191 + GEX Call Heavy \u2014 the rarest, highest-quality setups',
-    filters: {sig:'GO', minScore:90, analyst:true, proven:true, gex:true}
+    filters: {sig:'GO', minScore:111, analyst:true, proven:true, gex:true}
   },
   breakout: {
     label: '\u25b2 BREAKOUT',
     desc: 'Near 52-week high + RS > SPY + MACD + + TF Aligned 2/3 \u2014 stocks breaking out with market leadership',
-    filters: {sig:'GO', minScore:72, hi52:true, rs:true, macd:true, tf:true}
+    filters: {sig:'GO', minScore:89, hi52:true, rs:true, macd:true, tf:true}
   },
   momentum: {
     label: '\u25b6 MOMENTUM',
     desc: 'MACD + + Above EMA200 + Vol > Avg + RS > SPY \u2014 strong trending stocks with volume confirmation',
-    filters: {sig:'GO', minScore:72, macd:true, ema200:true, vol:true, rs:true}
+    filters: {sig:'GO', minScore:89, macd:true, ema200:true, vol:true, rs:true}
   },
   institutional: {
     label: '\u25c6 INSTITUTIONAL',
     desc: 'Analyst Revisions \u2191 + Insider Buying + PROVEN ticker \u2014 smart money signals active',
-    filters: {sig:'GO', minScore:72, analyst:true, insider:true, proven:true}
+    filters: {sig:'GO', minScore:89, analyst:true, insider:true, proven:true}
   }
 };
 
@@ -6323,7 +6544,7 @@ function updateHeaderQuotes(){
 //  SETTINGS PERSISTENCE
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
-var APP_VERSION = '3.5';
+var APP_VERSION = '3.6';
 var FMP_KEY_DEFAULT = 'IPvsKpxwgJfimD4BIjF5ntLiNGuAPrqQ'; // shared team key \u2014 individual keys override via API tab
 
 function saveAppSettings(){
