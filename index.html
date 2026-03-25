@@ -2741,11 +2741,11 @@ function fetchOptionContract(ticker,simPrice,callback){
  var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
 
- // Delta ladder (Option Alpha bot strategy) — preferred strike first, fall back in 0.02 steps
+ // Delta ladder (Option Alpha bot strategy) \u2014 preferred strike first, fall back in 0.02 steps
  var DELTA_LADDER = [0.45, 0.43, 0.41, 0.39, 0.37];
  var VOL_THRESHOLD = 130; // minimum contract volume (Option Alpha bot value)
 
- // Market days helper — count Mon-Fri between two dates
+ // Market days helper \u2014 count Mon-Fri between two dates
  function marketDaysBetween(d1, d2){
    var count=0, cur=new Date(d1);
    while(cur<d2){ cur.setDate(cur.getDate()+1); var day=cur.getDay(); if(day>0&&day<6) count++; }
@@ -2777,7 +2777,7 @@ function fetchOptionContract(ticker,simPrice,callback){
    var today = new Date();
 
    // DTE waterfall: find best expiry for each minimum market-day threshold
-   // Try 10 mkt days min → 15 min → 20 min (Option Alpha bot DTE branches)
+   // Try 10 mkt days min \u2192 15 min \u2192 20 min (Option Alpha bot DTE branches)
    var DTE_MINS = [10, 15, 20];
    var branchExpiry = null;
 
@@ -2823,7 +2823,7 @@ function fetchOptionContract(ticker,simPrice,callback){
 
      function sprdPct(o){var mid=(o.bid+o.ask)/2;return mid>0?((o.ask-o.bid)/mid*100):999;}
 
-     // Delta ladder: walk 0.45 → 0.43 → 0.41 → 0.39 → 0.37
+     // Delta ladder: walk 0.45 \u2192 0.43 \u2192 0.41 \u2192 0.39 \u2192 0.37
      // For each delta target, find nearest call AND check volume >= 130
      // First strike that passes volume threshold wins
      var chosen = null;
@@ -2902,10 +2902,10 @@ function fetchOptionContract(ticker,simPrice,callback){
    }).catch(function(){callback(null);});
  }).catch(function(){callback(null);});
 }
-// ══════════════════════════════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 //  INDICATOR HISTORY CACHE + CALCULATIONS (RSI Accel, MFI, CMO)
 //  Single 25-day Tradier history fetch per ticker, 24hr localStorage TTL
-// ══════════════════════════════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 var G_HIST_CACHE = {};
 
@@ -3150,30 +3150,30 @@ function scoreIt(ticker, ind, opt){
     res.push({n:c.n, pass:c.ok, val:c.val, filter:false, pts:c.pts, isFmp:true});
   });
 
-  // ── SECTION D: Momentum Acceleration (3 rules, 28 pts, Tradier history) ──────────
+  // \u2500\u2500 SECTION D: Momentum Acceleration (3 rules, 28 pts, Tradier history) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   // Uses G_HIST_CACHE populated async by fetchIndicatorHistory() during detail load
   var histDays = G_HIST_CACHE[ticker] || null;
 
-  // Rule: RSI Accelerating (+12) — RSI(7) today > RSI(7) yesterday
+  // Rule: RSI Accelerating (+12) \u2014 RSI(7) today > RSI(7) yesterday
   var rsiAccelData = calcRSIAccel(histDays, 7);
   var rsiAccelOk   = rsiAccelData.accel;
   var rsiAccelVal  = histDays
-    ? (rsiAccelData.rsiYest + ' → ' + rsiAccelData.rsiToday + (rsiAccelOk ? ' ↑' : ' ↓'))
+    ? (rsiAccelData.rsiYest + ' \u2192 ' + rsiAccelData.rsiToday + (rsiAccelOk ? ' \u2191' : ' \u2193'))
     : 'Load detail to calculate';
   if(rsiAccelOk){ score += 12; techScore += 12; }
   res.push({n:'RSI Accelerating', pass:rsiAccelOk, val:rsiAccelVal, filter:false, pts:12, isHist:true});
 
-  // Rule: MFI Bullish (+9) — MFI(7) > 40, volume-weighted buying pressure
+  // Rule: MFI Bullish (+9) \u2014 MFI(7) > 40, volume-weighted buying pressure
   var mfiVal_raw = calcMFI(histDays, 7);
   var mfiOk      = histDays ? mfiVal_raw > 40 : false;
-  var mfiVal     = histDays ? ('MFI(7) ' + mfiVal_raw + (mfiOk ? ' > 40' : ' ≤ 40')) : 'Load detail to calculate';
+  var mfiVal     = histDays ? ('MFI(7) ' + mfiVal_raw + (mfiOk ? ' > 40' : ' \u2264 40')) : 'Load detail to calculate';
   if(mfiOk){ score += 9; techScore += 9; }
   res.push({n:'MFI Bullish', pass:mfiOk, val:mfiVal, filter:false, pts:9, isHist:true});
 
-  // Rule: CMO Positive (+7) — CMO(10) > 0, net upward momentum across all bars
+  // Rule: CMO Positive (+7) \u2014 CMO(10) > 0, net upward momentum across all bars
   var cmoVal_raw = calcCMO(histDays, 10);
   var cmoOk      = histDays ? cmoVal_raw > 0 : false;
-  var cmoVal     = histDays ? ('CMO(10) ' + cmoVal_raw + (cmoOk ? ' > 0' : ' ≤ 0')) : 'Load detail to calculate';
+  var cmoVal     = histDays ? ('CMO(10) ' + cmoVal_raw + (cmoOk ? ' > 0' : ' \u2264 0')) : 'Load detail to calculate';
   if(cmoOk){ score += 7; techScore += 7; }
   res.push({n:'CMO Positive', pass:cmoOk, val:cmoVal, filter:false, pts:7, isHist:true});
 
@@ -3380,7 +3380,7 @@ function viewDetail(ticker,detId,emptyId){
    });
   });
  } else if(fmpKey){
-  // No Tradier but has FMP + history — fetch both
+  // No Tradier but has FMP + history \u2014 fetch both
   fetchIndicatorHistory(ticker).then(function(days){
    if(days){ G_HIST_CACHE[ticker]=days; }
    fetchFmpData(ticker).then(function(fmpData){
@@ -4246,6 +4246,10 @@ function fetchPositionsDirect(key,mode,host,acct){
               qty: Math.abs(p.qty)||0,
             };
             try{localStorage.setItem('rrjcar_pos_open',JSON.stringify(G.posOpenData));}catch(e){}
+          } else {
+            // Patch missing costBasis/qty on entries created before this field was added
+            var pod = G.posOpenData[p.symbol];
+            if(!pod.costBasis && p.cost){ pod.costBasis = p.cost||0; pod.qty = Math.abs(p.qty)||0; try{localStorage.setItem('rrjcar_pos_open',JSON.stringify(G.posOpenData));}catch(e){} }
           }
           // Attach open data + current underlying to position object
           var od = G.posOpenData[p.symbol]||{};
