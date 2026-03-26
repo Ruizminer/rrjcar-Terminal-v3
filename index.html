@@ -5389,12 +5389,23 @@ function fetchClosedPositions(){
       return isOpen && !matchedOpenIds[o.id];
     });
 
+    // Persist trades to localStorage and merge with any previously saved trades
+    // This survives Tradier sandbox resets which truncate order history
+    var savedTrades = [];
+    try{ savedTrades = JSON.parse(localStorage.getItem('rrjcar_closed_trades')||'[]'); }catch(e){}
+    // Build a map of closeOrderId -> trade for deduplication (fresh API data wins)
+    var tradeMap = {};
+    savedTrades.forEach(function(t){ if(t.closeOrderId) tradeMap[t.closeOrderId] = t; });
+    matched.forEach(function(t){ if(t.closeOrderId) tradeMap[t.closeOrderId] = t; });
+    var allTrades = Object.values(tradeMap).sort(function(a,b){ return new Date(b.closeDate)-new Date(a.closeDate); });
+    try{ localStorage.setItem('rrjcar_closed_trades', JSON.stringify(allTrades)); }catch(e){}
+
     G_closed.raw=allFilled;
-    G_closed.trades=matched;
+    G_closed.trades=allTrades;
     G_closed.openFilled=openFilled;
 
     src.textContent='['+creds.mode.toUpperCase()+'] '
-      +matched.length+' closed trade'+(matched.length!==1?'s':'')
+      +allTrades.length+' closed trade'+(allTrades.length!==1?'s':'')
       +(openFilled.length?' | '+openFilled.length+' open position'+(openFilled.length!==1?'s':''):'')
       +' | '+startDate+' \u2192 '+endDate
       +' | Updated: '+new Date().toLocaleTimeString();
