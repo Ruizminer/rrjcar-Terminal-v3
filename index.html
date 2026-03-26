@@ -370,6 +370,16 @@ tr.sel-row td{background:var(--blu3);}
   </div>
 </div>
 <div class="tab-pane" id="tab-sc">
+  <!-- Strategy mode quick filters -->
+  <div class="flt-bar" style="flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--bg3);">
+    <span style="font-family:var(--ff-mono);font-size:10px;color:var(--amb);letter-spacing:.5px;margin-right:2px;">STRATEGY:</span>
+    <button class="btn blu" style="font-size:11px;" onclick="applyStrategyMode('highConviction')">&#9733; HIGH CONVICTION</button>
+    <button class="btn" style="font-size:11px;" onclick="applyStrategyMode('breakout')">&#9650; BREAKOUT</button>
+    <button class="btn" style="font-size:11px;" onclick="applyStrategyMode('momentum')">&#9654; MOMENTUM</button>
+    <button class="btn" style="font-size:11px;" onclick="applyStrategyMode('institutional')">&#9670; INSTITUTIONAL</button>
+    <button class="btn" style="font-size:11px;border-color:var(--gry2);color:var(--gry);" onclick="applyStrategyMode('clear')">&#10005; CLEAR</button>
+    <span id="strategy-desc-sc" style="font-family:var(--ff-mono);font-size:10px;color:var(--gry);margin-left:4px;font-style:italic;"></span>
+  </div>
   <div class="flt-bar" style="flex-wrap:wrap;gap:8px;">
     <label>Sector <select id="sc-sect"><option value="">All</option></select></label>
     <label>Signal <select id="sc-sig"><option value="">All</option><option value="GO">GO</option><option value="NO-GO">NO-GO</option></select></label>
@@ -6375,6 +6385,7 @@ function applyStrategyMode(mode){
     clearFilters();
     switchTab('sc');
     if(eid('strategy-desc')) eid('strategy-desc').textContent = '';
+    if(eid('strategy-desc-sc')) eid('strategy-desc-sc').textContent = '';
     return;
   }
 
@@ -6406,6 +6417,7 @@ function applyStrategyMode(mode){
 
   // Show description in alerts tab
   if(eid('strategy-desc')) eid('strategy-desc').textContent = sm.desc;
+  if(eid('strategy-desc-sc')) eid('strategy-desc-sc').textContent = sm.desc;
 
   // Apply filters and switch to Full Scanner to see results
   applyFilters();
