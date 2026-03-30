@@ -3583,6 +3583,61 @@ function chainRowClick(ticker, strike, expDate){
   }, 120);
 }
 
+function viewDetail(ticker,detId,emptyId){
+ var r=null;
+ for(var i=0;i<G.results.length;i++){if(G.results[i].ticker===ticker){r=G.results[i];break;}}
+ if(!r)return;
+ G.selTicker=ticker;
+ document.querySelectorAll('.sig-card').forEach(function(c){c.classList.toggle('sel',c.dataset.ticker===ticker);});
+ document.querySelectorAll('tr.sel-row').forEach(function(row){row.classList.remove('sel-row');});
+ document.querySelectorAll('tr[data-ticker="'+ticker+'"]').forEach(function(row){row.classList.add('sel-row');});
+ buildDetail(r,detId,emptyId);
+
+ var tradierKey='';try{tradierKey=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+ var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
+
+ if(tradierKey){
+  fetchOptionContract(ticker,r.price,function(optData){
+   if(!optData)return;
+   if(optData.livePrice&&optData.livePrice>0){r.price=optData.livePrice;}
+   r.opt=Object.assign(r.opt||{},optData);
+   var newScore=scoreIt(ticker,r.ind,r.opt);
+   r.score=newScore.score;r.techScore=newScore.techScore;r.fundScore=newScore.fundScore;
+   r.isGo=newScore.isGo;r.filtersPass=newScore.filtersPass;
+   r.rules=newScore.rules;r.passes=newScore.passes;
+   G.detailOpt={ticker:ticker,strike:optData.strike,exp:optData.exp};
+   buildDetail(r,detId,emptyId);
+   fetchIndicatorHistory(ticker).then(function(days){
+    if(days){G_HIST_CACHE[ticker]=days;}
+    var s1=scoreIt(ticker,r.ind,r.opt);
+    r.score=s1.score;r.techScore=s1.techScore;r.fundScore=s1.fundScore;
+    r.isGo=s1.isGo;r.rules=s1.rules;r.passes=s1.passes;
+    buildDetail(r,detId,emptyId);
+    if(fmpKey){
+     fetchFmpData(ticker).then(function(fmpData){
+      if(!fmpData)return;
+      var s2=scoreIt(ticker,r.ind,r.opt);
+      r.score=s2.score;r.techScore=s2.techScore;r.fundScore=s2.fundScore;
+      r.isGo=s2.isGo;r.rules=s2.rules;r.passes=s2.passes;
+      buildDetail(r,detId,emptyId);
+     });
+    }
+   });
+  });
+ } else if(fmpKey){
+  fetchIndicatorHistory(ticker).then(function(days){
+   if(days){G_HIST_CACHE[ticker]=days;}
+   fetchFmpData(ticker).then(function(fmpData){
+    if(!fmpData)return;
+    var updated=scoreIt(ticker,r.ind,r.opt);
+    r.score=updated.score;r.techScore=updated.techScore;r.fundScore=updated.fundScore;
+    r.isGo=updated.isGo;r.rules=updated.rules;r.passes=updated.passes;
+    buildDetail(r,detId,emptyId);
+   });
+  });
+ }
+}
+
 function renderBuySig(){
   var goList=eid('bs-go-list'),noList=eid('bs-nogo-list');
   goList.innerHTML='';noList.innerHTML='';
