@@ -313,6 +313,26 @@ tr.sel-row td{background:var(--blu3);}
   .tbl-wrap{overflow-x:auto;}
   table{min-width:600px;}
 }
+
+.chain-tabs{display:flex;gap:0;border-bottom:var(--bdr);background:var(--bg1);flex-shrink:0;}
+.chain-tab{padding:6px 14px;font-family:var(--ff-mono);font-size:11px;color:var(--gry);cursor:pointer;border-bottom:2px solid transparent;letter-spacing:.5px;}
+.chain-tab.active{color:var(--ambb);border-bottom-color:var(--ambb);}
+.chain-tab:hover{color:var(--wht);}
+.chain-bar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg1);border-bottom:var(--bdr);flex-shrink:0;flex-wrap:wrap;}
+.chain-bar select{background:var(--bg2);border:var(--bdr);color:var(--wht);font-family:var(--ff-mono);font-size:11px;padding:3px 6px;border-radius:3px;}
+.chain-wrap{overflow-y:auto;flex:1;}
+.chain-tbl{width:100%;border-collapse:collapse;font-family:var(--ff-mono);font-size:11px;}
+.chain-tbl th{background:var(--bg2);color:var(--amb);font-weight:700;padding:4px 6px;text-align:right;border-bottom:1px solid var(--bg3);position:sticky;top:0;z-index:1;}
+.chain-tbl th.strike-col,.chain-tbl td.strike-col{text-align:center;background:var(--bg2);color:var(--gry3);font-weight:700;}
+.chain-tbl td{padding:3px 6px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.03);cursor:pointer;}
+.chain-tbl tr:hover td,.chain-tbl tr:hover td.strike-col{background:var(--bg3);}
+.chain-tbl tr.atm td{background:rgba(245,158,11,0.08);}
+.chain-tbl tr.atm td.strike-col{background:rgba(245,158,11,0.15);color:var(--ambb);}
+.chain-itm{color:var(--grn);}
+.chain-otm{color:var(--gry3);}
+.chain-hdr-calls{color:var(--grn) !important;text-align:center !important;background:rgba(34,197,94,0.06) !important;}
+.chain-hdr-puts{color:var(--red) !important;text-align:center !important;background:rgba(239,68,68,0.06) !important;}
+.chain-loading{display:flex;align-items:center;justify-content:center;height:200px;color:var(--gry);font-family:var(--ff-mono);font-size:12px;}
 </style>
 </head>
 <body>
@@ -3307,6 +3327,11 @@ function buildDetail(r,detId,emptyId){
     +'<span class="det-sig '+sigCls+'">'+sigLbl+'</span>'
     +'<span class="det-meta">'+r.sector+' | Score: <b>'+r.score+'</b>/150 | Tech: '+techScore+' Fund: '+fundScore+' | Passes: '+r.passes+'/14</span>'
     +'</div>'
+    +'<div class="chain-tabs">'
+    +'<div class="chain-tab active" id="dtab-signals" onclick="switchDetTab(\''+r.ticker+'\',\'signals\')">SIGNALS</div>'
+    +'<div class="chain-tab" id="dtab-chain" onclick="switchDetTab(\''+r.ticker+'\',\'chain\')">&#9783; OPTION CHAIN</div>'
+    +'</div>'
+    +'<div id="det-signals-'+r.ticker+'" style="display:flex;flex-direction:column;overflow:hidden;flex:1;">'
     +'<div class="det-tv" id="tv-'+r.ticker+'"></div>'
     +'<div class="det-scroll">'
     +'<div class="s-hdr">TECHNICAL INDICATORS</div>'
@@ -3341,11 +3366,146 @@ function buildDetail(r,detId,emptyId){
     +'</div>'
     +'<div class="s-hdr">RULE SCORECARD v3.5 <span style="font-size:10px;color:var(--gry);font-weight:400;">Tech '+techScore+' + Fund '+fundScore+' = '+r.score+'/150</span></div>'
     +'<div class="rules-grid">'+rulesHtml+'</div>'
-    +'</div>';
+    +'</div>'
+    +'</div>'; // close det-signals wrapper
+  // Add the chain placeholder div (hidden initially)
+  var chainDiv = document.createElement('div');
+  chainDiv.id = 'det-chain-'+r.ticker;
+  chainDiv.style.cssText = 'display:none;flex-direction:column;overflow:hidden;flex:1;';
+  chainDiv.innerHTML = '<div class="chain-loading">Click &#9783; OPTION CHAIN to load</div>';
+  det.appendChild(chainDiv);
+  // Close the signals wrapper div
+  var sigDiv = det.querySelector('#det-signals-'+r.ticker);
+  if(sigDiv){
+    var closeDiv = document.createElement('div');
+    closeDiv.id = 'det-signals-close-'+r.ticker;
+    sigDiv.style.overflow = 'hidden';
+  }
   renderTV('tv-'+r.ticker,r.ticker);
 }
 
-function viewDetail(ticker,detId,emptyId){
+function switchDetTab(ticker, tab){
+  var sigDiv   = eid('det-signals-'+ticker);
+  var chainDiv = eid('det-chain-'+ticker);
+  var sigBtn   = eid('dtab-signals');
+  var chainBtn = eid('dtab-chain');
+  if(!sigDiv || !chainDiv) return;
+  if(tab === 'chain'){
+    sigDiv.style.display   = 'none';
+    chainDiv.style.display = 'flex';
+    if(sigBtn)   sigBtn.classList.remove('active');
+    if(chainBtn) chainBtn.classList.add('active');
+    loadOptionChain(ticker);
+  } else {
+    sigDiv.style.display   = 'flex';
+    chainDiv.style.display = 'none';
+    if(sigBtn)   sigBtn.classList.add('active');
+    if(chainBtn) chainBtn.classList.remove('active');
+  }
+}
+
+async function loadOptionChain(ticker){
+  var chainDiv = eid('det-chain-'+ticker);
+  if(!chainDiv) return;
+  var creds = getTradierCreds();
+  if(!creds){ chainDiv.innerHTML = '<div class="chain-loading">No Tradier API key configured</div>'; return; }
+
+  chainDiv.innerHTML = '<div class="chain-loading">&#9656; Loading expirations...</div>';
+
+  // Fetch expirations
+  var expRes;
+  try{
+    expRes = await fetch(creds.host+'/v1/markets/options/expirations?symbol='+encodeURIComponent(ticker)+'&includeAllRoots=true',{
+      headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}
+    }).then(function(r){return r.json();});
+  }catch(e){ chainDiv.innerHTML = '<div class="chain-loading" style="color:var(--red);">Error: '+e.message+'</div>'; return; }
+
+  var dates = [];
+  try{ dates = expRes.expirations.date; if(!Array.isArray(dates)) dates=[dates]; }catch(e){}
+  if(!dates.length){ chainDiv.innerHTML = '<div class="chain-loading">No expirations found</div>'; return; }
+
+  // Get current price for ATM detection
+  var r = G.results.find(function(x){return x.ticker===ticker;});
+  var underlyingPrice = r ? r.price : 0;
+
+  // Build expiration selector
+  var selOpts = dates.slice(0,16).map(function(d){
+    return '<option value="'+d+'">'+d+'</option>';
+  }).join('');
+
+  chainDiv.innerHTML =
+    '<div class="chain-bar">'+
+    '<span style="color:var(--gry);font-size:10px;">EXPIRY</span>'+
+    '<select id="chain-exp-'+ticker+'" onchange="renderChainForExp(\''+ticker+'\',this.value,'+underlyingPrice+')">'+selOpts+'</select>'+
+    '<span style="color:var(--gry);font-size:10px;margin-left:8px;">TYPE</span>'+
+    '<select id="chain-type-'+ticker+'" onchange="renderChainForExp(\''+ticker+'\',eid(\'chain-exp-'+ticker+'\').value,'+underlyingPrice+')">'+
+    '<option value="both">Calls + Puts</option>'+
+    '<option value="calls">Calls only</option>'+
+    '<option value="puts">Puts only</option>'+
+    '</select>'+
+    '<span style="color:var(--gry);font-size:10px;margin-left:8px;">STRIKES</span>'+
+    '<select id="chain-strikes-'+ticker+'" onchange="renderChainForExp(\''+ticker+'\',eid(\'chain-exp-'+ticker+'\').value,'+underlyingPrice+')">'+
+    '<option value="20">\u00b110 strikes</option>'+
+    '<option value="40">\u00b120 strikes</option>'+
+    '<option value="0">All strikes</option>'+
+    '</select>'+
+    '<span id="chain-status-'+ticker+'" style="color:var(--gry);font-size:10px;margin-left:auto;"></span>'+
+    '</div>'+
+    '<div class="chain-wrap" id="chain-tbl-'+ticker+'"><div class="chain-loading">Loading chain...</div></div>';
+
+  // Auto-load first expiration
+  await renderChainForExp(ticker, dates[0], underlyingPrice);
+}
+
+async function renderChainForExp(ticker, expDate, underlyingPrice){
+  var creds = getTradierCreds();
+  if(!creds) return;
+  var wrap   = eid('chain-tbl-'+ticker);
+  var status = eid('chain-status-'+ticker);
+  var typeEl    = eid('chain-type-'+ticker);
+  var strikesEl = eid('chain-strikes-'+ticker);
+  var showType    = typeEl    ? typeEl.value    : 'both';
+  var strikeLimit = strikesEl ? parseInt(strikesEl.value) : 20;
+  if(!wrap) return;
+  wrap.innerHTML = '<div class="chain-loading">Loading '+expDate+'...</div>';
+  if(status) status.textContent = 'Fetching...';
+
+  var chainData;
+  try{
+    chainData = await fetch(
+      creds.host+'/v1/markets/options/chains?symbol='+encodeURIComponent(ticker)+'&expiration='+expDate+'&greeks=true',
+      {headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}}
+    ).then(function(r){return r.json();});
+  }catch(e){ wrap.innerHTML='<div class="chain-loading" style="color:var(--red);">Error: '+e.message+'</div>'; return; }
+
+  var options = [];
+  try{ options = chainData.options.option; if(!Array.isArray(options)) options=[options]; }catch(e){}
+  if(!options.length){ wrap.innerHTML='<div class="chain-loading">No options data for '+expDate+'</div>'; return; }
+
+  // Separate calls and puts, build strike map
+  var calls = {}, puts = {};
+  options.forEach(function(o){
+    if(!o || !o.strike) return;
+    if(o.option_type==='call') calls[o.strike] = o;
+    else if(o.option_type==='put') puts[o.strike] = o;
+  });
+
+  // Get all strikes, sorted
+  var allStrikes = Object.keys(calls).concat(Object.keys(puts))
+    .map(Number).filter(function(v,i,a){return a.indexOf(v)===i;})
+    .sort(function(a,b){return a-b;});
+
+  // Limit strikes around ATM
+  if(strikeLimit > 0 && underlyingPrice > 0){
+    var atmStrike = allStrikes.reduce(function(prev,curr){
+      return Math.abs(curr-underlyingPrice) < Math.abs(prev-underlyingPrice) ? curr : prev;
+    }, allStrikes[0]);
+    var atmIdx = allStrikes.indexOf(atmStrike);
+    var half = strikeLimit / 2;
+    allStrikes = allStrikes.slice(Math.max(0, atmIdx-half), atmIdx+half+1);
+  }
+
+  if(status) status.textContent = allStrikes.length+' strikes | underlying '+String.fromCharCode(36)+fmt2(underlyingPrice);
  var r=null;
  for(var i=0;i<G.results.length;i++){if(G.results[i].ticker===ticker){r=G.results[i];break;}}
  if(!r)return;
@@ -3402,6 +3562,25 @@ function viewDetail(ticker,detId,emptyId){
    });
   });
  }
+}
+
+
+function chainRowClick(ticker, strike, expDate){
+  var typeEl = eid('chain-type-'+ticker);
+  var showType = typeEl ? typeEl.value : 'both';
+  var optType = showType === 'puts' ? 'PUT' : 'CALL';
+  var DS = String.fromCharCode(36);
+  switchTab('order');
+  setTimeout(function(){
+    if(eid('ord-sym'))    eid('ord-sym').value    = ticker;
+    if(eid('ord-type'))   eid('ord-type').value   = optType;
+    if(eid('ord-strike')) eid('ord-strike').value = strike;
+    if(eid('ord-exp'))    eid('ord-exp').value    = expDate;
+    if(eid('ord-action')) eid('ord-action').value = 'BUY_TO_OPEN';
+    if(eid('ord-qty'))    eid('ord-qty').value    = 1;
+    fetchLiveQuote();
+    toast(ticker+' '+DS+strike+' '+optType+' '+expDate+' pre-filled in Order Ticket');
+  }, 120);
 }
 
 function renderBuySig(){
