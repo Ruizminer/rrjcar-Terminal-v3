@@ -63,7 +63,7 @@ a{color:var(--blu);text-decoration:none;}
 .sc-r .ind{color:var(--gry);font-size:10px;margin-top:4px;}
 .lnk-btn{background:var(--bg2);border:1px solid var(--amb3);border-radius:2px;color:var(--amb);cursor:pointer;font-size:10px;padding:2px 5px;}
 .lnk-btn:hover{background:var(--amb3);}
-.det-wrap{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+.det-wrap{display:flex;flex-direction:column;height:100%;overflow:hidden;} #sc-detail{height:100%;}
 .det-hdr{background:var(--bg2);border-bottom:var(--bdr);display:flex;align-items:baseline;gap:12px;padding:8px 12px;flex-shrink:0;flex-wrap:wrap;}
 .det-tk{color:var(--wht);font-size:18px;font-weight:700;}
 .det-pr{color:var(--amb);font-size:16px;font-weight:600;}
@@ -3371,7 +3371,7 @@ function buildDetail(r,detId,emptyId){
   // Add the chain placeholder div (hidden initially)
   var chainDiv = document.createElement('div');
   chainDiv.id = 'det-chain-'+r.ticker;
-  chainDiv.style.cssText = 'display:none;flex-direction:column;overflow:hidden;flex:1;';
+  chainDiv.style.cssText = 'display:none;flex-direction:column;overflow:hidden;flex:1;height:100%;';
   chainDiv.innerHTML = '<div class="chain-loading">Click &#9783; OPTION CHAIN to load</div>';
   det.appendChild(chainDiv);
   // Close the signals wrapper div
@@ -3393,6 +3393,10 @@ function switchDetTab(ticker, tab){
   if(tab === 'chain'){
     sigDiv.style.display   = 'none';
     chainDiv.style.display = 'flex';
+    chainDiv.style.flexDirection = 'column';
+    chainDiv.style.height  = '100%';
+    chainDiv.style.overflow = 'hidden';
+    chainDiv.style.flex    = '1';
     if(sigBtn)   sigBtn.classList.remove('active');
     if(chainBtn) chainBtn.classList.add('active');
     loadOptionChain(ticker);
