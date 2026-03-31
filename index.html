@@ -3371,7 +3371,7 @@ function buildDetail(r,detId,emptyId){
   // Add the chain placeholder div (hidden initially)
   var chainDiv = document.createElement('div');
   chainDiv.id = 'det-chain-'+r.ticker;
-  chainDiv.style.cssText = 'display:none;flex-direction:column;overflow:hidden;position:absolute;top:74px;left:0;right:0;bottom:0;background:var(--bg0);z-index:2;';
+  chainDiv.style.cssText = 'display:none;flex-direction:column;overflow:hidden;position:absolute;top:0;left:0;right:0;bottom:0;background:var(--bg0);z-index:2;';
   chainDiv.innerHTML = '<div class="chain-loading">Click &#9783; OPTION CHAIN to load</div>';
   det.appendChild(chainDiv);
   // Close the signals wrapper div
@@ -3395,7 +3395,7 @@ function switchDetTab(ticker, tab){
     chainDiv.style.display = 'flex';
     chainDiv.style.flexDirection = 'column';
     chainDiv.style.position = 'absolute';
-    chainDiv.style.top = '74px';
+    chainDiv.style.top = '0';
     chainDiv.style.left = '0';
     chainDiv.style.right = '0';
     chainDiv.style.bottom = '0';
@@ -3443,6 +3443,11 @@ async function loadOptionChain(ticker){
   }).join('');
 
   chainDiv.innerHTML =
+    '<div class="chain-tabs" style="flex-shrink:0;">'+
+    '<div class="chain-tab" data-tk="'+ticker+'" onclick="switchDetTab(this.dataset.tk,\'signals\')">&#8592; SIGNALS</div>'+
+    '<div class="chain-tab active">&#9783; OPTION CHAIN</div>'+
+    '<span style="font-family:var(--ff-mono);font-size:13px;font-weight:700;color:var(--ambb);margin-left:auto;padding-right:12px;">'+ticker+'</span>'+
+    '</div>'+
     '<div class="chain-bar">'+
     '<span style="color:var(--gry);font-size:10px;">EXPIRY</span>'+
     '<select id="chain-exp-'+ticker+'" onchange="renderChainForExp(\''+ticker+'\',this.value,'+underlyingPrice+')">'+selOpts+'</select>'+
@@ -3517,21 +3522,58 @@ async function renderChainForExp(ticker, expDate, underlyingPrice){
   var colsCall = showType !== 'puts';
   var colsPut  = showType !== 'calls';
 
-  function _th(t,cls){ return '<th class="'+(cls||'')+'">'+t+'</th>'; }
   function _td(t,cls){ return '<td class="'+(cls||'')+'">'+t+'</td>'; }
   function _f(v){ return v ? fmt2(v) : '--'; }
   function _oi(v){ return v ? fmtK(v) : '--'; }
   function _iv(v){ return v ? Math.round(v*100)+'%' : '--'; }
 
+  // Sort state
+  if(!window._chainSort) window._chainSort = {col:'strike',dir:'asc'};
+  var sortCol = window._chainSort.col;
+  var sortDir = window._chainSort.dir;
+
   var nearAtm = allStrikes.length ? allStrikes.reduce(function(p,c){
     return Math.abs(c-underlyingPrice)<Math.abs(p-underlyingPrice)?c:p;
   }, allStrikes[0]) : null;
 
+  function _th(t, col, cls){
+    var isActive = sortCol === col;
+    var arrow = isActive ? (sortDir==='asc'?' &#9650;':' &#9660;') : '';
+    var style = isActive ? 'color:var(--ambb);cursor:pointer;' : 'cursor:pointer;';
+    var onclick = col ? 'onclick="chainSort(\''+ticker+'\',\''+expDate+'\','+underlyingPrice+',\''+col+'\',\''+showType+'\','+strikeLimit+')"' : '';
+    return '<th class="'+(cls||'')+'" style="'+style+'" '+onclick+'>'+t+arrow+'</th>';
+  }
+
   var hdr = '<tr>';
-  if(colsCall) hdr += _th('OI','chain-hdr-calls')+_th('Vol','chain-hdr-calls')+_th('IV','chain-hdr-calls')+_th('Delta','chain-hdr-calls')+_th('Bid','chain-hdr-calls')+_th('Ask','chain-hdr-calls')+_th('Last','chain-hdr-calls');
-  hdr += _th('STRIKE','strike-col');
-  if(colsPut) hdr += _th('Last','chain-hdr-puts')+_th('Bid','chain-hdr-puts')+_th('Ask','chain-hdr-puts')+_th('Delta','chain-hdr-puts')+_th('IV','chain-hdr-puts')+_th('Vol','chain-hdr-puts')+_th('OI','chain-hdr-puts');
+  if(colsCall) hdr += _th('OI','c_oi','chain-hdr-calls')+_th('Vol','c_vol','chain-hdr-calls')+_th('IV','c_iv','chain-hdr-calls')+_th('Delta','c_delta','chain-hdr-calls')+_th('Bid','c_bid','chain-hdr-calls')+_th('Ask','c_ask','chain-hdr-calls')+_th('Last','c_last','chain-hdr-calls');
+  hdr += _th('STRIKE','strike',  'strike-col');
+  if(colsPut) hdr += _th('Last','p_last','chain-hdr-puts')+_th('Bid','p_bid','chain-hdr-puts')+_th('Ask','p_ask','chain-hdr-puts')+_th('Delta','p_delta','chain-hdr-puts')+_th('IV','p_iv','chain-hdr-puts')+_th('Vol','p_vol','chain-hdr-puts')+_th('OI','p_oi','chain-hdr-puts');
   hdr += '</tr>';
+
+  // Apply sort to allStrikes
+  allStrikes = allStrikes.slice().sort(function(a, b){
+    var c = calls, p = puts;
+    var av, bv;
+    var mul = sortDir === 'asc' ? 1 : -1;
+    switch(sortCol){
+      case 'c_vol':   av=c[a]?c[a].volume||0:0; bv=c[b]?c[b].volume||0:0; break;
+      case 'c_oi':    av=c[a]?c[a].open_interest||0:0; bv=c[b]?c[b].open_interest||0:0; break;
+      case 'c_delta': av=c[a]&&c[a].greeks?Math.abs(c[a].greeks.delta||0):0; bv=c[b]&&c[b].greeks?Math.abs(c[b].greeks.delta||0):0; break;
+      case 'c_iv':    av=c[a]&&c[a].greeks?c[a].greeks.smv_vol||0:0; bv=c[b]&&c[b].greeks?c[b].greeks.smv_vol||0:0; break;
+      case 'c_bid':   av=c[a]?c[a].bid||0:0; bv=c[b]?c[b].bid||0:0; break;
+      case 'c_ask':   av=c[a]?c[a].ask||0:0; bv=c[b]?c[b].ask||0:0; break;
+      case 'c_last':  av=c[a]?c[a].last||0:0; bv=c[b]?c[b].last||0:0; break;
+      case 'p_vol':   av=p[a]?p[a].volume||0:0; bv=p[b]?p[b].volume||0:0; break;
+      case 'p_oi':    av=p[a]?p[a].open_interest||0:0; bv=p[b]?p[b].open_interest||0:0; break;
+      case 'p_delta': av=p[a]&&p[a].greeks?Math.abs(p[a].greeks.delta||0):0; bv=p[b]&&p[b].greeks?Math.abs(p[b].greeks.delta||0):0; break;
+      case 'p_iv':    av=p[a]&&p[a].greeks?p[a].greeks.smv_vol||0:0; bv=p[b]&&p[b].greeks?p[b].greeks.smv_vol||0:0; break;
+      case 'p_bid':   av=p[a]?p[a].bid||0:0; bv=p[b]?p[b].bid||0:0; break;
+      case 'p_ask':   av=p[a]?p[a].ask||0:0; bv=p[b]?p[b].ask||0:0; break;
+      case 'p_last':  av=p[a]?p[a].last||0:0; bv=p[b]?p[b].last||0:0; break;
+      default:        av=a; bv=b; mul = sortDir==='asc'?1:-1; break; // strike
+    }
+    return (av - bv) * mul;
+  });
 
   var rows = allStrikes.map(function(strike){
     var c = calls[strike];
@@ -3555,6 +3597,19 @@ async function renderChainForExp(ticker, expDate, underlyingPrice){
 
   wrap.innerHTML = '<table class="chain-tbl"><thead>'+hdr+'</thead><tbody>'+rows+'</tbody></table>';
 }
+function chainSort(ticker, expDate, underlyingPrice, col, showType, strikeLimit){
+  if(!window._chainSort) window._chainSort = {col:'strike', dir:'asc'};
+  if(window._chainSort.col === col){
+    window._chainSort.dir = window._chainSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    window._chainSort.col = col;
+    // Vol/OI default desc (highest first), others default asc
+    window._chainSort.dir = (col.includes('vol')||col.includes('oi')) ? 'desc' : 'asc';
+  }
+  renderChainForExp(ticker, expDate, underlyingPrice);
+}
+
+
 function chainRowClick(ticker, strike, expDate){
   var typeEl = eid('chain-type-'+ticker);
   var showType = typeEl ? typeEl.value : 'both';
