@@ -3312,8 +3312,8 @@ function buildDetail(r,detId,emptyId){
   if(det){det.style.display='flex';det.style.flexDirection='column';det.style.height='100%';det.style.overflow='hidden';}
   // If chain view is active for this ticker, skip rebuilding the signals pane
   if(r && r.ticker){
-    var existingChain = eid('det-chain-'+r.ticker);
-    if(existingChain && existingChain.style.display === 'flex') return;
+    // If chain view is active for this ticker, skip signals rebuild
+    if(G.chainActiveTicker === r.ticker) return;
   }
   var sigCls=r.isGo?'go':'nogo';var sigLbl=r.isGo?'GO':'NO-GO';var ind=r.ind,opt=r.opt;
   var techScore=r.techScore||0, fundScore=r.fundScore||0;
@@ -3376,7 +3376,7 @@ function buildDetail(r,detId,emptyId){
   // Add the chain placeholder div (hidden initially)
   var chainDiv = document.createElement('div');
   chainDiv.id = 'det-chain-'+r.ticker;
-  chainDiv.style.cssText = 'display:none;flex-direction:column;overflow:hidden;position:absolute;top:0;left:0;right:0;bottom:0;background:var(--bg0);z-index:10;';
+  chainDiv.style.cssText = 'display:none;flex-direction:column;overflow:hidden;background:var(--bg0);z-index:10;';
   chainDiv.innerHTML = '<div class="chain-loading">Click &#9783; OPTION CHAIN to load</div>';
   det.appendChild(chainDiv);
   // Close the signals wrapper div
@@ -3393,20 +3393,25 @@ function switchDetTab(ticker, tab){
   var sigDiv   = eid('det-signals-'+ticker);
   var chainDiv = eid('det-chain-'+ticker);
   if(!sigDiv || !chainDiv) return;
-  // det-hdr and original chain-tabs are siblings inside sc-detail
+  // Use children[0] and children[1] to avoid matching .chain-tabs inside chainDiv
   var container = sigDiv.parentElement;
-  var detHdr  = container ? container.querySelector('.det-hdr')    : null;
-  var detTabs = container ? container.querySelector('.chain-tabs')  : null;
+  var detHdr  = container && container.children[0] && container.children[0].classList.contains('det-hdr')    ? container.children[0] : null;
+  var detTabs = container && container.children[1] && container.children[1].classList.contains('chain-tabs') ? container.children[1] : null;
   if(tab === 'chain'){
+    G.chainActiveTicker = ticker;
     sigDiv.style.display    = 'none';
-    if(detHdr)  detHdr.style.display  = 'none';
-    if(detTabs) detTabs.style.display = 'none';
-    chainDiv.style.cssText = 'display:flex;flex-direction:column;position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;background:var(--bg0);z-index:10;';
+    // Collapse det-hdr and chain-tabs so they take no space
+    if(detHdr)  { detHdr.style.visibility='hidden';  detHdr.style.height='0';  detHdr.style.overflow='hidden';  detHdr.style.padding='0'; }
+    if(detTabs) { detTabs.style.visibility='hidden'; detTabs.style.height='0'; detTabs.style.overflow='hidden'; detTabs.style.padding='0'; }
+    // Chain div fills sc-detail from top:0 \u2014 no absolute needed, use flex:1
+    chainDiv.style.cssText = 'display:flex;flex-direction:column;flex:1;overflow:hidden;background:var(--bg0);z-index:10;';
     loadOptionChain(ticker);
   } else {
+    G.chainActiveTicker = null;
     chainDiv.style.display  = 'none';
-    if(detHdr)  detHdr.style.display  = '';
-    if(detTabs) detTabs.style.display = '';
+    // Restore det-hdr and chain-tabs
+    if(detHdr)  { detHdr.style.visibility='';  detHdr.style.height='';  detHdr.style.overflow='';  detHdr.style.padding=''; }
+    if(detTabs) { detTabs.style.visibility=''; detTabs.style.height=''; detTabs.style.overflow=''; detTabs.style.padding=''; }
     sigDiv.style.display    = 'flex';
   }
 }
@@ -3414,6 +3419,12 @@ function switchDetTab(ticker, tab){
 async function loadOptionChain(ticker){
   var chainDiv = eid('det-chain-'+ticker);
   if(!chainDiv) return;
+  // Timing-safe: always hide det-hdr and chain-tabs when chain loads
+  var _container = chainDiv.parentElement;
+  var _detHdr  = _container && _container.children[0] && _container.children[0].classList.contains('det-hdr')    ? _container.children[0] : null;
+  var _detTabs = _container && _container.children[1] && _container.children[1].classList.contains('chain-tabs') ? _container.children[1] : null;
+  if(_detHdr)  _detHdr.style.display  = 'none';
+  if(_detTabs) _detTabs.style.display = 'none';
   var creds = getTradierCreds();
   if(!creds){ chainDiv.innerHTML = '<div class="chain-loading">No Tradier API key configured</div>'; return; }
 
