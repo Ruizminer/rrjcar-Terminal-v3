@@ -3436,8 +3436,11 @@ async function loadOptionChain(ticker){
   var underlyingPrice = r ? r.price : 0;
 
   // Build expiration selector
+  var _today = new Date(); _today.setHours(0,0,0,0);
   var selOpts = dates.slice(0,16).map(function(d){
-    return '<option value="'+d+'">'+d+'</option>';
+    var expMs = new Date(d+'T00:00:00').getTime();
+    var dte   = Math.round((expMs - _today.getTime()) / 86400000);
+    return '<option value="'+d+'">'+d+' ('+dte+'d)</option>';
   }).join('');
 
   chainDiv.innerHTML =
