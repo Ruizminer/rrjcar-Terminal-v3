@@ -3376,7 +3376,7 @@ function buildDetail(r,detId,emptyId){
   // Add the chain placeholder div (hidden initially)
   var chainDiv = document.createElement('div');
   chainDiv.id = 'det-chain-'+r.ticker;
-  chainDiv.style.cssText = 'display:none;flex-direction:column;overflow:hidden;position:absolute;top:0;left:0;right:0;bottom:0;background:var(--bg0);z-index:2;';
+  chainDiv.style.cssText = 'display:none;flex-direction:column;overflow:hidden;position:absolute;top:0;left:0;right:0;bottom:0;background:var(--bg0);z-index:10;';
   chainDiv.innerHTML = '<div class="chain-loading">Click &#9783; OPTION CHAIN to load</div>';
   det.appendChild(chainDiv);
   // Close the signals wrapper div
@@ -3401,7 +3401,7 @@ function switchDetTab(ticker, tab){
     sigDiv.style.display    = 'none';
     if(detHdr)  detHdr.style.display  = 'none';
     if(detTabs) detTabs.style.display = 'none';
-    chainDiv.style.cssText = 'display:flex;flex-direction:column;position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;background:var(--bg0);z-index:2;';
+    chainDiv.style.cssText = 'display:flex;flex-direction:column;position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;background:var(--bg0);z-index:10;';
     loadOptionChain(ticker);
   } else {
     chainDiv.style.display  = 'none';
