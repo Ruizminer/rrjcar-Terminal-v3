@@ -3491,7 +3491,6 @@ async function renderChainForExp(ticker, expDate, underlyingPrice){
   try{ options = chainData.options.option; if(!Array.isArray(options)) options=[options]; }catch(e){}
   if(!options.length){ wrap.innerHTML='<div class="chain-loading">No options data for '+expDate+'</div>'; return; }
 
-  // Separate calls and puts, build strike map
   var calls = {}, puts = {};
   options.forEach(function(o){
     if(!o || !o.strike) return;
@@ -3499,81 +3498,63 @@ async function renderChainForExp(ticker, expDate, underlyingPrice){
     else if(o.option_type==='put') puts[o.strike] = o;
   });
 
-  // Get all strikes, sorted
   var allStrikes = Object.keys(calls).concat(Object.keys(puts))
     .map(Number).filter(function(v,i,a){return a.indexOf(v)===i;})
     .sort(function(a,b){return a-b;});
 
-  // Limit strikes around ATM
   if(strikeLimit > 0 && underlyingPrice > 0){
     var atmStrike = allStrikes.reduce(function(prev,curr){
       return Math.abs(curr-underlyingPrice) < Math.abs(prev-underlyingPrice) ? curr : prev;
     }, allStrikes[0]);
     var atmIdx = allStrikes.indexOf(atmStrike);
-    var half = strikeLimit / 2;
+    var half = Math.floor(strikeLimit / 2);
     allStrikes = allStrikes.slice(Math.max(0, atmIdx-half), atmIdx+half+1);
   }
 
-  if(status) status.textContent = allStrikes.length+' strikes | underlying '+String.fromCharCode(36)+fmt2(underlyingPrice);
- var r=null;
- for(var i=0;i<G.results.length;i++){if(G.results[i].ticker===ticker){r=G.results[i];break;}}
- if(!r)return;
- G.selTicker=ticker;
- document.querySelectorAll('.sig-card').forEach(function(c){c.classList.toggle('sel',c.dataset.ticker===ticker);});
- document.querySelectorAll('tr.sel-row').forEach(function(row){row.classList.remove('sel-row');});
- document.querySelectorAll('tr[data-ticker="'+ticker+'"]').forEach(function(row){row.classList.add('sel-row');});
- buildDetail(r,detId,emptyId);
+  var DS = String.fromCharCode(36);
+  if(status) status.textContent = allStrikes.length+' strikes | underlying '+DS+fmt2(underlyingPrice);
 
- var tradierKey='';try{tradierKey=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
- var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
+  var colsCall = showType !== 'puts';
+  var colsPut  = showType !== 'calls';
 
- // Fetch options contract (Tradier)
- if(tradierKey){
-  fetchOptionContract(ticker,r.price,function(optData){
-   if(!optData)return;
-   if(optData.livePrice&&optData.livePrice>0){r.price=optData.livePrice;}
-   r.opt=Object.assign(r.opt,optData);
-   var newScore=scoreIt(ticker,r.ind,r.opt);
-   r.score=newScore.score;r.techScore=newScore.techScore;r.fundScore=newScore.fundScore;
-   r.isGo=newScore.isGo;r.filtersPass=newScore.filtersPass;
-   r.rules=newScore.rules;r.passes=newScore.passes;
-   G.detailOpt={ticker:ticker,strike:optData.strike,exp:optData.exp};
-   buildDetail(r,detId,emptyId);
+  function _th(t,cls){ return '<th class="'+(cls||'')+'">'+t+'</th>'; }
+  function _td(t,cls){ return '<td class="'+(cls||'')+'">'+t+'</td>'; }
+  function _f(v){ return v ? fmt2(v) : '--'; }
+  function _oi(v){ return v ? fmtK(v) : '--'; }
+  function _iv(v){ return v ? Math.round(v*100)+'%' : '--'; }
 
-   // After options load, fetch history indicators then FMP, re-score after each
-   fetchIndicatorHistory(ticker).then(function(days){
-    if(days){ G_HIST_CACHE[ticker]=days; }
-    var s1=scoreIt(ticker,r.ind,r.opt);
-    r.score=s1.score;r.techScore=s1.techScore;r.fundScore=s1.fundScore;
-    r.isGo=s1.isGo;r.rules=s1.rules;r.passes=s1.passes;
-    buildDetail(r,detId,emptyId);
-    if(fmpKey){
-     fetchFmpData(ticker).then(function(fmpData){
-      if(!fmpData)return;
-      var s2=scoreIt(ticker,r.ind,r.opt);
-      r.score=s2.score;r.techScore=s2.techScore;r.fundScore=s2.fundScore;
-      r.isGo=s2.isGo;r.rules=s2.rules;r.passes=s2.passes;
-      buildDetail(r,detId,emptyId);
-     });
+  var nearAtm = allStrikes.length ? allStrikes.reduce(function(p,c){
+    return Math.abs(c-underlyingPrice)<Math.abs(p-underlyingPrice)?c:p;
+  }, allStrikes[0]) : null;
+
+  var hdr = '<tr>';
+  if(colsCall) hdr += _th('OI','chain-hdr-calls')+_th('Vol','chain-hdr-calls')+_th('IV','chain-hdr-calls')+_th('Delta','chain-hdr-calls')+_th('Bid','chain-hdr-calls')+_th('Ask','chain-hdr-calls')+_th('Last','chain-hdr-calls');
+  hdr += _th('STRIKE','strike-col');
+  if(colsPut) hdr += _th('Last','chain-hdr-puts')+_th('Bid','chain-hdr-puts')+_th('Ask','chain-hdr-puts')+_th('Delta','chain-hdr-puts')+_th('IV','chain-hdr-puts')+_th('Vol','chain-hdr-puts')+_th('OI','chain-hdr-puts');
+  hdr += '</tr>';
+
+  var rows = allStrikes.map(function(strike){
+    var c = calls[strike];
+    var p = puts[strike];
+    var isATM = nearAtm !== null && strike === nearAtm;
+    var callITM = underlyingPrice>0 && strike<underlyingPrice;
+    var putITM  = underlyingPrice>0 && strike>underlyingPrice;
+    var row = '<tr class="'+(isATM?'atm':'')+'" data-tk="'+ticker+'" data-str="'+strike+'" data-exp="'+expDate+'" onclick="chainRowClick(this.dataset.tk,this.dataset.str,this.dataset.exp)">';
+    if(colsCall){
+      var cc = callITM?'chain-itm':'chain-otm';
+      row += _td(_oi(c&&c.open_interest),cc)+_td(_oi(c&&c.volume),cc)+_td(c&&c.greeks?_iv(c.greeks.smv_vol):'--',cc)+_td(c&&c.greeks?_f(c.greeks.delta):'--',cc)+_td(c?DS+_f(c.bid):'--',cc)+_td(c?DS+_f(c.ask):'--',cc)+_td(c?DS+_f(c.last):'--',cc);
     }
-   });
-  });
- } else if(fmpKey){
-  // No Tradier but has FMP + history \u2014 fetch both
-  fetchIndicatorHistory(ticker).then(function(days){
-   if(days){ G_HIST_CACHE[ticker]=days; }
-   fetchFmpData(ticker).then(function(fmpData){
-    if(!fmpData)return;
-    var updated=scoreIt(ticker,r.ind,r.opt);
-    r.score=updated.score;r.techScore=updated.techScore;r.fundScore=updated.fundScore;
-    r.isGo=updated.isGo;r.rules=updated.rules;r.passes=updated.passes;
-    buildDetail(r,detId,emptyId);
-   });
-  });
- }
+    row += _td(DS+fmt2(strike)+(isATM?' &#9670;':''),'strike-col');
+    if(colsPut){
+      var pc = putITM?'chain-itm':'chain-otm';
+      row += _td(p?DS+_f(p.last):'--',pc)+_td(p?DS+_f(p.bid):'--',pc)+_td(p?DS+_f(p.ask):'--',pc)+_td(p&&p.greeks?_f(p.greeks.delta):'--',pc)+_td(p&&p.greeks?_iv(p.greeks.smv_vol):'--',pc)+_td(_oi(p&&p.volume),pc)+_td(_oi(p&&p.open_interest),pc);
+    }
+    row += '</tr>';
+    return row;
+  }).join('');
+
+  wrap.innerHTML = '<table class="chain-tbl"><thead>'+hdr+'</thead><tbody>'+rows+'</tbody></table>';
 }
-
-
 function chainRowClick(ticker, strike, expDate){
   var typeEl = eid('chain-type-'+ticker);
   var showType = typeEl ? typeEl.value : 'both';
