@@ -3310,6 +3310,11 @@ function buildDetail(r,detId,emptyId){
   if(!r){if(emp)emp.style.display='flex';if(det)det.style.display='none';return;}
   if(emp)emp.style.display='none';
   if(det){det.style.display='flex';det.style.flexDirection='column';det.style.height='100%';det.style.overflow='hidden';}
+  // If chain view is active for this ticker, skip rebuilding the signals pane
+  if(r && r.ticker){
+    var existingChain = eid('det-chain-'+r.ticker);
+    if(existingChain && existingChain.style.display === 'flex') return;
+  }
   var sigCls=r.isGo?'go':'nogo';var sigLbl=r.isGo?'GO':'NO-GO';var ind=r.ind,opt=r.opt;
   var techScore=r.techScore||0, fundScore=r.fundScore||0;
   var rulesHtml='';
