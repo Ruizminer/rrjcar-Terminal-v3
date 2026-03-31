@@ -3387,29 +3387,22 @@ function buildDetail(r,detId,emptyId){
 function switchDetTab(ticker, tab){
   var sigDiv   = eid('det-signals-'+ticker);
   var chainDiv = eid('det-chain-'+ticker);
-  var sigBtn   = eid('dtab-signals');
-  var chainBtn = eid('dtab-chain');
   if(!sigDiv || !chainDiv) return;
+  // det-hdr and original chain-tabs are siblings inside sc-detail
+  var container = sigDiv.parentElement;
+  var detHdr  = container ? container.querySelector('.det-hdr')    : null;
+  var detTabs = container ? container.querySelector('.chain-tabs')  : null;
   if(tab === 'chain'){
-    sigDiv.style.display   = 'none';
-    chainDiv.style.display = 'flex';
-    chainDiv.style.flexDirection = 'column';
-    chainDiv.style.position = 'absolute';
-    chainDiv.style.top = '0';
-    chainDiv.style.left = '0';
-    chainDiv.style.right = '0';
-    chainDiv.style.bottom = '0';
-    chainDiv.style.overflow = 'hidden';
-    chainDiv.style.background = 'var(--bg0)';
-    chainDiv.style.zIndex = '2';
-    if(sigBtn)   sigBtn.classList.remove('active');
-    if(chainBtn) chainBtn.classList.add('active');
+    sigDiv.style.display    = 'none';
+    if(detHdr)  detHdr.style.display  = 'none';
+    if(detTabs) detTabs.style.display = 'none';
+    chainDiv.style.cssText = 'display:flex;flex-direction:column;position:absolute;top:0;left:0;right:0;bottom:0;overflow:hidden;background:var(--bg0);z-index:2;';
     loadOptionChain(ticker);
   } else {
-    sigDiv.style.display   = 'flex';
-    chainDiv.style.display = 'none';
-    if(sigBtn)   sigBtn.classList.add('active');
-    if(chainBtn) chainBtn.classList.remove('active');
+    chainDiv.style.display  = 'none';
+    if(detHdr)  detHdr.style.display  = '';
+    if(detTabs) detTabs.style.display = '';
+    sigDiv.style.display    = 'flex';
   }
 }
 
