@@ -5011,11 +5011,12 @@ async function runTsCheck(){
     // Armed -> Triggered
     if(st.status==='armed'){
       var pullback=st.peakPct>0?(st.peakPct-ret):0;
-      var pullbackFromHighPct=st.peakPct>0?((pullback/st.peakPct)*100):0;
-      if(pullbackFromHighPct>=pullbackPct){
+      // pullback is an absolute percentage point drop from peak (e.g. 187% -> 144% = 43pp drop)
+      // trigger when drop >= pullbackPct percentage points
+      if(pullback>=pullbackPct){
         st.status='triggered';
         G.tsTriggered[sym]=true;
-        tsLog(p.underlying+': TRIGGERED \u2014 pulled back '+fmt2(pullbackFromHighPct)+'% from peak +'+fmt2(st.peakPct)+'%','triggered');
+        tsLog(p.underlying+': TRIGGERED \u2014 pulled back '+fmt2(pullback)+'pp from peak +'+fmt2(st.peakPct)+'%','triggered');
         addAlert(p.underlying,'Trailing stop TRIGGERED \u2014 closing position','go');
         toast('\u26a1 Trail Stop triggered: '+p.underlying);
         executeTsClose(p,closeMode,creds);
