@@ -3933,8 +3933,7 @@ function finishScan(){
   try{ tradierKey = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
   if(tradierKey){
     setTimeout(function(){
-      addAlert('GEX', 'Auto-refreshing GEX after scan...', 'warn');
-      runGex();
+      runGex(); // silent auto-refresh \u2014 re-scores GEX bonus after scan
     }, 2000);
   }
 }
@@ -4167,7 +4166,13 @@ function runGex(){
         flow:gex>0?'CALL HEAVY':'PUT HEAVY', flowCls:gex>0?'go':'nogo', sim:true};
     });
     renderGex();
-    addAlert('GEX','GEX refreshed for '+G.gexData.length+' tickers (simulated)','warn');
+    G.results.forEach(function(r){
+      var u=scoreIt(r.ticker,r.ind,r.opt);
+      r.score=u.score;r.techScore=u.techScore;r.isGo=u.isGo;r.rules=u.rules;r.passes=u.passes;
+    });
+    G.results.sort(function(a,b){return b.score-a.score;});
+    G.filtered=G.results.slice();
+    renderBuySig();renderScan();
     return;
   }
 
@@ -4286,7 +4291,8 @@ function runGex(){
       G.results.sort(function(a,b){ return b.score - a.score; });
       G.filtered = G.results.slice();
       renderBuySig(); renderScan();
-      toast('GEX loaded \u2014 scores updated');
+      var gexTabVis = eid('gex-tab') && eid('gex-tab').classList.contains('active');
+      if(gexTabVis) toast('GEX loaded \u2014 scores updated');
       // Re-check high-conviction signals now that GEX bonus is applied
       checkHighConvictionSignals(G.results);
     });
@@ -4300,7 +4306,13 @@ function runGex(){
       return{t:t,gex:gex,flip:flip,call:call,put:100-call,flow:gex>0?'CALL HEAVY':'PUT HEAVY',flowCls:gex>0?'go':'nogo',sim:true};
     });
     renderGex();
-    addAlert('GEX','GEX fetch failed \u2014 showing simulated data','warn');
+    G.results.forEach(function(r){
+      var u=scoreIt(r.ticker,r.ind,r.opt);
+      r.score=u.score;r.techScore=u.techScore;r.isGo=u.isGo;r.rules=u.rules;r.passes=u.passes;
+    });
+    G.results.sort(function(a,b){return b.score-a.score;});
+    G.filtered=G.results.slice();
+    renderBuySig();renderScan();
   });
 }
 
