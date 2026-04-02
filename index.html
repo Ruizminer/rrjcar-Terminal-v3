@@ -1855,14 +1855,26 @@ function autoSelectContract(){
       eid('asr-gex').className   = 'asr-val';
     }
 
-    // Top-5 candidates from full ranked pool
+    // Best-per-expiry: one row per DTE, highest volume winner from each
+    // Sorted shortest DTE first so you scan the same way you would manually
     var DS = String.fromCharCode(36);
-    var topN = (best._pool || []).slice(0, 5);
-    // If pool somehow empty, synthesize entry from best
-    if(!topN.length) topN = [{opt:{strike:best.strike,greeks:{delta:best.delta},open_interest:best.oi,volume:best.vol,bid:best.bid,ask:best.ask}, expDate:best.exp, dte:best.dte, atmStrike:best.atmStrike, vol:best.vol}];
-    var candHtml = '<div style="color:var(--gry);font-size:9px;padding:4px 0 2px;letter-spacing:.5px;font-weight:700;">TOP CANDIDATES &mdash; ranked by volume</div>';
-    topN.forEach(function(c, idx){
-      var isBest = idx===0;
+    var pool2 = best._pool || [];
+    // Fallback: synthesize single entry if pool missing
+    if(!pool2.length) pool2 = [{opt:{strike:best.strike,greeks:{delta:best.delta},open_interest:best.oi,volume:best.vol,bid:best.bid,ask:best.ask}, expDate:best.exp, dte:best.dte, atmStrike:best.atmStrike, vol:best.vol}];
+
+    // Group by expiry, keep highest-vol candidate per expiry
+    var byExp = {};
+    pool2.forEach(function(c){
+      var k = c.expDate;
+      if(!byExp[k] || c.vol > byExp[k].vol) byExp[k] = c;
+    });
+    // Sort by DTE ascending (shortest first)
+    var perExp = Object.keys(byExp).map(function(k){ return byExp[k]; })
+      .sort(function(a,b){ return a.dte - b.dte; });
+
+    var candHtml = '<div style="color:var(--gry);font-size:9px;padding:4px 0 2px;letter-spacing:.5px;font-weight:700;">BEST PER EXPIRY &mdash; shortest DTE first</div>';
+    perExp.forEach(function(c, idx){
+      var isSelected = c.expDate === best.exp && c.opt.strike === best.strike;
       var o = c.opt;
       var atm = c.atmStrike || o.strike;
       var diff = +(o.strike - atm).toFixed(2);
@@ -1870,7 +1882,7 @@ function autoSelectContract(){
         ? '<span style="font-size:9px;color:var(--amb);"> ATM</span>'
         : '<span style="font-size:9px;color:var(--gry);">'+(diff>0?'+':'')+diff+'</span>';
       var mid2 = (o.bid+o.ask)/2;
-      candHtml += '<div class="asr-cand"'+(isBest?' style="background:rgba(59,130,246,0.07);"':'')+' onclick="applyCandidate('+o.strike+',\''+c.expDate+'\')">'        +'<span class="asr-cand-rank">'+(idx+1)+'.</span>'        +'<span style="color:'+(isBest?'var(--wht)':'var(--gry2)')+';font-weight:700;font-size:11px;width:60px;">'+DS+fmt2(o.strike)+atmTag+'</span>'        +'<span style="color:var(--gry);font-size:10px;width:90px;">'+c.expDate+'</span>'        +'<span style="color:var(--gry);font-size:10px;width:42px;">'+c.dte+'d</span>'        +'<span class="asr-cand-detail">vol:<b style="color:var(--grn);">'+fmtK(c.vol)+'</b> oi:'+fmtK(o.open_interest||0)+' \u03b4'+fmt2(o.greeks?o.greeks.delta:0)+' mid:'+DS+fmt2(mid2)+'</span>'        +(isBest?'<span style="font-size:9px;color:var(--blub);font-weight:700;">#1</span>':'<button class="btn" style="font-size:9px;padding:1px 6px;border-color:var(--gry2);color:var(--gry);" onclick="event.stopPropagation();applyCandidate('+o.strike+',\''+c.expDate+'\')">USE</button>')        +'</div>';
+      candHtml += '<div class="asr-cand"'+(isSelected?' style="background:rgba(59,130,246,0.07);"':'')+' onclick="applyCandidate('+o.strike+',\''+c.expDate+'\')">'        +'<span class="asr-cand-rank">'+(idx+1)+'.</span>'        +'<span style="color:'+(isSelected?'var(--wht)':'var(--gry2)')+';font-weight:700;font-size:11px;width:60px;">'+DS+fmt2(o.strike)+atmTag+'</span>'        +'<span style="color:var(--gry);font-size:10px;width:90px;">'+c.expDate+'</span>'        +'<span style="color:'+(c.dte<=20?'var(--grn)':'var(--gry)')+';font-size:10px;width:42px;">'+c.dte+'d</span>'        +'<span class="asr-cand-detail">vol:<b style="color:var(--grn);">'+fmtK(c.vol)+'</b> oi:'+fmtK(o.open_interest||0)+' \u03b4'+fmt2(o.greeks?o.greeks.delta:0)+' mid:'+DS+fmt2(mid2)+'</span>'        +(isSelected?'<span style="font-size:9px;color:var(--blub);font-weight:700;">\u2713</span>':'<button class="btn" style="font-size:9px;padding:1px 6px;border-color:var(--gry2);color:var(--gry);" onclick="event.stopPropagation();applyCandidate('+o.strike+',\''+c.expDate+'\')">USE</button>')        +'</div>';
     });
     eid('asr-candidates').innerHTML = candHtml;
     resultBox.classList.add('show');
