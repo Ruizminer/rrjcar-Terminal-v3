@@ -2771,18 +2771,14 @@ function fetchOptionContract(ticker,simPrice,callback){
  var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
 
- // Delta ladder (Option Alpha bot strategy) \u2014 preferred strike first, fall back in 0.02 steps
- var DELTA_LADDER = [0.45, 0.43, 0.41, 0.39, 0.37];
- var VOL_THRESHOLD = 130; // minimum contract volume (Option Alpha bot value)
+ // Selection: highest-volume call within +/-10 strikes of ATM,
+ // across all expiries >10 and <35 calendar DTE.
+ // Tie-break (within 20% volume): prefer shorter DTE.
 
- // Market days helper \u2014 count Mon-Fri between two dates
- function marketDaysBetween(d1, d2){
-   var count=0, cur=new Date(d1);
-   while(cur<d2){ cur.setDate(cur.getDate()+1); var day=cur.getDay(); if(day>0&&day<6) count++; }
-   return count;
+ function calDays(dateStr){
+   return Math.round((new Date(dateStr) - new Date()) / 864e5);
  }
 
- // Get live price + all expirations in parallel
  var priceP = fetch(host+'/v1/markets/quotes?symbols='+ticker,
    {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
    .then(function(r){return r.json();})
@@ -2804,102 +2800,73 @@ function fetchOptionContract(ticker,simPrice,callback){
    var price=res[0], dates=res[1];
    if(!dates.length){callback(null);return;}
 
-   var today = new Date();
+   // Filter expiries: >10 and <35 calendar days out
+   var validExps = dates.filter(function(d){ var cd=calDays(d); return cd>10&&cd<35; });
 
-   // DTE waterfall: find best expiry for each minimum market-day threshold
-   // Try 10 mkt days min \u2192 15 min \u2192 20 min (Option Alpha bot DTE branches)
-   var DTE_MINS = [10, 15, 20];
-   var branchExpiry = null;
-
-   for(var bi=0; bi<DTE_MINS.length; bi++){
-     var minMktDays = DTE_MINS[bi];
-     var best=null, bestMktDays=9999;
-     dates.forEach(function(d){
-       var mktDays = marketDaysBetween(today, new Date(d));
-       // Must meet minimum AND stay under 50 market days (~70 cal days)
-       if(mktDays >= minMktDays && mktDays <= 50 && mktDays < bestMktDays){
-         bestMktDays = mktDays;
-         best = {date:d, mktDays:mktDays};
-       }
-     });
-     if(best){ branchExpiry = best; break; }
+   // Fallback: widen to >7 and <50
+   if(!validExps.length){
+     validExps = dates.filter(function(d){ var cd=calDays(d); return cd>7&&cd<50; });
    }
-
-   // Final fallback: nearest expiry with any reasonable DTE
-   if(!branchExpiry){
-     var fallback=null, fallDiff=9999;
-     dates.forEach(function(d){
-       var calDays=Math.round((new Date(d)-today)/864e5);
-       var diff=Math.abs(calDays-35);
-       if(calDays>=10&&calDays<=90&&diff<fallDiff){fallDiff=diff;fallback={date:d,mktDays:Math.round(calDays*5/7)};}
-     });
-     branchExpiry = fallback || {date:dates[0], mktDays:0};
+   // Last resort: any future expiry
+   if(!validExps.length){
+     validExps = dates.filter(function(d){ return calDays(d)>0; });
    }
+   if(!validExps.length){callback(null);return;}
 
-   // Fetch chain for selected expiry
-   fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+branchExpiry.date+'&greeks=true',
-     {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-   .then(function(r){return r.json();})
-   .then(function(cdata){
-     var opts=[];
-     try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
-     if(!opts.length){callback(null);return;}
+   // Fetch all valid expiry chains in parallel
+   var chainFetches = validExps.map(function(expDate){
+     return fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+expDate+'&greeks=true',
+       {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+     .then(function(r){return r.json();})
+     .then(function(cdata){
+       var opts=[];
+       try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
+       return {expDate:expDate, dte:calDays(expDate), opts:opts};
+     }).catch(function(){return {expDate:expDate, dte:calDays(expDate), opts:[]};});
+   });
 
-     // Base filter: calls only, valid greeks
-     var calls = opts.filter(function(o){
-       return o.option_type==='call' && o.greeks && o.greeks.delta>0.05 && o.greeks.delta<0.99;
+   Promise.all(chainFetches).then(function(chains){
+     var candidates = [];
+
+     chains.forEach(function(chain){
+       var calls = chain.opts.filter(function(o){
+         return o.option_type==='call' && o.greeks && o.greeks.delta>0.02 && o.greeks.delta<0.99;
+       });
+       if(!calls.length) return;
+
+       // ATM strike = nearest to current price
+       var atmStrike = calls.reduce(function(best,o){
+         return Math.abs(o.strike-price)<Math.abs(best-price)?o.strike:best;
+       }, calls[0].strike);
+
+       // Sorted unique strikes, find ATM index, slice +-10 rows
+       var strikesSorted = calls.map(function(o){return o.strike;})
+         .filter(function(v,i,a){return a.indexOf(v)===i;})
+         .sort(function(a,b){return a-b;});
+       var atmIdx = strikesSorted.indexOf(atmStrike);
+       if(atmIdx<0) atmIdx=0;
+       var windowStrikes = strikesSorted.slice(Math.max(0,atmIdx-10), Math.min(strikesSorted.length-1,atmIdx+10)+1);
+       var strikeSet = {};
+       windowStrikes.forEach(function(s){strikeSet[s]=true;});
+
+       calls.forEach(function(o){
+         if(!strikeSet[o.strike]) return;
+         candidates.push({opt:o, expDate:chain.expDate, dte:chain.dte, atmStrike:atmStrike, vol:o.volume||0});
+       });
      });
-     if(!calls.length){callback(null);return;}
 
-     function sprdPct(o){var mid=(o.bid+o.ask)/2;return mid>0?((o.ask-o.bid)/mid*100):999;}
+     if(!candidates.length){callback(null);return;}
 
-     // Delta ladder: walk 0.45 \u2192 0.43 \u2192 0.41 \u2192 0.39 \u2192 0.37
-     // For each delta target, find nearest call AND check volume >= 130
-     // First strike that passes volume threshold wins
-     var chosen = null;
-     var DELTA_TOL = 0.03; // +/- tolerance for matching delta target
+     // Sort: primary=volume desc, tie-break within 20%=shorter DTE
+     candidates.sort(function(a,b){
+       var vA=a.vol, vB=b.vol;
+       var tied = Math.abs(vA-vB)/(Math.max(vA,vB)||1) <= 0.20;
+       if(tied) return a.dte-b.dte;
+       return vB-vA;
+     });
 
-     for(var di=0; di<DELTA_LADDER.length; di++){
-       var target = DELTA_LADDER[di];
-       // Find calls nearest to this delta target
-       var candidates = calls.filter(function(o){
-         return Math.abs(Math.abs(o.greeks.delta) - target) <= DELTA_TOL;
-       });
-       // Sort by closeness to target delta
-       candidates.sort(function(a,b){
-         return Math.abs(Math.abs(a.greeks.delta)-target) - Math.abs(Math.abs(b.greeks.delta)-target);
-       });
-       // Walk candidates: first one with volume >= threshold wins
-       for(var ci=0; ci<candidates.length; ci++){
-         if((candidates[ci].volume||0) >= VOL_THRESHOLD){
-           chosen = candidates[ci];
-           chosen._strikeNum = di+1; // which step in ladder fired (1st=0.45, 2nd=0.43...)
-           break;
-         }
-       }
-       if(chosen) break;
-     }
-
-     // Fallback: if no ladder strike cleared volume threshold,
-     // use liquidity tiers (original logic) to avoid returning null
-     if(!chosen){
-       var t1=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=50&&sprdPct(o)<=10;});
-       var t2=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=10&&sprdPct(o)<=15;});
-       var t3=calls.filter(function(o){return (o.open_interest||0)>=100;});
-       var pool=t1.length?t1:t2.length?t2:t3.length?t3:calls;
-       pool.forEach(function(o){
-         var delta=Math.abs(o.greeks.delta||0);
-         var dScore=delta>=0.40&&delta<=0.50?40:delta>=0.35&&delta<=0.55?20:5;
-         var vScore=Math.min((o.volume||0)/50,30);
-         var oScore=Math.min((o.open_interest||0)/200,20);
-         var sScore=sprdPct(o)<3?10:sprdPct(o)<5?7:sprdPct(o)<8?4:1;
-         o._score=dScore+vScore+oScore+sScore;
-       });
-       pool.sort(function(a,b){return b._score-a._score;});
-       chosen=pool[0];
-       chosen._strikeNum=0; // 0 = fallback tier selection
-     }
-
+     var winner=candidates[0];
+     var chosen=winner.opt;
      var mid=(chosen.bid+chosen.ask)/2;
      var spread=chosen.ask-chosen.bid;
      var spreadPct=mid>0?(spread/mid*100):0;
@@ -2908,26 +2875,25 @@ function fetchOptionContract(ticker,simPrice,callback){
      var extPct=mid>0?(extrinsic/mid*100):0;
 
      callback({
-       strike:     chosen.strike,
-       spread:     +(spread.toFixed(2)),
-       spreadPct:  +(spreadPct.toFixed(2)),
-       delta:      +(chosen.greeks.delta.toFixed(2)),
-       ext:        +(extPct.toFixed(1)),
-       mktDays:    branchExpiry.mktDays,
-       dte:        branchExpiry.mktDays, // keep dte field for compatibility
-       optPr:      +(mid.toFixed(2)),
-       bid:        chosen.bid,
-       ask:        chosen.ask,
-       oi:         chosen.open_interest||0,
-       vol:        chosen.volume||0,
-       exp:        branchExpiry.date,
-       iv:         chosen.greeks?chosen.greeks.smv_vol:0,
-       symbol:     chosen.symbol,
-       livePrice:  price,
-       live:       true,
-       strikeNum:  chosen._strikeNum, // which delta ladder step fired
-       volThresh:  VOL_THRESHOLD,
-       tierUsed:   chosen._strikeNum > 0 ? ('delta-'+DELTA_LADDER[chosen._strikeNum-1]) : 'fallback'
+       strike:    chosen.strike,
+       spread:    +(spread.toFixed(2)),
+       spreadPct: +(spreadPct.toFixed(2)),
+       delta:     +(chosen.greeks.delta.toFixed(2)),
+       ext:       +(extPct.toFixed(1)),
+       dte:       winner.dte,
+       mktDays:   winner.dte,
+       optPr:     +(mid.toFixed(2)),
+       bid:       chosen.bid,
+       ask:       chosen.ask,
+       oi:        chosen.open_interest||0,
+       vol:       chosen.volume||0,
+       exp:       winner.expDate,
+       iv:        chosen.greeks?chosen.greeks.smv_vol:0,
+       symbol:    chosen.symbol,
+       livePrice: price,
+       live:      true,
+       atmStrike: winner.atmStrike,
+       tierUsed:  'vol-rank'
      });
    }).catch(function(){callback(null);});
  }).catch(function(){callback(null);});
@@ -3358,11 +3324,11 @@ function buildDetail(r,detId,emptyId){
     +'<div class="og-cell"><div class="og-lbl">Delta</div><div class="og-val '+(opt.delta>=0.70?'ok':'warn')+'">'+opt.delta+(opt.delta>=0.70?' \u2713':' \u2717')+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Extrinsic %</div><div class="og-val '+(opt.ext<=30?'ok':'warn')+'">'+fmtP(opt.ext)+(opt.ext<=30?' \u2713':' \u2717')+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Spread %</div><div class="og-val '+(opt.spreadPct<2?'ok':'warn')+'">'+fmtP(opt.spreadPct)+(opt.spreadPct<2?' \u2713':' \u2717')+'</div></div>'
-    +'<div class="og-cell"><div class="og-lbl">DTE</div><div class="og-val '+((opt.dte>=25&&opt.dte<=50)?'ok':'warn')+'">'+opt.dte+'d'+((opt.dte>=25&&opt.dte<=50)?' \u2713':' \u2717')+'</div></div>'
-    +'<div class="og-cell"><div class="og-lbl">Strike</div><div class="og-val">$'+fmt2(opt.strike)+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">DTE</div><div class="og-val '+((opt.dte>10&&opt.dte<35)?'ok':'warn')+'">'+opt.dte+'d'+((opt.dte>10&&opt.dte<35)?' \u2713':' \u2717')+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Strike</div><div class="og-val">'+(function(){var DS=String.fromCharCode(36);var atm=opt.atmStrike||opt.strike;var diff=+(opt.strike-atm).toFixed(2);var tag=diff===0?'<span style="font-size:9px;color:var(--amb);"> ATM</span>':diff>0?'<span style="font-size:9px;color:var(--gry);"> +'+diff+'</span>':'<span style="font-size:9px;color:var(--gry);"> '+diff+'</span>';return DS+fmt2(opt.strike)+tag;})()+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Expiry</div><div class="og-val">'+opt.exp+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Opt Price</div><div class="og-val">$'+fmt2(opt.optPr)+'</div></div>'
-    +'<div class="og-cell"><div class="og-lbl">OI / Vol</div><div class="og-val">'+fmtK(opt.oi)+' / '+fmtK(opt.vol)+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">OI / Vol</div><div class="og-val">'+fmtK(opt.oi)+' / <b style="color:var(--grn);">'+fmtK(opt.vol)+'</b>'+(opt.tierUsed==='vol-rank'?'<span style="font-size:9px;color:var(--blub);margin-left:3px;">#1 vol</span>':'')+'</div></div>'
     +'</div>'
     +'<div style="padding:8px 12px;border-bottom:var(--bdr);display:flex;align-items:center;gap:10px;">'
     +'<button class="btn blu" style="font-size:12px;padding:5px 14px;" onclick="doBuyCall()">\u25b2 BUY CALL</button>'
