@@ -5574,7 +5574,11 @@ function matchTrades(orders){
 
       // P&L: for long (BTO->STC): (close-open)*100*qty
       //       for short (STO->BTC): (open-close)*100*qty
-      var isLong=(openLots.length>0&&(openLots[0].side==='buy_to_open'||openLots[0].side==='buy'));
+      // When no open lot found in history (sandbox truncation), default to LONG
+      // since the terminal only trades buy_to_open long calls
+      var isLong=(openLots.length>0)
+        ? (openLots[0].side==='buy_to_open'||openLots[0].side==='buy')
+        : true;
       var pnl = isLong
         ? (closePx - openPx)*100*closeQty
         : (openPx - closePx)*100*closeQty;
