@@ -1799,7 +1799,7 @@ function scoreGexForDate(expDateStr){
   return 0; // neutral
 }
 
-function autoSelectContract(){
+async function autoSelectContract(){
   var sym  = eid('ord-sym').value.trim().toUpperCase();
   var type = eid('ord-type').value;
 
@@ -1811,85 +1811,195 @@ function autoSelectContract(){
 
   var creds = getTradierCreds();
   if(!creds){
+    // Simulated mode
     statusEl.textContent = 'No API key \u2014 running simulated auto-select...';
     autoSelectSimulated(sym, type);
     return;
   }
 
-  statusEl.textContent = 'Scanning chains...';
+  statusEl.textContent = 'Fetching expirations...';
   resultBox.classList.remove('show');
 
-  // Delegate entirely to fetchOptionContract (same logic as signal auto-select)
-  fetchOptionContract(sym, 0, function(best){
-    if(!best){
-      statusEl.textContent = 'No qualifying contracts found for '+sym+'. Try again during market hours.';
+  try {
+    // Step 1: Get stock price
+    var quoteRes = await fetch(creds.host+'/v1/markets/quotes?symbols='+sym, {
+      headers:{Authorization:'Bearer '+creds.key, Accept:'application/json'}
+    }).then(function(r){return r.json();});
+    var stockPrice = 0;
+    try{ var q=quoteRes.quotes.quote; stockPrice=q.last||(q.bid+q.ask)/2||q.prevclose||0; }catch(e){}
+    if(!stockPrice){ statusEl.textContent = 'Could not fetch stock price'; return; }
+
+    // Step 2: Get expirations
+    var expRes = await fetch(creds.host+'/v1/markets/options/expirations?symbol='+sym, {
+      headers:{Authorization:'Bearer '+creds.key, Accept:'application/json'}
+    }).then(function(r){return r.json();});
+    var dates = [];
+    try{ dates=expRes.expirations.date; if(!Array.isArray(dates))dates=[dates]; }catch(e){}
+    if(!dates.length){ statusEl.textContent = 'No expirations found for '+sym; return; }
+
+    var today = new Date();
+    // Filter to 15-35 market days
+    var validDates = dates.filter(function(d){
+      var mdays = marketDaysBetween(today, new Date(d));
+      return mdays >= 15 && mdays <= 35;
+    });
+
+    if(!validDates.length){
+      statusEl.textContent = 'No expirations in 15-35 market day window for '+sym;
       return;
     }
 
-    // Fill order ticket
+    // Step 3: Score each valid expiration by GEX sentiment \u2014 prefer bullish dates
+    var scoredDates = validDates.map(function(d){
+      var mdays = marketDaysBetween(today, new Date(d));
+      var gexScore = scoreGexForDate(d);
+      return { date:d, mdays:mdays, gexScore:gexScore };
+    }).sort(function(a,b){
+      // Primary: GEX score descending (most bullish first)
+      if(b.gexScore !== a.gexScore) return b.gexScore - a.gexScore;
+      // Secondary: prefer DTE closer to 25 (sweet spot)
+      return Math.abs(a.mdays-25) - Math.abs(b.mdays-25);
+    });
+
+    statusEl.textContent = 'Scanning chains for '+scoredDates.length+' expirations...';
+
+    // Step 4: For each top-3 candidate dates, fetch chain and find best strike
+    var candidates = [];
+    var toCheck = scoredDates.slice(0, 3);
+
+    for(var i=0; i<toCheck.length; i++){
+      var expDate = toCheck[i].date;
+      try{
+        var chainRes = await fetch(
+          creds.host+'/v1/markets/options/chains?symbol='+sym+'&expiration='+expDate+'&greeks=true',
+          {headers:{Authorization:'Bearer '+creds.key, Accept:'application/json'}}
+        ).then(function(r){return r.json();});
+        var opts = [];
+        try{ opts=chainRes.options.option; if(!Array.isArray(opts))opts=[opts]; }catch(e){}
+
+        // Filter to correct type, min OI>=100, volume>=100, valid greeks
+        var filtered = opts.filter(function(o){
+          return o.option_type===(type==='CALL'?'call':'put')
+            && (o.open_interest||0) >= 100
+            && (o.volume||0) >= 100
+            && o.greeks
+            && o.greeks.delta;
+        });
+        // Fallback: relax volume to >=10 if nothing passes
+        if(!filtered.length){
+          filtered = opts.filter(function(o){
+            return o.option_type===(type==='CALL'?'call':'put')
+              && (o.open_interest||0) >= 100
+              && (o.volume||0) >= 10
+              && o.greeks && o.greeks.delta;
+          });
+        }
+
+        if(!filtered.length) continue;
+
+        // Compute avg volume for these contracts
+        var avgVol = filtered.reduce(function(s,o){return s+(o.volume||0);},0) / filtered.length;
+
+        // Filter: volume must be above average for that chain
+        var aboveAvg = filtered.filter(function(o){ return (o.volume||0) > avgVol; });
+        var pool = aboveAvg.length > 0 ? aboveAvg : filtered;
+
+        // Score each strike: prefer delta 0.5-0.75 range (slightly ITM for momentum)
+        pool.forEach(function(o){
+          var delta   = Math.abs(o.greeks.delta||0);
+          var vol     = o.volume||0;
+          var oi      = o.open_interest||0;
+          var mid     = (o.bid+o.ask)/2;
+          var spread  = o.ask-o.bid;
+          var sprdPct = mid>0 ? (spread/mid)*100 : 99;
+
+          // Score components
+          var deltaScore = delta>=0.5&&delta<=0.75 ? 30 : delta>=0.4&&delta<=0.85 ? 15 : 0;
+          var volScore   = Math.min(vol/100, 30);        // up to 30pts for volume
+          var oiScore    = Math.min(oi/500, 20);         // up to 20pts for OI
+          var sprdScore  = sprdPct < 5 ? 10 : sprdPct < 10 ? 5 : 0; // tight spread bonus
+          var gexBonus   = toCheck[i].gexScore * 10;    // GEX sentiment bonus
+
+          var totalScore = deltaScore + volScore + oiScore + sprdScore + gexBonus;
+
+          candidates.push({
+            strike:    o.strike,
+            exp:       expDate,
+            mdays:     toCheck[i].mdays,
+            gexScore:  toCheck[i].gexScore,
+            delta:     delta,
+            vol:       vol,
+            oi:        oi,
+            mid:       mid,
+            spread:    spread,
+            sprdPct:   sprdPct,
+            score:     totalScore,
+            symbol:    o.symbol
+          });
+        });
+      } catch(chainErr){ /* skip this expiry */ }
+    }
+
+    if(!candidates.length){
+      statusEl.textContent = 'No contracts met criteria (OI>=100, vol>=100). Try a different symbol or check back later in the session.';
+      return;
+    }
+
+    // Sort by score descending
+    candidates.sort(function(a,b){ return b.score - a.score; });
+    var best = candidates[0];
+
+    // Fill in the order ticket
     eid('ord-strike').value = best.strike;
     eid('ord-exp').value    = best.exp;
     updateOrdChart();
     fetchLiveQuote();
 
-    // Update result panel
-    eid('asr-strike').textContent  = '$'+fmt2(best.strike);
-    eid('asr-exp').textContent     = best.exp;
-    eid('asr-dte').textContent     = best.dte+'d';
-    eid('asr-dte').className       = 'asr-val '+(best.dte>10&&best.dte<35?'good':'warn');
-    eid('asr-vol').textContent     = fmtK(best.vol);
-    eid('asr-oi').textContent      = fmtK(best.oi);
-    eid('asr-delta').textContent   = fmt2(best.delta);
-    eid('asr-score').textContent   = '--';
+    // Show results panel
+    eid('asr-strike').textContent = '$'+fmt2(best.strike);
+    eid('asr-exp').textContent    = best.exp;
+    eid('asr-dte').textContent    = best.mdays+' days';
+    eid('asr-dte').className      = 'asr-val '+(best.mdays>=20&&best.mdays<=30?'good':'warn');
+    var gexLbl = best.gexScore>=2?'STRONG BULL':best.gexScore===1?'BULLISH':best.gexScore===0?'NEUTRAL':'BEARISH';
+    var gexCls = best.gexScore>=1?'good':'warn';
+    eid('asr-gex').textContent  = gexLbl;
+    eid('asr-gex').className    = 'asr-val '+gexCls;
+    eid('asr-vol').textContent  = fmtK(best.vol);
+    eid('asr-oi').textContent   = fmtK(best.oi);
+    eid('asr-delta').textContent= fmt2(best.delta);
+    eid('asr-score').textContent= Math.round(best.score);
 
-    // GEX display: reuse cached value if available
-    var gexScore = (G.gexData||[]).reduce(function(found, g){
-      return (g.ticker===sym&&found===null) ? (g.score||0) : found;
-    }, null);
-    if(gexScore !== null){
-      var gexLbl = gexScore>=2?'STRONG BULL':gexScore===1?'BULLISH':gexScore===0?'NEUTRAL':'BEARISH';
-      eid('asr-gex').textContent = gexLbl;
-      eid('asr-gex').className   = 'asr-val '+(gexScore>=1?'good':'warn');
-    } else {
-      eid('asr-gex').textContent = 'N/A';
-      eid('asr-gex').className   = 'asr-val';
-    }
-
-    // Best-per-expiry: one row per DTE, highest volume winner from each
-    // Sorted shortest DTE first so you scan the same way you would manually
-    var DS = String.fromCharCode(36);
-    var pool2 = best._pool || [];
-    // Fallback: synthesize single entry if pool missing
-    if(!pool2.length) pool2 = [{opt:{strike:best.strike,greeks:{delta:best.delta},open_interest:best.oi,volume:best.vol,bid:best.bid,ask:best.ask}, expDate:best.exp, dte:best.dte, atmStrike:best.atmStrike, vol:best.vol}];
-
-    // Group by expiry, keep highest-vol candidate per expiry
-    var byExp = {};
-    pool2.forEach(function(c){
-      var k = c.expDate;
-      if(!byExp[k] || c.vol > byExp[k].vol) byExp[k] = c;
-    });
-    // Sort by DTE ascending (shortest first)
-    var perExp = Object.keys(byExp).map(function(k){ return byExp[k]; })
-      .sort(function(a,b){ return a.dte - b.dte; });
-
-    var candHtml = '<div style="color:var(--gry);font-size:9px;padding:4px 0 2px;letter-spacing:.5px;font-weight:700;">BEST PER EXPIRY &mdash; shortest DTE first</div>';
-    perExp.forEach(function(c, idx){
-      var isSelected = c.expDate === best.exp && c.opt.strike === best.strike;
-      var o = c.opt;
-      var atm = c.atmStrike || o.strike;
-      var diff = +(o.strike - atm).toFixed(2);
-      var atmTag = diff===0
-        ? '<span style="font-size:9px;color:var(--amb);"> ATM</span>'
-        : '<span style="font-size:9px;color:var(--gry);">'+(diff>0?'+':'')+diff+'</span>';
-      var mid2 = (o.bid+o.ask)/2;
-      candHtml += '<div class="asr-cand"'+(isSelected?' style="background:rgba(59,130,246,0.07);"':'')+' onclick="applyCandidate('+o.strike+',\''+c.expDate+'\')">'        +'<span class="asr-cand-rank">'+(idx+1)+'.</span>'        +'<span style="color:'+(isSelected?'var(--wht)':'var(--gry2)')+';font-weight:700;font-size:11px;width:60px;">'+DS+fmt2(o.strike)+atmTag+'</span>'        +'<span style="color:var(--gry);font-size:10px;width:90px;">'+c.expDate+'</span>'        +'<span style="color:'+(c.dte<=20?'var(--grn)':'var(--gry)')+';font-size:10px;width:42px;">'+c.dte+'d</span>'        +'<span class="asr-cand-detail">vol:<b style="color:var(--grn);">'+fmtK(c.vol)+'</b> oi:'+fmtK(o.open_interest||0)+' \u03b4'+fmt2(o.greeks?o.greeks.delta:0)+' mid:'+DS+fmt2(mid2)+'</span>'        +(isSelected?'<span style="font-size:9px;color:var(--blub);font-weight:700;">\u2713</span>':'<button class="btn" style="font-size:9px;padding:1px 6px;border-color:var(--gry2);color:var(--gry);" onclick="event.stopPropagation();applyCandidate('+o.strike+',\''+c.expDate+'\')">USE</button>')        +'</div>';
+    // Show top-5 candidates for comparison
+    var top5 = candidates.slice(0,5);
+    var candHtml = '<div style="color:var(--gry);font-size:9px;padding:4px 0 2px;letter-spacing:.5px;font-weight:700;">TOP CANDIDATES</div>';
+    top5.forEach(function(c,idx){
+      var gexTag = c.gexScore>=1
+        ? '<span class="asr-cand-badge bull">BULL GEX</span>'
+        : '<span class="asr-cand-badge neut">NEUT GEX</span>';
+      var isBest = idx===0 ? ' style="background:rgba(59,130,246,0.07);"' : '';
+      candHtml += '<div class="asr-cand"'+isBest+' onclick="applyCandidate('+c.strike+',\''+c.exp+'\')">'
+        +'<span class="asr-cand-rank">'+(idx+1)+'.</span>'
+        +'<span style="color:var(--wht);font-weight:700;font-size:11px;width:60px;">$'+c.strike+'</span>'
+        +'<span style="color:var(--gry);font-size:10px;width:90px;">'+c.exp+'</span>'
+        +'<span style="color:var(--gry);font-size:10px;width:52px;">'+c.mdays+'d</span>'
+        +gexTag
+        +'<span class="asr-cand-detail">'
+          +'vol:'+fmtK(c.vol)+' oi:'+fmtK(c.oi)+' \u03b4'+fmt2(c.delta)+' score:'+Math.round(c.score)
+        +'</span>'
+        +'<button class="btn blu" style="font-size:9px;padding:1px 6px;" onclick="event.stopPropagation();applyCandidate('+c.strike+',\''+c.exp+'\')">USE</button>'
+        +'</div>';
     });
     eid('asr-candidates').innerHTML = candHtml;
     resultBox.classList.add('show');
 
-    statusEl.textContent = 'Selected: '+DS+best.strike+' '+type+' '+best.exp+' ('+best.dte+'d) vol:'+fmtK(best.vol)+' oi:'+fmtK(best.oi);
-    toast('Auto-selected: '+DS+best.strike+' '+type+' exp '+best.exp);
-  });
+    var gexDesc = best.gexScore>=2?'monthly OPEX (strong bull)':best.gexScore===1?'bullish GEX date':best.gexScore===0?'neutral GEX':'bearish GEX';
+    statusEl.textContent = 'Selected: $'+best.strike+' '+type+' '+best.exp+' ('+best.mdays+'d, '+gexDesc+') vol:'+fmtK(best.vol)+' oi:'+fmtK(best.oi);
+    addAlert(sym, 'Auto-select: $'+best.strike+' '+type+' '+best.exp+' score:'+Math.round(best.score), 'go');
+    toast('Auto-selected: $'+best.strike+' '+type+' exp '+best.exp);
+
+  } catch(err) {
+    statusEl.textContent = 'Error: '+err.message;
+  }
 }
 
 function applyCandidate(strike, exp){
@@ -2661,14 +2771,18 @@ function fetchOptionContract(ticker,simPrice,callback){
  var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
 
- // Selection: highest-volume call within +/-10 strikes of ATM,
- // across all expiries >10 and <35 calendar DTE.
- // Tie-break (within 20% volume): prefer shorter DTE.
+ // Delta ladder (Option Alpha bot strategy) \u2014 preferred strike first, fall back in 0.02 steps
+ var DELTA_LADDER = [0.45, 0.43, 0.41, 0.39, 0.37];
+ var VOL_THRESHOLD = 130; // minimum contract volume (Option Alpha bot value)
 
- function calDays(dateStr){
-   return Math.round((new Date(dateStr) - new Date()) / 864e5);
+ // Market days helper \u2014 count Mon-Fri between two dates
+ function marketDaysBetween(d1, d2){
+   var count=0, cur=new Date(d1);
+   while(cur<d2){ cur.setDate(cur.getDate()+1); var day=cur.getDay(); if(day>0&&day<6) count++; }
+   return count;
  }
 
+ // Get live price + all expirations in parallel
  var priceP = fetch(host+'/v1/markets/quotes?symbols='+ticker,
    {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
    .then(function(r){return r.json();})
@@ -2690,86 +2804,102 @@ function fetchOptionContract(ticker,simPrice,callback){
    var price=res[0], dates=res[1];
    if(!dates.length){callback(null);return;}
 
-   // Filter expiries: >10 and <35 calendar days out
-   var validExps = dates.filter(function(d){ var cd=calDays(d); return cd>10&&cd<35; });
+   var today = new Date();
 
-   // Fallback: widen to >7 and <50
-   if(!validExps.length){
-     validExps = dates.filter(function(d){ var cd=calDays(d); return cd>7&&cd<50; });
-   }
-   // Last resort: any future expiry
-   if(!validExps.length){
-     validExps = dates.filter(function(d){ return calDays(d)>0; });
-   }
-   if(!validExps.length){callback(null);return;}
+   // DTE waterfall: find best expiry for each minimum market-day threshold
+   // Try 10 mkt days min \u2192 15 min \u2192 20 min (Option Alpha bot DTE branches)
+   var DTE_MINS = [10, 15, 20];
+   var branchExpiry = null;
 
-   // Fetch all valid expiry chains in parallel
-   var chainFetches = validExps.map(function(expDate){
-     return fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+expDate+'&greeks=true',
-       {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-     .then(function(r){return r.json();})
-     .then(function(cdata){
-       var opts=[];
-       try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
-       return {expDate:expDate, dte:calDays(expDate), opts:opts};
-     }).catch(function(){return {expDate:expDate, dte:calDays(expDate), opts:[]};});
-   });
-
-   Promise.all(chainFetches).then(function(chains){
-     var candidates = [];
-
-     chains.forEach(function(chain){
-       var calls = chain.opts.filter(function(o){
-         return o.option_type==='call' && o.greeks && o.greeks.delta>0.02 && o.greeks.delta<0.99;
-       });
-       if(!calls.length) return;
-
-       // ATM strike = nearest to current price
-       var atmStrike = calls.reduce(function(best,o){
-         return Math.abs(o.strike-price)<Math.abs(best-price)?o.strike:best;
-       }, calls[0].strike);
-
-       // Sorted unique strikes, find ATM index, slice +-10 rows
-       var strikesSorted = calls.map(function(o){return o.strike;})
-         .filter(function(v,i,a){return a.indexOf(v)===i;})
-         .sort(function(a,b){return a-b;});
-       var atmIdx = strikesSorted.indexOf(atmStrike);
-       if(atmIdx<0) atmIdx=0;
-       var windowStrikes = strikesSorted.slice(Math.max(0,atmIdx-10), Math.min(strikesSorted.length-1,atmIdx+10)+1);
-       var strikeSet = {};
-       windowStrikes.forEach(function(s){strikeSet[s]=true;});
-
-       calls.forEach(function(o){
-         if(!strikeSet[o.strike]) return;
-         candidates.push({opt:o, expDate:chain.expDate, dte:chain.dte, atmStrike:atmStrike, vol:o.volume||0});
-       });
+   for(var bi=0; bi<DTE_MINS.length; bi++){
+     var minMktDays = DTE_MINS[bi];
+     var best=null, bestMktDays=9999;
+     dates.forEach(function(d){
+       var mktDays = marketDaysBetween(today, new Date(d));
+       // Must meet minimum AND stay under 50 market days (~70 cal days)
+       if(mktDays >= minMktDays && mktDays <= 50 && mktDays < bestMktDays){
+         bestMktDays = mktDays;
+         best = {date:d, mktDays:mktDays};
+       }
      });
+     if(best){ branchExpiry = best; break; }
+   }
 
-     if(!candidates.length){callback(null);return;}
-
-     // 1. Prefer candidates strictly inside the primary DTE window (>10 and <35).
-     //    Fallback-widened expiries only enter if nothing qualifies here.
-     var primaryCands = candidates.filter(function(c){ return c.dte>10&&c.dte<35; });
-     var pool = primaryCands.length ? primaryCands : candidates;
-
-     // 2. If any candidate has real volume, drop zero-volume rows entirely.
-     //    This prevents a zero-vol 4/17 strike from tying with a real-vol outside entry.
-     var withVol = pool.filter(function(c){ return c.vol>0; });
-     if(withVol.length) pool = withVol;
-     // else all zero-volume: sort by OI as proxy, same tie-break rule
-
-     // 3. Sort: primary = volume (or OI if all-zero) desc,
-     //          tie-break within 20% = shorter DTE
-     pool.sort(function(a,b){
-       var vA = a.vol>0 ? a.vol : (a.opt.open_interest||0);
-       var vB = b.vol>0 ? b.vol : (b.opt.open_interest||0);
-       var tied = Math.abs(vA-vB)/(Math.max(vA,vB)||1) <= 0.20;
-       if(tied) return a.dte-b.dte;
-       return vB-vA;
+   // Final fallback: nearest expiry with any reasonable DTE
+   if(!branchExpiry){
+     var fallback=null, fallDiff=9999;
+     dates.forEach(function(d){
+       var calDays=Math.round((new Date(d)-today)/864e5);
+       var diff=Math.abs(calDays-35);
+       if(calDays>=10&&calDays<=90&&diff<fallDiff){fallDiff=diff;fallback={date:d,mktDays:Math.round(calDays*5/7)};}
      });
+     branchExpiry = fallback || {date:dates[0], mktDays:0};
+   }
 
-     var winner=pool[0];
-     var chosen=winner.opt;
+   // Fetch chain for selected expiry
+   fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+branchExpiry.date+'&greeks=true',
+     {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+   .then(function(r){return r.json();})
+   .then(function(cdata){
+     var opts=[];
+     try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
+     if(!opts.length){callback(null);return;}
+
+     // Base filter: calls only, valid greeks
+     var calls = opts.filter(function(o){
+       return o.option_type==='call' && o.greeks && o.greeks.delta>0.05 && o.greeks.delta<0.99;
+     });
+     if(!calls.length){callback(null);return;}
+
+     function sprdPct(o){var mid=(o.bid+o.ask)/2;return mid>0?((o.ask-o.bid)/mid*100):999;}
+
+     // Delta ladder: walk 0.45 \u2192 0.43 \u2192 0.41 \u2192 0.39 \u2192 0.37
+     // For each delta target, find nearest call AND check volume >= 130
+     // First strike that passes volume threshold wins
+     var chosen = null;
+     var DELTA_TOL = 0.03; // +/- tolerance for matching delta target
+
+     for(var di=0; di<DELTA_LADDER.length; di++){
+       var target = DELTA_LADDER[di];
+       // Find calls nearest to this delta target
+       var candidates = calls.filter(function(o){
+         return Math.abs(Math.abs(o.greeks.delta) - target) <= DELTA_TOL;
+       });
+       // Sort by closeness to target delta
+       candidates.sort(function(a,b){
+         return Math.abs(Math.abs(a.greeks.delta)-target) - Math.abs(Math.abs(b.greeks.delta)-target);
+       });
+       // Walk candidates: first one with volume >= threshold wins
+       for(var ci=0; ci<candidates.length; ci++){
+         if((candidates[ci].volume||0) >= VOL_THRESHOLD){
+           chosen = candidates[ci];
+           chosen._strikeNum = di+1; // which step in ladder fired (1st=0.45, 2nd=0.43...)
+           break;
+         }
+       }
+       if(chosen) break;
+     }
+
+     // Fallback: if no ladder strike cleared volume threshold,
+     // use liquidity tiers (original logic) to avoid returning null
+     if(!chosen){
+       var t1=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=50&&sprdPct(o)<=10;});
+       var t2=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=10&&sprdPct(o)<=15;});
+       var t3=calls.filter(function(o){return (o.open_interest||0)>=100;});
+       var pool=t1.length?t1:t2.length?t2:t3.length?t3:calls;
+       pool.forEach(function(o){
+         var delta=Math.abs(o.greeks.delta||0);
+         var dScore=delta>=0.40&&delta<=0.50?40:delta>=0.35&&delta<=0.55?20:5;
+         var vScore=Math.min((o.volume||0)/50,30);
+         var oScore=Math.min((o.open_interest||0)/200,20);
+         var sScore=sprdPct(o)<3?10:sprdPct(o)<5?7:sprdPct(o)<8?4:1;
+         o._score=dScore+vScore+oScore+sScore;
+       });
+       pool.sort(function(a,b){return b._score-a._score;});
+       chosen=pool[0];
+       chosen._strikeNum=0; // 0 = fallback tier selection
+     }
+
      var mid=(chosen.bid+chosen.ask)/2;
      var spread=chosen.ask-chosen.bid;
      var spreadPct=mid>0?(spread/mid*100):0;
@@ -2778,26 +2908,26 @@ function fetchOptionContract(ticker,simPrice,callback){
      var extPct=mid>0?(extrinsic/mid*100):0;
 
      callback({
-       strike:    chosen.strike,
-       spread:    +(spread.toFixed(2)),
-       spreadPct: +(spreadPct.toFixed(2)),
-       delta:     +(chosen.greeks.delta.toFixed(2)),
-       ext:       +(extPct.toFixed(1)),
-       dte:       winner.dte,
-       mktDays:   winner.dte,
-       optPr:     +(mid.toFixed(2)),
-       bid:       chosen.bid,
-       ask:       chosen.ask,
-       oi:        chosen.open_interest||0,
-       vol:       chosen.volume||0,
-       exp:       winner.expDate,
-       iv:        chosen.greeks?chosen.greeks.smv_vol:0,
-       symbol:    chosen.symbol,
-       livePrice: price,
-       live:      true,
-       atmStrike: winner.atmStrike,
-       tierUsed:  'vol-rank',
-       _pool:     pool   // full ranked candidate list for top-N display
+       strike:     chosen.strike,
+       spread:     +(spread.toFixed(2)),
+       spreadPct:  +(spreadPct.toFixed(2)),
+       delta:      +(chosen.greeks.delta.toFixed(2)),
+       ext:        +(extPct.toFixed(1)),
+       mktDays:    branchExpiry.mktDays,
+       dte:        branchExpiry.mktDays, // keep dte field for compatibility
+       optPr:      +(mid.toFixed(2)),
+       bid:        chosen.bid,
+       ask:        chosen.ask,
+       oi:         chosen.open_interest||0,
+       vol:        chosen.volume||0,
+       exp:        branchExpiry.date,
+       iv:         chosen.greeks?chosen.greeks.smv_vol:0,
+       symbol:     chosen.symbol,
+       livePrice:  price,
+       live:       true,
+       strikeNum:  chosen._strikeNum, // which delta ladder step fired
+       volThresh:  VOL_THRESHOLD,
+       tierUsed:   chosen._strikeNum > 0 ? ('delta-'+DELTA_LADDER[chosen._strikeNum-1]) : 'fallback'
      });
    }).catch(function(){callback(null);});
  }).catch(function(){callback(null);});
@@ -3228,11 +3358,11 @@ function buildDetail(r,detId,emptyId){
     +'<div class="og-cell"><div class="og-lbl">Delta</div><div class="og-val '+(opt.delta>=0.70?'ok':'warn')+'">'+opt.delta+(opt.delta>=0.70?' \u2713':' \u2717')+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Extrinsic %</div><div class="og-val '+(opt.ext<=30?'ok':'warn')+'">'+fmtP(opt.ext)+(opt.ext<=30?' \u2713':' \u2717')+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Spread %</div><div class="og-val '+(opt.spreadPct<2?'ok':'warn')+'">'+fmtP(opt.spreadPct)+(opt.spreadPct<2?' \u2713':' \u2717')+'</div></div>'
-    +'<div class="og-cell"><div class="og-lbl">DTE</div><div class="og-val '+((opt.dte>10&&opt.dte<35)?'ok':'warn')+'">'+opt.dte+'d'+((opt.dte>10&&opt.dte<35)?' \u2713':' \u2717')+'</div></div>'
-    +'<div class="og-cell"><div class="og-lbl">Strike</div><div class="og-val">'+(function(){var DS=String.fromCharCode(36);var atm=opt.atmStrike||opt.strike;var diff=+(opt.strike-atm).toFixed(2);var tag=diff===0?'<span style="font-size:9px;color:var(--amb);"> ATM</span>':diff>0?'<span style="font-size:9px;color:var(--gry);"> +'+diff+'</span>':'<span style="font-size:9px;color:var(--gry);"> '+diff+'</span>';return DS+fmt2(opt.strike)+tag;})()+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">DTE</div><div class="og-val '+((opt.dte>=25&&opt.dte<=50)?'ok':'warn')+'">'+opt.dte+'d'+((opt.dte>=25&&opt.dte<=50)?' \u2713':' \u2717')+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">Strike</div><div class="og-val">$'+fmt2(opt.strike)+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Expiry</div><div class="og-val">'+opt.exp+'</div></div>'
     +'<div class="og-cell"><div class="og-lbl">Opt Price</div><div class="og-val">$'+fmt2(opt.optPr)+'</div></div>'
-    +'<div class="og-cell"><div class="og-lbl">OI / Vol</div><div class="og-val">'+fmtK(opt.oi)+' / <b style="color:var(--grn);">'+fmtK(opt.vol)+'</b>'+(opt.tierUsed==='vol-rank'?'<span style="font-size:9px;color:var(--blub);margin-left:3px;">#1 vol</span>':'')+'</div></div>'
+    +'<div class="og-cell"><div class="og-lbl">OI / Vol</div><div class="og-val">'+fmtK(opt.oi)+' / '+fmtK(opt.vol)+'</div></div>'
     +'</div>'
     +'<div style="padding:8px 12px;border-bottom:var(--bdr);display:flex;align-items:center;gap:10px;">'
     +'<button class="btn blu" style="font-size:12px;padding:5px 14px;" onclick="doBuyCall()">\u25b2 BUY CALL</button>'
@@ -3929,47 +4059,12 @@ function finishScan(){
 
   // Auto-refresh GEX after scan so GEX bonus scores are applied
   // Run in background \u2014 doesn't block UI
-  // Pre-fetch indicator history for all tickers in background
-  // Enables RSI Accel, MFI, CMO rules to score on first scan
-  // 24hr localStorage cache means subsequent scans cost 0 API calls
-  var histKey='';try{histKey=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
-  if(histKey){
-    var allForHist = G.results.filter(function(r){return r.isGo;})
-      .concat(G.results.filter(function(r){return !r.isGo;}))
-      .map(function(r){return r.ticker;});
-    var histDelay = 500;
-    var histPending = 0;
-    var histDone = 0;
-    allForHist.forEach(function(t){
-      if(G_HIST_CACHE[t] && G_HIST_CACHE[t].length >= 10) return;
-      histPending++;
-      setTimeout(function(){
-        fetchIndicatorHistory(t).then(function(days){
-          if(!days) return;
-          G_HIST_CACHE[t] = days;
-          var r = G.results.filter(function(x){return x.ticker===t;})[0];
-          if(r){
-            var u = scoreIt(t, r.ind, r.opt);
-            r.score=u.score; r.techScore=u.techScore; r.fundScore=u.fundScore;
-            r.isGo=u.isGo; r.rules=u.rules; r.passes=u.passes;
-          }
-          histDone++;
-          if(histDone % 10 === 0 || histDone === histPending){
-            G.results.sort(function(a,b){return b.score-a.score;});
-            G.filtered = G.results.slice();
-            renderBuySig(); renderScan();
-          }
-        });
-      }, histDelay);
-      histDelay += 150;
-    });
-  }
-
   var tradierKey = '';
   try{ tradierKey = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
   if(tradierKey){
     setTimeout(function(){
-      runGex(); // silent auto-refresh \u2014 re-scores GEX bonus after scan
+      addAlert('GEX', 'Auto-refreshing GEX after scan...', 'warn');
+      runGex();
     }, 2000);
   }
 }
@@ -4202,13 +4297,7 @@ function runGex(){
         flow:gex>0?'CALL HEAVY':'PUT HEAVY', flowCls:gex>0?'go':'nogo', sim:true};
     });
     renderGex();
-    G.results.forEach(function(r){
-      var u=scoreIt(r.ticker,r.ind,r.opt);
-      r.score=u.score;r.techScore=u.techScore;r.isGo=u.isGo;r.rules=u.rules;r.passes=u.passes;
-    });
-    G.results.sort(function(a,b){return b.score-a.score;});
-    G.filtered=G.results.slice();
-    renderBuySig();renderScan();
+    addAlert('GEX','GEX refreshed for '+G.gexData.length+' tickers (simulated)','warn');
     return;
   }
 
@@ -4327,8 +4416,7 @@ function runGex(){
       G.results.sort(function(a,b){ return b.score - a.score; });
       G.filtered = G.results.slice();
       renderBuySig(); renderScan();
-      var gexTabVis = eid('gex-tab') && eid('gex-tab').classList.contains('active');
-      if(gexTabVis) toast('GEX loaded \u2014 scores updated');
+      toast('GEX loaded \u2014 scores updated');
       // Re-check high-conviction signals now that GEX bonus is applied
       checkHighConvictionSignals(G.results);
     });
@@ -4342,13 +4430,7 @@ function runGex(){
       return{t:t,gex:gex,flip:flip,call:call,put:100-call,flow:gex>0?'CALL HEAVY':'PUT HEAVY',flowCls:gex>0?'go':'nogo',sim:true};
     });
     renderGex();
-    G.results.forEach(function(r){
-      var u=scoreIt(r.ticker,r.ind,r.opt);
-      r.score=u.score;r.techScore=u.techScore;r.isGo=u.isGo;r.rules=u.rules;r.passes=u.passes;
-    });
-    G.results.sort(function(a,b){return b.score-a.score;});
-    G.filtered=G.results.slice();
-    renderBuySig();renderScan();
+    addAlert('GEX','GEX fetch failed \u2014 showing simulated data','warn');
   });
 }
 
@@ -6278,7 +6360,8 @@ function checkHighConvictionSignals(results){
 
 var G_AT = {
   enabled:false, timer:null, scanCount:0, signalCount:0, orderCount:0,
-  dailyPnl:0, inFlightTickers:{}, openedToday:{}, lastGexReady:0, disarmedByLoss:false
+  dailyPnl:0, inFlightTickers:{}, openedToday:{}, lastGexReady:0, disarmedByLoss:false,
+  qualifiedOn:{}
 };
 
 function saveAutoTraderSettings(){
@@ -6420,7 +6503,7 @@ function loadAutoTraderState(){
     var s = JSON.parse(raw);
     if(s.stateDate !== new Date().toDateString()){
       G_AT.scanCount=0;G_AT.signalCount=0;G_AT.orderCount=0;
-      G_AT.dailyPnl=0;G_AT.disarmedByLoss=false;G_AT.openedToday={};
+      G_AT.dailyPnl=0;G_AT.disarmedByLoss=false;G_AT.openedToday={};G_AT.qualifiedOn={};
       atLog('New trading day \u2014 daily stats reset','ok');
       return;
     }
@@ -6460,22 +6543,53 @@ async function runAutoScanCycle(){
     return;
   }
   var cooldownMs = 4*3600000;
+  var now = Date.now();
+  var persistMs = 60000; // must score >= minScore for 2 consecutive cycles before entry
+
+  // Track first-seen timestamp per qualifying ticker
+  var qualifiedThisCycle = {};
+  results.forEach(function(r){
+    if(r.isGo && r.score >= s.minScore) qualifiedThisCycle[r.ticker] = true;
+  });
+  Object.keys(qualifiedThisCycle).forEach(function(t){
+    if(!G_AT.qualifiedOn[t]) G_AT.qualifiedOn[t] = now;
+  });
+  Object.keys(G_AT.qualifiedOn).forEach(function(t){
+    if(!qualifiedThisCycle[t]) delete G_AT.qualifiedOn[t];
+  });
+
+  // Build candidates: score gate + persistence + position guards
   var candidates = [];
   results.forEach(function(r){
-    if(!r.isGo||r.score<s.minScore) return;  // score is the gate \u2014 all 17 rules already baked in
-    if(atHasOpenPosition(r.ticker))  return;  // no duplicate positions
+    if(!r.isGo||r.score<s.minScore) return;
+    if(atHasOpenPosition(r.ticker))  return;
     var lastTs = G_AT.openedToday[r.ticker+'_ts']||0;
-    if(Date.now()-lastTs < cooldownMs) return; // 4hr cooldown per ticker
+    if(now-lastTs < cooldownMs) return;
+    var age = now - (G_AT.qualifiedOn[r.ticker]||now);
+    if(age < persistMs){
+      atLog(r.ticker+' qualifying ('+Math.round(age/1000)+'s / '+Math.round(persistMs/1000)+'s)','');
+      return;
+    }
     candidates.push(r);
   });
-  if(!candidates.length){ atLog('No signals above score '+s.minScore+' this cycle',''); return; }
+
+  if(!candidates.length){
+    var qualifying = Object.keys(G_AT.qualifiedOn).length;
+    if(qualifying) atLog(qualifying+' ticker(s) building persistence \u2014 no entries yet','');
+    else atLog('No signals above score '+s.minScore+' this cycle','');
+    return;
+  }
+
+  // 1 entry per cycle \u2014 top scorer only
   candidates.sort(function(a,b){ return b.score-a.score; });
   var signal = candidates[0];
   G_AT.signalCount++;
   atUpdateStats();
-  atLog('\u2605 Signal: '+signal.ticker+' | score '+signal.score+' | '+signal.sector,'warn');
-  addAlert(signal.ticker,'\u26a1 AUTO-TRADER: '+signal.ticker+' score '+signal.score+' | '+signal.sector+' | $'+fmt2(signal.price),'go');
+  var DS = String.fromCharCode(36);
+  atLog('\u2605 Signal: '+signal.ticker+' | score '+signal.score+' | age '+Math.round((now-(G_AT.qualifiedOn[signal.ticker]||now))/1000)+'s | '+signal.sector,'warn');
+  addAlert(signal.ticker,'\u26a1 AUTO-TRADER: '+signal.ticker+' score '+signal.score+' | '+signal.sector+' | '+DS+fmt2(signal.price),'go');
   if(atCountAutoPositions() >= s.maxPositions){ atLog('Position cap reached \u2014 skipping '+signal.ticker,'warn'); return; }
+  delete G_AT.qualifiedOn[signal.ticker];
   atExecuteTrade(signal, s.budget);
 }
 
