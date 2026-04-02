@@ -960,7 +960,7 @@ tr.sel-row td{background:var(--blu3);}
         <div class="api-row" style="align-items:center;">
           <label style="flex:0 0 200px;">MIN SCORE THRESHOLD</label>
           <input type="number" id="at-min-score" value="120" min="89" max="150" style="width:70px;" oninput="saveAutoTraderSettings()">
-          <span style="color:var(--gry);font-size:11px;margin-left:8px;">/ 122 — must also pass PROVEN + Analyst Rev + GEX</span>
+          <span style="color:var(--gry);font-size:11px;margin-left:8px;">/ 150 — score is the only gate</span>
         </div>
         <div class="api-row" style="align-items:center;">
           <label style="flex:0 0 200px;">MARKET HOURS ONLY</label>
@@ -6462,18 +6462,13 @@ async function runAutoScanCycle(){
   var cooldownMs = 4*3600000;
   var candidates = [];
   results.forEach(function(r){
-    if(!r.isGo||r.score<s.minScore) return;
-    var passed={};
-    if(r.rules) r.rules.forEach(function(rule){ if(rule.pass) passed[rule.n]=true; });
-    if(!passed['PROVEN ticker'])            return;
-    if(!passed['Analyst Revisions \u2191']) return;
-    if(!passed['GEX Call Heavy'])           return;
-    if(atHasOpenPosition(r.ticker))         return;
+    if(!r.isGo||r.score<s.minScore) return;  // score is the gate \u2014 all 17 rules already baked in
+    if(atHasOpenPosition(r.ticker))  return;  // no duplicate positions
     var lastTs = G_AT.openedToday[r.ticker+'_ts']||0;
-    if(Date.now()-lastTs < cooldownMs)      return;
+    if(Date.now()-lastTs < cooldownMs) return; // 4hr cooldown per ticker
     candidates.push(r);
   });
-  if(!candidates.length){ atLog('No new high conviction signals this cycle',''); return; }
+  if(!candidates.length){ atLog('No signals above score '+s.minScore+' this cycle',''); return; }
   candidates.sort(function(a,b){ return b.score-a.score; });
   var signal = candidates[0];
   G_AT.signalCount++;
