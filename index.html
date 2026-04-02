@@ -2857,15 +2857,28 @@ function fetchOptionContract(ticker,simPrice,callback){
 
      if(!candidates.length){callback(null);return;}
 
-     // Sort: primary=volume desc, tie-break within 20%=shorter DTE
-     candidates.sort(function(a,b){
-       var vA=a.vol, vB=b.vol;
+     // 1. Prefer candidates strictly inside the primary DTE window (>10 and <35).
+     //    Fallback-widened expiries only enter if nothing qualifies here.
+     var primaryCands = candidates.filter(function(c){ return c.dte>10&&c.dte<35; });
+     var pool = primaryCands.length ? primaryCands : candidates;
+
+     // 2. If any candidate has real volume, drop zero-volume rows entirely.
+     //    This prevents a zero-vol 4/17 strike from tying with a real-vol outside entry.
+     var withVol = pool.filter(function(c){ return c.vol>0; });
+     if(withVol.length) pool = withVol;
+     // else all zero-volume: sort by OI as proxy, same tie-break rule
+
+     // 3. Sort: primary = volume (or OI if all-zero) desc,
+     //          tie-break within 20% = shorter DTE
+     pool.sort(function(a,b){
+       var vA = a.vol>0 ? a.vol : (a.opt.open_interest||0);
+       var vB = b.vol>0 ? b.vol : (b.opt.open_interest||0);
        var tied = Math.abs(vA-vB)/(Math.max(vA,vB)||1) <= 0.20;
        if(tied) return a.dte-b.dte;
        return vB-vA;
      });
 
-     var winner=candidates[0];
+     var winner=pool[0];
      var chosen=winner.opt;
      var mid=(chosen.bid+chosen.ask)/2;
      var spread=chosen.ask-chosen.bid;
