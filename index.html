@@ -3095,7 +3095,7 @@ function scoreIt(ticker, ind, opt){
 
   // \u2500\u2500 GO DECISION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   var total = clamp(score, 0, 150); // 144 base + 6 GEX bonus
-  var isGo  = total >= 89 && !avoidBad;
+  var isGo  = total >= 110 && !avoidBad;
 
   return {
     score:      total,
@@ -5974,7 +5974,7 @@ function saveNotifSettings(){
       ejsTemplate:   eid('notif-ejs-template')    ? eid('notif-ejs-template').value     : '',
       ejsPubKey:     eid('notif-ejs-pubkey')      ? eid('notif-ejs-pubkey').value       : '',
       emailTo:       eid('notif-email-to')        ? eid('notif-email-to').value         : '',
-      minScore:      eid('notif-min-score')       ? parseInt(eid('notif-min-score').value)||111  : 111,
+      minScore:      eid('notif-min-score')       ? parseInt(eid('notif-min-score').value)||120  : 120,
       cooldown:      eid('notif-cooldown')        ? parseInt(eid('notif-cooldown').value)||60    : 60,
       autoFill:      eid('notif-autofill')        ? eid('notif-autofill').checked       : false,
       autoQty:       eid('notif-autoqty')         ? parseInt(eid('notif-autoqty').value)||1      : 1,
@@ -5995,7 +5995,7 @@ function loadNotifSettings(){
     if(eid('notif-ejs-template'))  eid('notif-ejs-template').value    = s.ejsTemplate  || '';
     if(eid('notif-ejs-pubkey'))    eid('notif-ejs-pubkey').value      = s.ejsPubKey    || '';
     if(eid('notif-email-to'))      eid('notif-email-to').value        = s.emailTo      || '';
-    if(eid('notif-min-score'))     eid('notif-min-score').value       = s.minScore     || 111;
+    if(eid('notif-min-score'))     eid('notif-min-score').value       = s.minScore     || 120;
     if(eid('notif-cooldown'))      eid('notif-cooldown').value        = s.cooldown     || 60;
     if(eid('notif-autofill'))      eid('notif-autofill').checked      = !!s.autoFill;
     if(eid('notif-autoqty'))       eid('notif-autoqty').value         = s.autoQty      || 1;
@@ -6010,7 +6010,7 @@ function getNotifSettings(){
     var raw = localStorage.getItem('rrjcar_notif');
     if(raw) return JSON.parse(raw);
   }catch(e){}
-  return {browser:false, email:false, minScore:111, cooldown:60};
+  return {browser:false, email:false, minScore:120, cooldown:60};
 }
 
 function updateNotifPermStatus(){
@@ -6225,7 +6225,7 @@ function hcModalSkip(){
 
 function checkHighConvictionSignals(results){
   var s = getNotifSettings();
-  var minScore   = s.minScore    || 111;
+  var minScore   = s.minScore    || 120;
   var cooldownMs = (s.cooldown   || 60) * 60000;
   var doAutoFill   = !!s.autoFill;
   var doAutoSubmit = !!s.autoSubmit;
@@ -6287,7 +6287,7 @@ function saveAutoTraderSettings(){
       budget:         +(eid('at-budget')?.value||500),
       maxContracts:   +(eid('at-max-contracts')?.value||3),
       dailyLoss:      +(eid('at-daily-loss')?.value||500),
-      minScore:       +(eid('at-min-score')?.value||111),
+      minScore:       +(eid('at-min-score')?.value||120),
       hoursGate:      eid('at-hours-gate')?.checked !== false,
       maxPositions:   +(eid('at-max-positions')?.value||3),
       marketFallback: eid('at-market-fallback')?.checked || false,
@@ -6303,7 +6303,7 @@ function loadAutoTraderSettings(){
     if(eid('at-budget'))          eid('at-budget').value          = s.budget        || 500;
     if(eid('at-max-contracts'))   eid('at-max-contracts').value   = s.maxContracts  || 3;
     if(eid('at-daily-loss'))      eid('at-daily-loss').value      = s.dailyLoss     || 500;
-    if(eid('at-min-score'))       eid('at-min-score').value       = s.minScore     || 111;
+    if(eid('at-min-score'))       eid('at-min-score').value       = s.minScore     || 120;
     if(eid('at-hours-gate'))      eid('at-hours-gate').checked    = s.hoursGate !== false;
     if(eid('at-max-positions'))   eid('at-max-positions').value   = s.maxPositions || 3;
     if(eid('at-market-fallback')) eid('at-market-fallback').checked = !!s.marketFallback;
@@ -6318,12 +6318,12 @@ function getAutoTraderSettings(){
       budget:       +(s.budget       || (eid('at-budget')        ? eid('at-budget').value        : 0) || 500),
       maxContracts: +(s.maxContracts || (eid('at-max-contracts') ? eid('at-max-contracts').value : 0) || 3),
       dailyLoss:    +(s.dailyLoss    || (eid('at-daily-loss')     ? eid('at-daily-loss').value    : 0) || 500),
-      minScore:       +(s.minScore       || (eid('at-min-score')        ? eid('at-min-score').value       : 0) || 111),
+      minScore:       +(s.minScore       || (eid('at-min-score')        ? eid('at-min-score').value       : 0) || 120),
       hoursGate:      s.hoursGate !== false,
       maxPositions:   +(s.maxPositions   || (eid('at-max-positions')   ? eid('at-max-positions').value   : 0) || 3),
       marketFallback: !!s.marketFallback,
     };
-  }catch(e){ return {budget:500,maxContracts:3,dailyLoss:500,minScore:111,hoursGate:true,maxPositions:3,marketFallback:false}; }
+  }catch(e){ return {budget:500,maxContracts:3,dailyLoss:500,minScore:120,hoursGate:true,maxPositions:3,marketFallback:false}; }
 }
 
 function atLog(msg, cls){
@@ -6575,7 +6575,7 @@ var STRATEGY_MODES = {
   highConviction: {
     label: '\u2605 HIGH CONVICTION',
     desc: 'PROVEN ticker + Score \u226590 + Analyst Revisions \u2191 + GEX Call Heavy \u2014 the rarest, highest-quality setups',
-    filters: {sig:'GO', minScore:111, analyst:true, proven:true, gex:true}
+    filters: {sig:'GO', minScore:120, analyst:true, proven:true, gex:true}
   },
   breakout: {
     label: '\u25b2 BREAKOUT',
