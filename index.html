@@ -3929,6 +3929,42 @@ function finishScan(){
 
   // Auto-refresh GEX after scan so GEX bonus scores are applied
   // Run in background \u2014 doesn't block UI
+  // Pre-fetch indicator history for all tickers in background
+  // Enables RSI Accel, MFI, CMO rules to score on first scan
+  // 24hr localStorage cache means subsequent scans cost 0 API calls
+  var histKey='';try{histKey=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
+  if(histKey){
+    var allForHist = G.results.filter(function(r){return r.isGo;})
+      .concat(G.results.filter(function(r){return !r.isGo;}))
+      .map(function(r){return r.ticker;});
+    var histDelay = 500;
+    var histPending = 0;
+    var histDone = 0;
+    allForHist.forEach(function(t){
+      if(G_HIST_CACHE[t] && G_HIST_CACHE[t].length >= 10) return;
+      histPending++;
+      setTimeout(function(){
+        fetchIndicatorHistory(t).then(function(days){
+          if(!days) return;
+          G_HIST_CACHE[t] = days;
+          var r = G.results.filter(function(x){return x.ticker===t;})[0];
+          if(r){
+            var u = scoreIt(t, r.ind, r.opt);
+            r.score=u.score; r.techScore=u.techScore; r.fundScore=u.fundScore;
+            r.isGo=u.isGo; r.rules=u.rules; r.passes=u.passes;
+          }
+          histDone++;
+          if(histDone % 10 === 0 || histDone === histPending){
+            G.results.sort(function(a,b){return b.score-a.score;});
+            G.filtered = G.results.slice();
+            renderBuySig(); renderScan();
+          }
+        });
+      }, histDelay);
+      histDelay += 150;
+    });
+  }
+
   var tradierKey = '';
   try{ tradierKey = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
   if(tradierKey){
