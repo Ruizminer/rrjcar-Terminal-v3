@@ -5654,9 +5654,14 @@ function fetchClosedPositions(){
         src.textContent='['+creds.mode.toUpperCase()+'] 0 orders';
         return;
       }
-      var od=data.orders.order;
-      if(!Array.isArray(od)) od = od ? [od] : [];
-      orders=od.filter(function(o){return o&&o.status;});
+      // Tradier returns {"orders":"null"} (string) when no orders in range
+      if(!data.orders || data.orders === 'null' || typeof data.orders === 'string'){
+        orders = [];
+      } else {
+        var od=data.orders.order;
+        if(!Array.isArray(od)) od = od ? [od] : [];
+        orders=od.filter(function(o){return o&&o.status;});
+      }
     }catch(e){
       wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div>'
         +'<p style="color:var(--wrn);">Parse error: '+e.message+'</p></div>';
@@ -5664,9 +5669,21 @@ function fetchClosedPositions(){
       return;
     }
 
+    // Even if API returns no orders, still load from localStorage cache
+    // This handles sandbox resets and date range gaps
     if(!orders.length){
+      var cachedTrades = [];
+      try{ cachedTrades = JSON.parse(localStorage.getItem('rrjcar_closed_trades')||'[]'); }catch(e){}
+      if(cachedTrades.length){
+        G_closed.raw = [];
+        G_closed.trades = cachedTrades;
+        G_closed.openFilled = [];
+        src.textContent = '[CACHED] '+cachedTrades.length+' closed trade'+(cachedTrades.length!==1?'s':'')+' | '+startDate+' \u2192 '+endDate+' | Updated: '+new Date().toLocaleTimeString();
+        renderClosedTable();
+        return;
+      }
       wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div>'
-        +'<p>No order history found for this account.</p></div>';
+        +'<p>No order history found for this period.</p></div>';
       src.textContent='['+creds.mode.toUpperCase()+'] 0 orders';
       return;
     }
