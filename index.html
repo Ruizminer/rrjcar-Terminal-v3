@@ -5570,7 +5570,12 @@ function matchTrades(orders){
       var openPx=openLots.length>0?openLots[0].price:0;
       // If openPx is still 0 (sandbox artifact or unmatched), try avg_fill_price of close order as fallback
       // This at least prevents division-by-zero in pnlPct
-      var openDate=openLots.length>0?openLots[0].date:o.create_date;
+      // When no matching BTO in history, try posOpenData for the real open date
+      var openDate=openLots.length>0?openLots[0].date:null;
+      if(!openDate && G.posOpenData && G.posOpenData[sym] && G.posOpenData[sym].openTs){
+        openDate = G.posOpenData[sym].openTs;
+      }
+      if(!openDate) openDate = o.create_date; // last resort: use close date
 
       // P&L: for long (BTO->STC): (close-open)*100*qty
       //       for short (STO->BTC): (open-close)*100*qty
@@ -5675,6 +5680,14 @@ function fetchClosedPositions(){
       var pod = G.posOpenData && G.posOpenData[t.symbol];
       if(pod && pod.costBasis && pod.qty){
         t.openPrice = pod.costBasis / pod.qty / 100;
+      }
+      // Also recover openDate from posOpenData.openTs if still showing close date
+      if(pod && pod.openTs && (t.openDate === t.closeDate || t.openDate === '--')){
+        var openDt = pod.openTs.slice(0,10);
+        if(openDt !== t.closeDate){
+          t.openDate = openDt;
+          t.holdDays = Math.round((new Date(t.closeDate) - new Date(openDt)) / 864e5);
+        }
       }
       // Recalculate P&L with recovered open price
       if(t.openPrice > 0){
