@@ -1813,12 +1813,14 @@ function updateAsrMonthLabel(){
   }
 }
 
-function populateAsrMonths(sym){
+function populateAsrMonths(sym, savedValue){
   var el=eid('asr-month');
   if(!el||!sym) return;
   var creds=getTradierCreds();
   if(!creds) return;
-  var saved=el.value;
+  // savedValue can be passed explicitly (to preserve selection before innerHTML reset)
+  // or fall back to current value
+  var saved = (savedValue !== undefined) ? savedValue : el.value;
   el.innerHTML='<option value="">Any (10\u201335 DTE)</option>';
   fetch(creds.host+'/v1/markets/options/expirations?symbol='+sym,
     {headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}})
@@ -1849,10 +1851,11 @@ function autoSelectContract(){
   if(!sym){ toast('Enter a symbol first'); return; }
   if(type==='STOCK'){ statusEl.textContent='Auto-select is for options (CALL/PUT)'; return; }
 
-  // Populate month dropdown for this symbol (async, non-blocking)
-  populateAsrMonths(sym);
-
+  // Read month filter BEFORE repopulating (populateAsrMonths resets innerHTML synchronously)
   var monthFilter = eid('asr-month') ? eid('asr-month').value : '';
+
+  // Repopulate month dropdown for this symbol \u2014 pass saved value so selection is restored
+  populateAsrMonths(sym, monthFilter);
   var creds = getTradierCreds();
 
   if(!creds){
