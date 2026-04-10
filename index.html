@@ -575,7 +575,7 @@ tr.sel-row td{background:var(--blu3);}
       <div class="ord-row">
         <div class="ord-field">
           <label>SYMBOL</label>
-          <input id="ord-sym" placeholder="e.g. AAPL"
+          <input id="ord-sym" placeholder="e.g. AAPL" onchange="populateAsrMonths(this.value.trim().toUpperCase())"
             oninput="this.value=this.value.toUpperCase()"
             onchange="onSymbolChange()"
             onblur="onSymbolChange()">
@@ -634,6 +634,9 @@ tr.sel-row td{background:var(--blu3);}
       <div class="auto-sel-box">
         <div class="auto-sel-hdr">
           <span style="color:var(--blub);font-size:10px;font-weight:700;letter-spacing:.5px;">&#9650; AUTO-SELECT CONTRACT</span>
+          <select id="asr-month" style="font-size:10px;padding:2px 6px;background:var(--bg2);color:var(--gry);border:1px solid var(--bg3);border-radius:3px;cursor:pointer;" onchange="updateAsrMonthLabel()">
+            <option value="">Any (10&#8211;35 DTE)</option>
+          </select>
           <button class="btn blu" style="font-size:10px;padding:2px 10px;" onclick="autoSelectContract()">&#9650; FIND BEST</button>
           <span class="auto-sel-status" id="asr-status">Enter symbol &amp; type above, then click FIND BEST to auto-fill strike &amp; expiry</span>
         </div>
@@ -1799,207 +1802,124 @@ function scoreGexForDate(expDateStr){
   return 0; // neutral
 }
 
-async function autoSelectContract(){
+function updateAsrMonthLabel(){
+  var el=eid('asr-month'), statusEl=eid('asr-status');
+  if(!el||!statusEl) return;
+  if(el.value){
+    var lbl=el.options[el.selectedIndex].text;
+    statusEl.textContent='Month filter: '+lbl+' \u2014 click FIND BEST to scan';
+  } else {
+    statusEl.textContent='Enter symbol & type above, then click FIND BEST to auto-fill strike & expiry';
+  }
+}
+
+function populateAsrMonths(sym){
+  var el=eid('asr-month');
+  if(!el||!sym) return;
+  var creds=getTradierCreds();
+  if(!creds) return;
+  var saved=el.value;
+  el.innerHTML='<option value="">Any (10\u201335 DTE)</option>';
+  fetch(creds.host+'/v1/markets/options/expirations?symbol='+sym,
+    {headers:{Authorization:'Bearer '+creds.key,Accept:'application/json'}})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    var dates=[];
+    try{dates=d.expirations.date;if(!Array.isArray(dates))dates=[dates];}catch(e){}
+    var months={};
+    dates.forEach(function(dt){ var m=dt.slice(0,7); if(!months[m])months[m]=0; months[m]++; });
+    var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    Object.keys(months).sort().forEach(function(m){
+      var p=m.split('-');
+      var lbl=MN[parseInt(p[1])-1]+' '+p[0]+' ('+months[m]+' exp)';
+      var opt=document.createElement('option');
+      opt.value=m; opt.textContent=lbl;
+      if(m===saved) opt.selected=true;
+      el.appendChild(opt);
+    });
+  }).catch(function(){});
+}
+
+function autoSelectContract(){
   var sym  = eid('ord-sym').value.trim().toUpperCase();
   var type = eid('ord-type').value;
-
   var statusEl  = eid('asr-status');
   var resultBox = eid('asr-result');
 
   if(!sym){ toast('Enter a symbol first'); return; }
-  if(type === 'STOCK'){ statusEl.textContent = 'Auto-select is for options (CALL/PUT)'; return; }
+  if(type==='STOCK'){ statusEl.textContent='Auto-select is for options (CALL/PUT)'; return; }
 
+  // Populate month dropdown for this symbol (async, non-blocking)
+  populateAsrMonths(sym);
+
+  var monthFilter = eid('asr-month') ? eid('asr-month').value : '';
   var creds = getTradierCreds();
+
   if(!creds){
-    // Simulated mode
-    statusEl.textContent = 'No API key \u2014 running simulated auto-select...';
+    statusEl.textContent='No API key \u2014 running simulated auto-select...';
     autoSelectSimulated(sym, type);
     return;
   }
 
-  statusEl.textContent = 'Fetching expirations...';
+  var DS = String.fromCharCode(36);
+  var mLabel = monthFilter ? (' ['+eid('asr-month').options[eid('asr-month').selectedIndex].text+']') : '';
+  statusEl.textContent='Scanning chains'+mLabel+'...';
   resultBox.classList.remove('show');
 
-  try {
-    // Step 1: Get stock price
-    var quoteRes = await fetch(creds.host+'/v1/markets/quotes?symbols='+sym, {
-      headers:{Authorization:'Bearer '+creds.key, Accept:'application/json'}
-    }).then(function(r){return r.json();});
-    var stockPrice = 0;
-    try{ var q=quoteRes.quotes.quote; stockPrice=q.last||(q.bid+q.ask)/2||q.prevclose||0; }catch(e){}
-    if(!stockPrice){ statusEl.textContent = 'Could not fetch stock price'; return; }
-
-    // Step 2: Get expirations
-    var expRes = await fetch(creds.host+'/v1/markets/options/expirations?symbol='+sym, {
-      headers:{Authorization:'Bearer '+creds.key, Accept:'application/json'}
-    }).then(function(r){return r.json();});
-    var dates = [];
-    try{ dates=expRes.expirations.date; if(!Array.isArray(dates))dates=[dates]; }catch(e){}
-    if(!dates.length){ statusEl.textContent = 'No expirations found for '+sym; return; }
-
-    var today = new Date();
-    // Filter to 15-35 market days
-    var validDates = dates.filter(function(d){
-      var mdays = marketDaysBetween(today, new Date(d));
-      return mdays >= 15 && mdays <= 35;
-    });
-
-    if(!validDates.length){
-      statusEl.textContent = 'No expirations in 15-35 market day window for '+sym;
+  fetchOptionContract(sym, 0, function(best){
+    if(!best){
+      statusEl.textContent='No qualifying contracts found for '+sym+'. Try again during market hours.';
       return;
     }
 
-    // Step 3: Score each valid expiration by GEX sentiment \u2014 prefer bullish dates
-    var scoredDates = validDates.map(function(d){
-      var mdays = marketDaysBetween(today, new Date(d));
-      var gexScore = scoreGexForDate(d);
-      return { date:d, mdays:mdays, gexScore:gexScore };
-    }).sort(function(a,b){
-      // Primary: GEX score descending (most bullish first)
-      if(b.gexScore !== a.gexScore) return b.gexScore - a.gexScore;
-      // Secondary: prefer DTE closer to 25 (sweet spot)
-      return Math.abs(a.mdays-25) - Math.abs(b.mdays-25);
-    });
-
-    statusEl.textContent = 'Scanning chains for '+scoredDates.length+' expirations...';
-
-    // Step 4: For each top-3 candidate dates, fetch chain and find best strike
-    var candidates = [];
-    var toCheck = scoredDates.slice(0, 3);
-
-    for(var i=0; i<toCheck.length; i++){
-      var expDate = toCheck[i].date;
-      try{
-        var chainRes = await fetch(
-          creds.host+'/v1/markets/options/chains?symbol='+sym+'&expiration='+expDate+'&greeks=true',
-          {headers:{Authorization:'Bearer '+creds.key, Accept:'application/json'}}
-        ).then(function(r){return r.json();});
-        var opts = [];
-        try{ opts=chainRes.options.option; if(!Array.isArray(opts))opts=[opts]; }catch(e){}
-
-        // Filter to correct type, min OI>=100, volume>=100, valid greeks
-        var filtered = opts.filter(function(o){
-          return o.option_type===(type==='CALL'?'call':'put')
-            && (o.open_interest||0) >= 100
-            && (o.volume||0) >= 100
-            && o.greeks
-            && o.greeks.delta;
-        });
-        // Fallback: relax volume to >=10 if nothing passes
-        if(!filtered.length){
-          filtered = opts.filter(function(o){
-            return o.option_type===(type==='CALL'?'call':'put')
-              && (o.open_interest||0) >= 100
-              && (o.volume||0) >= 10
-              && o.greeks && o.greeks.delta;
-          });
-        }
-
-        if(!filtered.length) continue;
-
-        // Compute avg volume for these contracts
-        var avgVol = filtered.reduce(function(s,o){return s+(o.volume||0);},0) / filtered.length;
-
-        // Filter: volume must be above average for that chain
-        var aboveAvg = filtered.filter(function(o){ return (o.volume||0) > avgVol; });
-        var pool = aboveAvg.length > 0 ? aboveAvg : filtered;
-
-        // Score each strike: prefer delta 0.5-0.75 range (slightly ITM for momentum)
-        pool.forEach(function(o){
-          var delta   = Math.abs(o.greeks.delta||0);
-          var vol     = o.volume||0;
-          var oi      = o.open_interest||0;
-          var mid     = (o.bid+o.ask)/2;
-          var spread  = o.ask-o.bid;
-          var sprdPct = mid>0 ? (spread/mid)*100 : 99;
-
-          // Score components
-          var deltaScore = delta>=0.5&&delta<=0.75 ? 30 : delta>=0.4&&delta<=0.85 ? 15 : 0;
-          var volScore   = Math.min(vol/100, 30);        // up to 30pts for volume
-          var oiScore    = Math.min(oi/500, 20);         // up to 20pts for OI
-          var sprdScore  = sprdPct < 5 ? 10 : sprdPct < 10 ? 5 : 0; // tight spread bonus
-          var gexBonus   = toCheck[i].gexScore * 10;    // GEX sentiment bonus
-
-          var totalScore = deltaScore + volScore + oiScore + sprdScore + gexBonus;
-
-          candidates.push({
-            strike:    o.strike,
-            exp:       expDate,
-            mdays:     toCheck[i].mdays,
-            gexScore:  toCheck[i].gexScore,
-            delta:     delta,
-            vol:       vol,
-            oi:        oi,
-            mid:       mid,
-            spread:    spread,
-            sprdPct:   sprdPct,
-            score:     totalScore,
-            symbol:    o.symbol
-          });
-        });
-      } catch(chainErr){ /* skip this expiry */ }
-    }
-
-    if(!candidates.length){
-      statusEl.textContent = 'No contracts met criteria (OI>=100, vol>=100). Try a different symbol or check back later in the session.';
-      return;
-    }
-
-    // Sort by score descending
-    candidates.sort(function(a,b){ return b.score - a.score; });
-    var best = candidates[0];
-
-    // Fill in the order ticket
+    // Fill order ticket
     eid('ord-strike').value = best.strike;
     eid('ord-exp').value    = best.exp;
     updateOrdChart();
     fetchLiveQuote();
 
-    // Show results panel
-    eid('asr-strike').textContent = '$'+fmt2(best.strike);
-    eid('asr-exp').textContent    = best.exp;
-    eid('asr-dte').textContent    = best.mdays+' days';
-    eid('asr-dte').className      = 'asr-val '+(best.mdays>=20&&best.mdays<=30?'good':'warn');
-    var gexLbl = best.gexScore>=2?'STRONG BULL':best.gexScore===1?'BULLISH':best.gexScore===0?'NEUTRAL':'BEARISH';
-    var gexCls = best.gexScore>=1?'good':'warn';
-    eid('asr-gex').textContent  = gexLbl;
-    eid('asr-gex').className    = 'asr-val '+gexCls;
-    eid('asr-vol').textContent  = fmtK(best.vol);
-    eid('asr-oi').textContent   = fmtK(best.oi);
-    eid('asr-delta').textContent= fmt2(best.delta);
-    eid('asr-score').textContent= Math.round(best.score);
+    // Update result panel summary
+    eid('asr-strike').textContent  = DS+fmt2(best.strike);
+    eid('asr-exp').textContent     = best.exp;
+    eid('asr-dte').textContent     = best.dte+'d';
+    eid('asr-dte').className       = 'asr-val '+(best.dte>10&&best.dte<35?'good':'warn');
+    eid('asr-vol').textContent     = fmtK(best.vol);
+    eid('asr-oi').textContent      = fmtK(best.oi);
+    eid('asr-delta').textContent   = fmt2(best.delta);
+    eid('asr-score').textContent   = '--';
 
-    // Show top-5 candidates for comparison
-    var top5 = candidates.slice(0,5);
-    var candHtml = '<div style="color:var(--gry);font-size:9px;padding:4px 0 2px;letter-spacing:.5px;font-weight:700;">TOP CANDIDATES</div>';
-    top5.forEach(function(c,idx){
-      var gexTag = c.gexScore>=1
-        ? '<span class="asr-cand-badge bull">BULL GEX</span>'
-        : '<span class="asr-cand-badge neut">NEUT GEX</span>';
-      var isBest = idx===0 ? ' style="background:rgba(59,130,246,0.07);"' : '';
-      candHtml += '<div class="asr-cand"'+isBest+' onclick="applyCandidate('+c.strike+',\''+c.exp+'\')">'
-        +'<span class="asr-cand-rank">'+(idx+1)+'.</span>'
-        +'<span style="color:var(--wht);font-weight:700;font-size:11px;width:60px;">$'+c.strike+'</span>'
-        +'<span style="color:var(--gry);font-size:10px;width:90px;">'+c.exp+'</span>'
-        +'<span style="color:var(--gry);font-size:10px;width:52px;">'+c.mdays+'d</span>'
-        +gexTag
-        +'<span class="asr-cand-detail">'
-          +'vol:'+fmtK(c.vol)+' oi:'+fmtK(c.oi)+' \u03b4'+fmt2(c.delta)+' score:'+Math.round(c.score)
-        +'</span>'
-        +'<button class="btn blu" style="font-size:9px;padding:1px 6px;" onclick="event.stopPropagation();applyCandidate('+c.strike+',\''+c.exp+'\')">USE</button>'
-        +'</div>';
+    // GEX from cache
+    var gexScore=(G.gexData||[]).reduce(function(f,g){ return (g.ticker===sym&&f===null)?(g.score||0):f; },null);
+    if(gexScore!==null){
+      var gL=gexScore>=2?'STRONG BULL':gexScore===1?'BULLISH':gexScore===0?'NEUTRAL':'BEARISH';
+      eid('asr-gex').textContent=gL; eid('asr-gex').className='asr-val '+(gexScore>=1?'good':'warn');
+    } else { eid('asr-gex').textContent='N/A'; eid('asr-gex').className='asr-val'; }
+
+    // Best-per-expiry candidates list
+    var pool2=best._pool||[];
+    if(!pool2.length) pool2=[{opt:{strike:best.strike,greeks:{delta:best.delta},open_interest:best.oi,volume:best.vol,bid:best.bid,ask:best.ask},expDate:best.exp,dte:best.dte,atmStrike:best.atmStrike,vol:best.vol}];
+    var byExp={};
+    pool2.forEach(function(c){ var k=c.expDate; if(!byExp[k]||c.vol>byExp[k].vol) byExp[k]=c; });
+    var perExp=Object.keys(byExp).map(function(k){return byExp[k];}).sort(function(a,b){return a.dte-b.dte;});
+
+    var mfBadge=best.monthFilter?'<span style="font-size:9px;color:var(--amb);margin-left:4px;">'+best.monthFilter+'</span>':'';
+    var candHtml='<div style="color:var(--gry);font-size:9px;padding:4px 0 2px;letter-spacing:.5px;font-weight:700;">BEST PER EXPIRY'+mfBadge+' \u2014 shortest DTE first</div>';
+    perExp.forEach(function(c,idx){
+      var isSel=c.expDate===best.exp&&c.opt.strike===best.strike;
+      var o=c.opt;
+      var atm=c.atmStrike||o.strike;
+      var diff=+(o.strike-atm).toFixed(2);
+      var atmTag=diff===0?'<span style="font-size:9px;color:var(--amb);"> ATM</span>':'<span style="font-size:9px;color:var(--gry);">'+(diff>0?'+':'')+diff+'</span>';
+      var mid2=(o.bid+o.ask)/2;
+      candHtml+='<div class="asr-cand"'+(isSel?' style="background:rgba(59,130,246,0.07);"':'')+' onclick="applyCandidate('+o.strike+',\''+c.expDate+'\')">'        +'<span class="asr-cand-rank">'+(idx+1)+'.</span>'        +'<span style="color:'+(isSel?'var(--wht)':'var(--gry2)')+';font-weight:700;font-size:11px;width:60px;">'+DS+fmt2(o.strike)+atmTag+'</span>'        +'<span style="color:var(--gry);font-size:10px;width:90px;">'+c.expDate+'</span>'        +'<span style="color:'+(c.dte<=20?'var(--grn)':'var(--gry)')+';font-size:10px;width:42px;">'+c.dte+'d</span>'        +'<span class="asr-cand-detail">vol:<b style="color:var(--grn);">'+fmtK(c.vol)+'</b> oi:'+fmtK(o.open_interest||0)+' \u03b4'+fmt2(o.greeks?o.greeks.delta:0)+' mid:'+DS+fmt2(mid2)+'</span>'        +(isSel?'<span style="font-size:9px;color:var(--blub);font-weight:700;">\u2713</span>':'<button class="btn" style="font-size:9px;padding:1px 6px;border-color:var(--gry2);color:var(--gry);" onclick="event.stopPropagation();applyCandidate('+o.strike+',\''+c.expDate+'\')">USE</button>')        +'</div>';
     });
-    eid('asr-candidates').innerHTML = candHtml;
+    eid('asr-candidates').innerHTML=candHtml;
     resultBox.classList.add('show');
 
-    var gexDesc = best.gexScore>=2?'monthly OPEX (strong bull)':best.gexScore===1?'bullish GEX date':best.gexScore===0?'neutral GEX':'bearish GEX';
-    statusEl.textContent = 'Selected: $'+best.strike+' '+type+' '+best.exp+' ('+best.mdays+'d, '+gexDesc+') vol:'+fmtK(best.vol)+' oi:'+fmtK(best.oi);
-    addAlert(sym, 'Auto-select: $'+best.strike+' '+type+' '+best.exp+' score:'+Math.round(best.score), 'go');
-    toast('Auto-selected: $'+best.strike+' '+type+' exp '+best.exp);
-
-  } catch(err) {
-    statusEl.textContent = 'Error: '+err.message;
-  }
+    var mfNote=best.monthFilter?' | month:'+best.monthFilter:'';
+    statusEl.textContent='Selected: '+DS+best.strike+' '+type+' '+best.exp+' ('+best.dte+'d) vol:'+fmtK(best.vol)+' oi:'+fmtK(best.oi)+mfNote;
+    toast('Auto-selected: '+DS+best.strike+' '+type+' exp '+best.exp);
+  }, monthFilter || undefined);
 }
 
 function applyCandidate(strike, exp){
@@ -2765,24 +2685,19 @@ function simOpt(price){
   var exp=expDate.toISOString().slice(0,10);
   return{strike:strike,spread:spread,spreadPct:spreadPct,delta:delta,ext:ext,dte:dte,optPr:optPr,oi:oi,vol:vol2,exp:exp};
 }
-function fetchOptionContract(ticker,simPrice,callback){
+function fetchOptionContract(ticker,simPrice,callback,monthFilter){
+ // monthFilter: optional 'YYYY-MM' string to restrict expiries to that month only
  var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
  if(!key){callback(null);return;}
  var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
  var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
 
- // Delta ladder (Option Alpha bot strategy) \u2014 preferred strike first, fall back in 0.02 steps
- var DELTA_LADDER = [0.45, 0.43, 0.41, 0.39, 0.37];
- var VOL_THRESHOLD = 130; // minimum contract volume (Option Alpha bot value)
-
- // Market days helper \u2014 count Mon-Fri between two dates
- function marketDaysBetween(d1, d2){
-   var count=0, cur=new Date(d1);
-   while(cur<d2){ cur.setDate(cur.getDate()+1); var day=cur.getDay(); if(day>0&&day<6) count++; }
-   return count;
+ // Selection: highest-volume call within +/-10 strikes of ATM
+ // DTE window: 10-35 calendar days (default) OR all expiries within a specific month
+ function calDays(dateStr){
+   return Math.round((new Date(dateStr) - new Date()) / 864e5);
  }
 
- // Get live price + all expirations in parallel
  var priceP = fetch(host+'/v1/markets/quotes?symbols='+ticker,
    {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
    .then(function(r){return r.json();})
@@ -2804,102 +2719,87 @@ function fetchOptionContract(ticker,simPrice,callback){
    var price=res[0], dates=res[1];
    if(!dates.length){callback(null);return;}
 
-   var today = new Date();
-
-   // DTE waterfall: find best expiry for each minimum market-day threshold
-   // Try 10 mkt days min \u2192 15 min \u2192 20 min (Option Alpha bot DTE branches)
-   var DTE_MINS = [10, 15, 20];
-   var branchExpiry = null;
-
-   for(var bi=0; bi<DTE_MINS.length; bi++){
-     var minMktDays = DTE_MINS[bi];
-     var best=null, bestMktDays=9999;
-     dates.forEach(function(d){
-       var mktDays = marketDaysBetween(today, new Date(d));
-       // Must meet minimum AND stay under 50 market days (~70 cal days)
-       if(mktDays >= minMktDays && mktDays <= 50 && mktDays < bestMktDays){
-         bestMktDays = mktDays;
-         best = {date:d, mktDays:mktDays};
-       }
-     });
-     if(best){ branchExpiry = best; break; }
+   var validExps;
+   if(monthFilter){
+     // Month mode: use ALL expiries in the selected month, any DTE
+     validExps = dates.filter(function(d){ return d.slice(0,7) === monthFilter; });
+     if(!validExps.length){callback(null);return;}
+   } else {
+     // Default mode: 10-35 calendar DTE window
+     validExps = dates.filter(function(d){ var cd=calDays(d); return cd>10&&cd<35; });
+     // Fallback: widen to 7-50
+     if(!validExps.length) validExps = dates.filter(function(d){ var cd=calDays(d); return cd>7&&cd<50; });
+     // Last resort: any future
+     if(!validExps.length) validExps = dates.filter(function(d){ return calDays(d)>0; });
+     if(!validExps.length){callback(null);return;}
    }
 
-   // Final fallback: nearest expiry with any reasonable DTE
-   if(!branchExpiry){
-     var fallback=null, fallDiff=9999;
-     dates.forEach(function(d){
-       var calDays=Math.round((new Date(d)-today)/864e5);
-       var diff=Math.abs(calDays-35);
-       if(calDays>=10&&calDays<=90&&diff<fallDiff){fallDiff=diff;fallback={date:d,mktDays:Math.round(calDays*5/7)};}
-     });
-     branchExpiry = fallback || {date:dates[0], mktDays:0};
-   }
+   // Fetch all valid expiry chains in parallel
+   var chainFetches = validExps.map(function(expDate){
+     return fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+expDate+'&greeks=true',
+       {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
+     .then(function(r){return r.json();})
+     .then(function(cdata){
+       var opts=[];
+       try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
+       return {expDate:expDate, dte:calDays(expDate), opts:opts};
+     }).catch(function(){return {expDate:expDate, dte:calDays(expDate), opts:[]};});
+   });
 
-   // Fetch chain for selected expiry
-   fetch(host+'/v1/markets/options/chains?symbol='+ticker+'&expiration='+branchExpiry.date+'&greeks=true',
-     {headers:{Authorization:'Bearer '+key,Accept:'application/json'}})
-   .then(function(r){return r.json();})
-   .then(function(cdata){
-     var opts=[];
-     try{opts=cdata.options.option;if(!Array.isArray(opts))opts=[opts];}catch(e){}
-     if(!opts.length){callback(null);return;}
+   Promise.all(chainFetches).then(function(chains){
+     var candidates = [];
 
-     // Base filter: calls only, valid greeks
-     var calls = opts.filter(function(o){
-       return o.option_type==='call' && o.greeks && o.greeks.delta>0.05 && o.greeks.delta<0.99;
-     });
-     if(!calls.length){callback(null);return;}
-
-     function sprdPct(o){var mid=(o.bid+o.ask)/2;return mid>0?((o.ask-o.bid)/mid*100):999;}
-
-     // Delta ladder: walk 0.45 \u2192 0.43 \u2192 0.41 \u2192 0.39 \u2192 0.37
-     // For each delta target, find nearest call AND check volume >= 130
-     // First strike that passes volume threshold wins
-     var chosen = null;
-     var DELTA_TOL = 0.03; // +/- tolerance for matching delta target
-
-     for(var di=0; di<DELTA_LADDER.length; di++){
-       var target = DELTA_LADDER[di];
-       // Find calls nearest to this delta target
-       var candidates = calls.filter(function(o){
-         return Math.abs(Math.abs(o.greeks.delta) - target) <= DELTA_TOL;
+     chains.forEach(function(chain){
+       var calls = chain.opts.filter(function(o){
+         return o.option_type==='call' && o.greeks && o.greeks.delta>0.02 && o.greeks.delta<0.99;
        });
-       // Sort by closeness to target delta
-       candidates.sort(function(a,b){
-         return Math.abs(Math.abs(a.greeks.delta)-target) - Math.abs(Math.abs(b.greeks.delta)-target);
+       if(!calls.length) return;
+
+       // ATM = nearest to current price
+       var atmStrike = calls.reduce(function(best,o){
+         return Math.abs(o.strike-price)<Math.abs(best-price)?o.strike:best;
+       }, calls[0].strike);
+
+       // +/-10 strike window
+       var strikesSorted = calls.map(function(o){return o.strike;})
+         .filter(function(v,i,a){return a.indexOf(v)===i;})
+         .sort(function(a,b){return a-b;});
+       var atmIdx = strikesSorted.indexOf(atmStrike);
+       if(atmIdx<0) atmIdx=0;
+       var windowStrikes = strikesSorted.slice(Math.max(0,atmIdx-10), Math.min(strikesSorted.length-1,atmIdx+10)+1);
+       var strikeSet = {};
+       windowStrikes.forEach(function(s){strikeSet[s]=true;});
+
+       calls.forEach(function(o){
+         if(!strikeSet[o.strike]) return;
+         candidates.push({opt:o, expDate:chain.expDate, dte:chain.dte, atmStrike:atmStrike, vol:o.volume||0});
        });
-       // Walk candidates: first one with volume >= threshold wins
-       for(var ci=0; ci<candidates.length; ci++){
-         if((candidates[ci].volume||0) >= VOL_THRESHOLD){
-           chosen = candidates[ci];
-           chosen._strikeNum = di+1; // which step in ladder fired (1st=0.45, 2nd=0.43...)
-           break;
-         }
-       }
-       if(chosen) break;
+     });
+
+     if(!candidates.length){callback(null);return;}
+
+     // Prefer primary window candidates unless month filter active
+     var pool;
+     if(monthFilter){
+       pool = candidates; // all candidates are already in the target month
+     } else {
+       var primaryCands = candidates.filter(function(c){ return c.dte>10&&c.dte<35; });
+       pool = primaryCands.length ? primaryCands : candidates;
+       var withVol = pool.filter(function(c){ return c.vol>0; });
+       if(withVol.length) pool = withVol;
      }
 
-     // Fallback: if no ladder strike cleared volume threshold,
-     // use liquidity tiers (original logic) to avoid returning null
-     if(!chosen){
-       var t1=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=50&&sprdPct(o)<=10;});
-       var t2=calls.filter(function(o){return (o.open_interest||0)>=100&&(o.volume||0)>=10&&sprdPct(o)<=15;});
-       var t3=calls.filter(function(o){return (o.open_interest||0)>=100;});
-       var pool=t1.length?t1:t2.length?t2:t3.length?t3:calls;
-       pool.forEach(function(o){
-         var delta=Math.abs(o.greeks.delta||0);
-         var dScore=delta>=0.40&&delta<=0.50?40:delta>=0.35&&delta<=0.55?20:5;
-         var vScore=Math.min((o.volume||0)/50,30);
-         var oScore=Math.min((o.open_interest||0)/200,20);
-         var sScore=sprdPct(o)<3?10:sprdPct(o)<5?7:sprdPct(o)<8?4:1;
-         o._score=dScore+vScore+oScore+sScore;
-       });
-       pool.sort(function(a,b){return b._score-a._score;});
-       chosen=pool[0];
-       chosen._strikeNum=0; // 0 = fallback tier selection
-     }
+     // Sort: primary=volume desc, tie-break within 20%=shorter DTE
+     pool.sort(function(a,b){
+       var vA = a.vol>0?a.vol:(a.opt.open_interest||0);
+       var vB = b.vol>0?b.vol:(b.opt.open_interest||0);
+       var tied = Math.abs(vA-vB)/(Math.max(vA,vB)||1) <= 0.20;
+       if(tied) return a.dte-b.dte;
+       return vB-vA;
+     });
 
+     var winner=pool[0];
+     var chosen=winner.opt;
      var mid=(chosen.bid+chosen.ask)/2;
      var spread=chosen.ask-chosen.bid;
      var spreadPct=mid>0?(spread/mid*100):0;
@@ -2913,21 +2813,22 @@ function fetchOptionContract(ticker,simPrice,callback){
        spreadPct:  +(spreadPct.toFixed(2)),
        delta:      +(chosen.greeks.delta.toFixed(2)),
        ext:        +(extPct.toFixed(1)),
-       mktDays:    branchExpiry.mktDays,
-       dte:        branchExpiry.mktDays, // keep dte field for compatibility
+       dte:        winner.dte,
+       mktDays:    winner.dte,
        optPr:      +(mid.toFixed(2)),
        bid:        chosen.bid,
        ask:        chosen.ask,
        oi:         chosen.open_interest||0,
        vol:        chosen.volume||0,
-       exp:        branchExpiry.date,
+       exp:        winner.expDate,
        iv:         chosen.greeks?chosen.greeks.smv_vol:0,
        symbol:     chosen.symbol,
        livePrice:  price,
        live:       true,
-       strikeNum:  chosen._strikeNum, // which delta ladder step fired
-       volThresh:  VOL_THRESHOLD,
-       tierUsed:   chosen._strikeNum > 0 ? ('delta-'+DELTA_LADDER[chosen._strikeNum-1]) : 'fallback'
+       atmStrike:  winner.atmStrike,
+       tierUsed:   monthFilter ? 'month-filter' : 'vol-rank',
+       monthFilter: monthFilter || null,
+       _pool:      pool
      });
    }).catch(function(){callback(null);});
  }).catch(function(){callback(null);});
