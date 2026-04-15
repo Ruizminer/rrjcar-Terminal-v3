@@ -4011,8 +4011,8 @@ function finishScan(){
   try{ tradierKey = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
   if(tradierKey){
     setTimeout(function(){
-      addAlert('GEX', 'Auto-refreshing GEX after scan...', 'warn');
-      runGex();
+      addAlert('GEX', 'Auto-refreshing GEX/Flow for all GO signals...', 'info');
+      runGex(true);
     }, 2000);
   }
 }
@@ -4210,19 +4210,19 @@ function renderScan(){
 </script>
 
 <script>
-function runGex(){
+function runGex(fromScan){
   var wrap=eid('gx-tbl-wrap');
   eid('gex-ts').textContent='Updated: '+new Date().toLocaleTimeString();
 
   // Use GO results from scan if available, otherwise fall back to static UNIVERSE
   var sourceTickers;
   if(G.results && G.results.length > 0){
-    // Use top GO signals first, then top NO-GO by score \u2014 max 50
-    var goTickers = G.results.filter(function(r){ return r.isGo; }).slice(0,35);
-    var nogoTickers = G.results.filter(function(r){ return !r.isGo; }).slice(0,15);
+    // All GO signals + top NO-GO by score, cap at 80 total
+    var goTickers   = G.results.filter(function(r){ return r.isGo; });
+    var nogoTickers = G.results.filter(function(r){ return !r.isGo; }).slice(0,Math.max(10, 80-goTickers.length));
     sourceTickers = goTickers.concat(nogoTickers).map(function(r){ return r.ticker; });
   } else {
-    sourceTickers = UNIVERSE.slice(0,30).map(function(u){ return u.t; });
+    sourceTickers = UNIVERSE.slice(0,50).map(function(u){ return u.t; });
   }
 
   var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
@@ -4251,7 +4251,7 @@ function runGex(){
 
   // Live path: fetch real 30DTE options chain for each ticker to compute net GEX flow
   // Call OI vs Put OI at 30DTE expiry = real flow proxy
-  var gexTickers = sourceTickers.slice(0, 35); // expanded for full GO coverage
+  var gexTickers = sourceTickers.slice(0, 80); // all GO signals + top NO-GO
   eid('gex-ts').textContent = 'Fetching 30DTE options flow for ' + gexTickers.length + ' tickers...';
 
   // Step 1: get expirations for all tickers, find nearest 25-50 calendar day expiry each
@@ -4354,17 +4354,22 @@ function runGex(){
       });
 
       renderGex();
-      addAlert('GEX','GEX/Flow refreshed \u2014 real 30DTE net flow for '+G.gexData.length+' tickers','warn');
+      var gexMsg = (fromScan ? 'Post-scan GEX scored ' : 'GEX/Flow refreshed \u2014 ') + G.gexData.length + ' tickers (real 30DTE net flow)';
+      addAlert('GEX', gexMsg, fromScan ? 'info' : 'warn');
       // Re-score all results now that GEX data is available
       G.results.forEach(function(r){
         var updated = scoreIt(r.ticker, r.ind, r.opt);
-        r.score = updated.score; r.techScore = updated.techScore;
+        r.score = updated.score; r.techScore = updated.techScore; r.fundScore = updated.fundScore;
         r.isGo = updated.isGo; r.rules = updated.rules; r.passes = updated.passes;
       });
       G.results.sort(function(a,b){ return b.score - a.score; });
       G.filtered = G.results.slice();
       renderBuySig(); renderScan();
-      toast('GEX loaded \u2014 scores updated');
+      var gexBonusCount = G.results.filter(function(r){
+        return (r.rules||[]).some(function(x){ return x.n==='GEX Call Heavy' && x.pass; });
+      }).length;
+      var goCount = G.results.filter(function(r){ return r.isGo; }).length;
+      toast('GEX scored ' + G.gexData.length + ' tickers \u2014 ' + gexBonusCount + ' got +6pts bonus | ' + goCount + ' GO signals');
       // Re-check high-conviction signals now that GEX bonus is applied
       checkHighConvictionSignals(G.results);
     });
