@@ -3991,8 +3991,46 @@ function finishScan(){
             r.isGo=updated.isGo; r.rules=updated.rules; r.passes=updated.passes;
           }
         });
+        // Re-render after last FMP fetch
+        if(fmpDelay === (goTickers.length - 1) * 300){
+          setTimeout(function(){
+            G.results.sort(function(a,b){ return b.score - a.score; });
+            G.filtered = G.results.slice();
+            renderBuySig(); renderScan();
+          }, 500);
+        }
       }, fmpDelay);
       fmpDelay += 300; // stagger by 300ms to avoid rate limiting
+    });
+  }
+
+  // Background history pre-fetch: populates G_HIST_CACHE for all tickers
+  // so list scores match detail scores without requiring a click
+  var tradierKeyHist = '';
+  try{ tradierKeyHist = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
+  if(tradierKeyHist){
+    var histDelay = 500; // start after FMP pre-fetch begins
+    var batchCount = 0;
+    G.results.forEach(function(r){
+      if(G_HIST_CACHE[r.ticker]) return; // already cached, skip
+      setTimeout(function(){
+        fetchIndicatorHistory(r.ticker).then(function(days){
+          if(!days) return;
+          G_HIST_CACHE[r.ticker] = days;
+          // Re-score with fresh history data
+          var updated = scoreIt(r.ticker, r.ind, r.opt);
+          r.score = updated.score; r.techScore = updated.techScore; r.fundScore = updated.fundScore;
+          r.isGo = updated.isGo; r.rules = updated.rules; r.passes = updated.passes;
+          // Re-render list every 10 completions to avoid thrashing
+          batchCount++;
+          if(batchCount % 10 === 0){
+            G.results.sort(function(a,b){ return b.score - a.score; });
+            G.filtered = G.results.slice();
+            renderBuySig(); renderScan();
+          }
+        });
+      }, histDelay);
+      histDelay += 150; // 150ms stagger = ~97s for 648 tickers
     });
   }
 
