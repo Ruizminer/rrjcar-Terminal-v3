@@ -4215,28 +4215,32 @@ function runGex(fromScan){
   eid('gex-ts').textContent='Updated: '+new Date().toLocaleTimeString();
 
   // Use GO results from scan if available, otherwise fall back to static UNIVERSE
-  var sourceTickers;
-  if(G.results && G.results.length > 0){
-    // All GO signals + top NO-GO by score, cap at 80 total
-    var goTickers   = G.results.filter(function(r){ return r.isGo; });
-    var nogoTickers = G.results.filter(function(r){ return !r.isGo; }).slice(0,Math.max(10, 80-goTickers.length));
-    sourceTickers = goTickers.concat(nogoTickers).map(function(r){ return r.ticker; });
-  } else {
-    sourceTickers = UNIVERSE.slice(0,50).map(function(u){ return u.t; });
-  }
-
   var key='';try{key=localStorage.getItem('rrjcar_tradier')||'';}catch(e){}
   var mode='sandbox';try{mode=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
+
+  // Ticker selection:
+  // fromScan=true  -> score-threshold (>=70pts) so GEX bonus can tip borderline tickers
+  // fromScan=false -> full universe (648 tickers), batched to avoid rate limits
+  var gexTickers;
+  if(fromScan){
+    // All tickers that could reach GO threshold with +6 GEX bonus
+    gexTickers = G.results
+      .filter(function(r){ return r.score >= 70; })
+      .map(function(r){ return r.ticker; });
+  } else {
+    // Full universe for manual GEX tab run
+    gexTickers = UNIVERSE.map(function(u){ return u.t; });
+  }
 
   eid('gex-ts').textContent='Fetching flow data...';
 
   if(!key){
     // No API key \u2014 generate simulated GEX from scan results
-    G.gexData = sourceTickers.map(function(t){
+    var simSource = fromScan ? gexTickers : UNIVERSE.slice(0,50).map(function(u){return u.t;});
+    G.gexData = simSource.map(function(t){
       var result = G.results.filter(function(r){ return r.t===t||r.ticker===t; })[0];
       var score = result ? result.score : 50;
-      // Use score to bias GEX direction \u2014 high-scoring = more bullish flow
       var bullish = score >= 72;
       var gex = (bullish?1:-1) * Math.floor(rnd(100,9000));
       var flip = result ? +(result.price * rnd(0.98,1.02)).toFixed(2) : +rnd(50,500).toFixed(2);
@@ -4249,18 +4253,29 @@ function runGex(fromScan){
     return;
   }
 
-  // Live path: fetch real 30DTE options chain for each ticker to compute net GEX flow
-  // Call OI vs Put OI at 30DTE expiry = real flow proxy
-  var gexTickers = sourceTickers.slice(0, 80); // all GO signals + top NO-GO
-  eid('gex-ts').textContent = 'Fetching 30DTE options flow for ' + gexTickers.length + ' tickers...';
+  // Live path: batched fetches to respect rate limits
+  // Batch size 20, 300ms between batches -> ~648 tickers in ~10s
+  var BATCH = 20, DELAY = 300;
+  var batches = [];
+  for(var bi=0; bi<gexTickers.length; bi+=BATCH) batches.push(gexTickers.slice(bi,bi+BATCH));
+  var allExpiries = [];
+  eid('gex-ts').textContent = 'Fetching GEX for ' + gexTickers.length + ' tickers in ' + batches.length + ' batches...';
 
-  // Step 1: get expirations for all tickers, find nearest 25-50 calendar day expiry each
+  // Step 1: get expirations for all tickers in batches, find nearest 25-50 DTE
   var today = new Date();
   function calendarDays(d1, d2){
-    return Math.round((d2 - d1) / 864e5); // same as fetchOptionContract \u2014 calendar days
+    return Math.round((d2 - d1) / 864e5);
   }
 
-  var expPromises = gexTickers.map(function(t){
+  function fetchExpBatch(batchIdx){
+    if(batchIdx >= batches.length){
+      // All expirations done - now fetch chains
+      fetchChains(allExpiries);
+      return;
+    }
+    var batch = batches[batchIdx];
+    eid('gex-ts').textContent = 'Expiry batch ' + (batchIdx+1) + '/' + batches.length + '...';
+    var expPromises = batch.map(function(t){
     return fetch(host+'/v1/markets/options/expirations?symbol='+t+'&includeAllRoots=true', {
       headers:{Authorization:'Bearer '+key, Accept:'application/json'}
     })
@@ -4268,7 +4283,6 @@ function runGex(fromScan){
     .then(function(d){
       var dates = [];
       try{ dates = d.expirations.date; if(!Array.isArray(dates)) dates=[dates]; }catch(e){}
-      // Find nearest expiry in 25-50 calendar days (matches fetchOptionContract range)
       var best = null, bestDiff = 999;
       dates.forEach(function(dt){
         var dte = calendarDays(today, new Date(dt));
@@ -4279,25 +4293,52 @@ function runGex(fromScan){
       return {ticker:t, expiry:best};
     })
     .catch(function(){ return {ticker:t, expiry:null}; });
-  });
-
-  Promise.all(expPromises).then(function(expiries){
-    // Step 2: fetch options chains for tickers that have a valid expiry
-    var chainPromises = expiries.map(function(e){
-      if(!e.expiry) return Promise.resolve({ticker:e.ticker, chain:[], expiry:null});
-      return fetch(host+'/v1/markets/options/chains?symbol='+e.ticker+'&expiration='+e.expiry.date+'&greeks=false', {
-        headers:{Authorization:'Bearer '+key, Accept:'application/json'}
-      })
-      .then(function(r){return r.json();})
-      .then(function(d){
-        var opts = [];
-        try{ opts=d.options.option; if(!Array.isArray(opts)) opts=[opts]; }catch(ex){}
-        return {ticker:e.ticker, chain:opts, expiry:e.expiry, dte:e.expiry.dte};
-      })
-      .catch(function(){ return {ticker:e.ticker, chain:[], expiry:e.expiry}; });
     });
+    Promise.all(expPromises).then(function(batchExpiries){
+      allExpiries = allExpiries.concat(batchExpiries);
+      setTimeout(function(){ fetchExpBatch(batchIdx+1); }, DELAY);
+    }).catch(function(){
+      setTimeout(function(){ fetchExpBatch(batchIdx+1); }, DELAY);
+    });
+  }
 
-    Promise.all(chainPromises).then(function(chains){
+  // Step 2: fetch chains in batches once all expirations collected
+  function fetchChains(expiries){
+    var validExp = expiries.filter(function(e){ return e.expiry; });
+    var chainBatches = [];
+    for(var ci=0; ci<validExp.length; ci+=BATCH) chainBatches.push(validExp.slice(ci,ci+BATCH));
+    var allChains = [];
+
+    function fetchChainBatch(batchIdx){
+      if(batchIdx >= chainBatches.length){
+        processChains(allChains);
+        return;
+      }
+      var batch = chainBatches[batchIdx];
+      eid('gex-ts').textContent = 'Chain batch ' + (batchIdx+1) + '/' + chainBatches.length + '...';
+      var chainPromises = batch.map(function(e){
+        return fetch(host+'/v1/markets/options/chains?symbol='+e.ticker+'&expiration='+e.expiry.date+'&greeks=false', {
+          headers:{Authorization:'Bearer '+key, Accept:'application/json'}
+        })
+        .then(function(r){return r.json();})
+        .then(function(d){
+          var opts = [];
+          try{ opts=d.options.option; if(!Array.isArray(opts)) opts=[opts]; }catch(ex){}
+          return {ticker:e.ticker, chain:opts, expiry:e.expiry, dte:e.expiry.dte};
+        })
+        .catch(function(){ return {ticker:e.ticker, chain:[], expiry:e.expiry}; });
+      });
+      Promise.all(chainPromises).then(function(batchChains){
+        allChains = allChains.concat(batchChains);
+        setTimeout(function(){ fetchChainBatch(batchIdx+1); }, DELAY);
+      }).catch(function(){
+        setTimeout(function(){ fetchChainBatch(batchIdx+1); }, DELAY);
+      });
+    }
+    fetchChainBatch(0);
+  }
+
+  function processChains(chains){
       // Step 3: compute net flow from call OI vs put OI
       G.gexData = chains.map(function(c){
         var result = G.results.filter(function(r){ return r.t===c.ticker||r.ticker===c.ticker; })[0];
@@ -4372,19 +4413,11 @@ function runGex(fromScan){
       toast('GEX scored ' + G.gexData.length + ' tickers \u2014 ' + gexBonusCount + ' got +6pts bonus | ' + goCount + ' GO signals');
       // Re-check high-conviction signals now that GEX bonus is applied
       checkHighConvictionSignals(G.results);
-    });
-  })
-  .catch(function(e){
-    console.warn('GEX fetch error:', e);
-    // Fall back to simulated
-    G.gexData = sourceTickers.slice(0,20).map(function(t){
-      var gex=(Math.random()>0.5?1:-1)*Math.floor(rnd(100,9000));
-      var flip=+(rnd(50,500)).toFixed(2);var call=Math.floor(rnd(40,80));
-      return{t:t,gex:gex,flip:flip,call:call,put:100-call,flow:gex>0?'CALL HEAVY':'PUT HEAVY',flowCls:gex>0?'go':'nogo',sim:true};
-    });
-    renderGex();
-    addAlert('GEX','GEX fetch failed \u2014 showing simulated data','warn');
-  });
+  }
+
+  // Kick off batched expiry fetches
+  fetchExpBatch(0);
+
 }
 
 function renderGex(){
