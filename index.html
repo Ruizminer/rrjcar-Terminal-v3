@@ -3040,7 +3040,10 @@ async function fetchFmpData(ticker){
       insiderBuyValue:    0,
       insiderSellValue:   0,
       analystRevisionsOk: revisionsUp >= 2,
-      insiderBuyingOk:    false  // requires FMP Premium plan \u2014 empty on Starter
+      ptConsensus:        (Array.isArray(ptRes) && ptRes[0]) ? ptRes[0].targetConsensus : null,
+      ptHigh:             (Array.isArray(ptRes) && ptRes[0]) ? ptRes[0].targetHigh : null,
+      ptUpsideOk:         (Array.isArray(ptRes) && ptRes[0] && ptRes[0].targetConsensus > 0),
+      insiderBuyingOk:    false
     };
     saveFmpCache(ticker, data);
     return data;
