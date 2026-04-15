@@ -3117,7 +3117,7 @@ function scoreIt(ticker, ind, opt){
     ? (fmp.revisionsUp >= 2 ? fmp.revisionsUp+' analysts / '+fmp.upgradesLast30+' upgrades' : fmp.revisionsUp+' analysts (need \u22652)')
     : 'No FMP key';
   var insiderVal = fmp ? (insiderOk ? '$'+Math.round(fmp.insiderBuyValue/1000)+'K buys' : 'Requires Premium plan') : 'No FMP key';
-  var ptVal      = fmp ? (fmp.ptConsensus ? 'PT $'+fmp.ptConsensus.toFixed(2)+(fmp.ptHigh ? ' (Hi $'+fmp.ptHigh+')' : '') : 'No PT data') : 'No FMP key';
+  var ptVal      = fmp ? (fmp.ptConsensus != null ? 'PT $'+(+fmp.ptConsensus).toFixed(2)+(fmp.ptHigh ? ' (Hi $'+fmp.ptHigh+')' : '') : 'No PT data') : 'No FMP key';
 
   var fmpChecks = [
     {ok:analystOk, n:'Analyst Revisions \u2191', val:analystVal, pts:12},
