@@ -4264,7 +4264,7 @@ function runGex(fromScan){
   if(fromScan){
     // All tickers that could reach GO threshold with +6 GEX bonus
     gexTickers = G.results
-      .filter(function(r){ return r.score >= 70; })
+      .filter(function(r){ return r.score >= 65; })
       .map(function(r){ return r.ticker; });
   } else {
     // Full universe for manual GEX tab run
