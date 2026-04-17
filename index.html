@@ -3981,7 +3981,11 @@ function finishScan(){
   var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
   if(!fmpKey && typeof FMP_KEY_DEFAULT !== 'undefined') fmpKey = FMP_KEY_DEFAULT;
   if(fmpKey){
-    var goTickers = G.results.filter(function(r){ return r.score >= 65; }).map(function(r){ return r.ticker; });
+    // Deduplicate and skip already-cached tickers
+    var seen = {};
+    var goTickers = G.results.filter(function(r){ return r.score >= 65; })
+      .map(function(r){ return r.ticker; })
+      .filter(function(t){ if(seen[t]||G_FMP_CACHE[t]) return false; seen[t]=true; return true; });
     var fmpDelay = 0;
     goTickers.forEach(function(t){
       setTimeout(function(){
@@ -4006,7 +4010,7 @@ function finishScan(){
           }, 500);
         }
       }, fmpDelay);
-      fmpDelay += 200; // stagger by 200ms = ~81s for 407 tickers (avoids FMP rate limits)
+      fmpDelay += 400; // stagger by 400ms = ~136s for unique uncached tickers
     });
   }
 
