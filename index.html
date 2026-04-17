@@ -4050,6 +4050,38 @@ function finishScan(){
     setTimeout(function(){ fetchNextFmp(0); }, 1000);
   }
 
+  // Background history pre-fetch: populates G_HIST_CACHE for all tickers
+  // so list scores match detail scores without requiring a click
+  var tradierKeyHist = '';
+  try{ tradierKeyHist = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
+  if(tradierKeyHist){
+    var histDelay = 1500; // start after FMP + GEX settle
+    var batchCount = 0;
+    // Sort by score desc so high scorers get history first
+    var histOrder = G.results.slice().sort(function(a,b){ return b.score - a.score; });
+    histOrder.forEach(function(r){
+      if(G_HIST_CACHE[r.ticker]) return; // already cached, skip
+      setTimeout(function(){
+        var gResult = G.results.find(function(x){ return x.ticker === r.ticker; });
+        if(!gResult) return;
+        fetchIndicatorHistory(r.ticker).then(function(days){
+          if(!days) return;
+          G_HIST_CACHE[r.ticker] = days;
+          var updated = scoreIt(r.ticker, gResult.ind, gResult.opt);
+          gResult.score = updated.score; gResult.techScore = updated.techScore; gResult.fundScore = updated.fundScore;
+          gResult.isGo = updated.isGo; gResult.rules = updated.rules; gResult.passes = updated.passes;
+          batchCount++;
+          if(batchCount % 10 === 0){
+            G.results.sort(function(a,b){ return b.score - a.score; });
+            G.filtered = G.results.slice();
+            renderBuySig(); renderScan();
+          }
+        });
+      }, histDelay);
+      histDelay += 50; // 50ms stagger
+    });
+  }
+
   var goCount = G.results.filter(function(r){ return r.isGo; }).length;
   addAlert('SYS', 'Scan complete: ' + G.results.length + ' tickers | ' + goCount + ' GO', 'go');
   toast('Scan complete \u2014 ' + G.results.length + ' tickers');
