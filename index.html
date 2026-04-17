@@ -3990,12 +3990,12 @@ function finishScan(){
   var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
   if(!fmpKey && typeof FMP_KEY_DEFAULT !== 'undefined') fmpKey = FMP_KEY_DEFAULT;
   if(fmpKey){
-    // Only pre-fetch FMP for GO signals + borderline tickers (within 20pts of threshold)
+    // Pre-fetch FMP for GO signals + borderline tickers (within 40pts of threshold)
     // All others get FMP data on click — keeps API calls well under rate limits
     var goThreshold = 110;
     var seen = {};
     var fmpQueue = G.results
-      .filter(function(r){ return r.score >= goThreshold - 20; })
+      .filter(function(r){ return r.score >= goThreshold - 40; })
       .sort(function(a,b){ return b.score - a.score; })
       .map(function(r){ return r.ticker; })
       .filter(function(t){ if(seen[t]||G_FMP_CACHE[t]) return false; seen[t]=true; return true; });
