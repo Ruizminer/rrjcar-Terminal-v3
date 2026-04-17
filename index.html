@@ -3806,8 +3806,11 @@ async function fetchDynamicUniverse(key, mode){
 
     if(price < minPrice) return;
     if(maxPrice > 0 && price > maxPrice) return;
-    if(avgVol < minAvgVol) return;
-    if(avgVol > 0 && (todayVol / avgVol) * 100 < volRatioPct) return;
+    // Skip volume filters in sandbox — sandbox average_volume data is unreliable
+    if(mode !== 'sandbox'){
+      if(avgVol < minAvgVol) return;
+      if(avgVol > 0 && (todayVol / avgVol) * 100 < volRatioPct) return;
+    }
 
     passed.push({
       t: u.t, s: u.s,
