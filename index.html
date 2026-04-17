@@ -3998,27 +3998,46 @@ function finishScan(){
       .filter(function(t){ if(seen[t]||G_FMP_CACHE[t]) return false; seen[t]=true; return true; });
 
     var fmpBatchCount = 0;
+    function applyFmpToResult(t, data){
+      if(!data) return;
+      var r = G.results.filter(function(x){ return x.ticker===t; })[0];
+      if(!r) return;
+      var updated = scoreIt(t, r.ind, r.opt);
+      r.score=updated.score; r.techScore=updated.techScore; r.fundScore=updated.fundScore;
+      r.isGo=updated.isGo; r.rules=updated.rules; r.passes=updated.passes;
+    }
     function fetchNextFmp(idx){
-      if(idx >= fmpQueue.length) return;
+      if(idx >= fmpQueue.length){
+        // All done — final re-render and toast
+        G.results.sort(function(a,b){ return b.score - a.score; });
+        G.filtered = G.results.slice();
+        renderBuySig(); renderScan();
+        var f20 = G.results.filter(function(r){ return r.fundScore === 20; }).length;
+        toast('FMP loaded — ' + f20 + '/' + G.results.length + ' Fund 20/20');
+        return;
+      }
       var t = fmpQueue[idx];
-      // Skip if already cached (may have been fetched by a click in the meantime)
-      if(G_FMP_CACHE[t]){ fetchNextFmp(idx+1); return; }
-      fetchFmpData(t).then(function(data){
-        if(data){
-          var r = G.results.filter(function(x){ return x.ticker===t; })[0];
-          if(r){
-            var updated = scoreIt(t, r.ind, r.opt);
-            r.score=updated.score; r.techScore=updated.techScore; r.fundScore=updated.fundScore;
-            r.isGo=updated.isGo; r.rules=updated.rules; r.passes=updated.passes;
-          }
-          fmpBatchCount++;
-          if(fmpBatchCount % 10 === 0){
-            G.results.sort(function(a,b){ return b.score - a.score; });
-            G.filtered = G.results.slice();
-            renderBuySig(); renderScan();
-          }
+      // If already in cache, re-score immediately and move on (no API call needed)
+      if(G_FMP_CACHE[t]){
+        applyFmpToResult(t, G_FMP_CACHE[t]);
+        fmpBatchCount++;
+        if(fmpBatchCount % 10 === 0){
+          G.results.sort(function(a,b){ return b.score - a.score; });
+          G.filtered = G.results.slice();
+          renderBuySig(); renderScan();
         }
-        // Wait 350ms before next fetch regardless of success/failure
+        fetchNextFmp(idx+1); // no delay for cache hits
+        return;
+      }
+      fetchFmpData(t).then(function(data){
+        applyFmpToResult(t, data);
+        fmpBatchCount++;
+        if(fmpBatchCount % 10 === 0){
+          G.results.sort(function(a,b){ return b.score - a.score; });
+          G.filtered = G.results.slice();
+          renderBuySig(); renderScan();
+        }
+        // Wait 350ms before next fetch to stay under rate limits
         setTimeout(function(){ fetchNextFmp(idx+1); }, 350);
       }).catch(function(){
         setTimeout(function(){ fetchNextFmp(idx+1); }, 350);
