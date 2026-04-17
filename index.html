@@ -3050,7 +3050,13 @@ async function fetchFmpData(ticker){
       ptUpsideOk:         (Array.isArray(ptRes) && ptRes[0] && ptRes[0].targetConsensus > 0),
       insiderBuyingOk:    false
     };
-    saveFmpCache(ticker, data);
+    // Guard: if all signals null/false, likely a rate-limit or empty response — don't cache
+    var hasData = data.ptConsensus !== null || data.revisionsUp > 0;
+    if(hasData){
+      saveFmpCache(ticker, data);
+    } else {
+      console.warn('FMP: empty response for '+ticker+' (rate limit?) — not caching');
+    }
     return data;
   } catch(e){
     console.warn('FMP fetch error for '+ticker+':', e);
@@ -4007,7 +4013,7 @@ function finishScan(){
           }, 500);
         }
       }, fmpDelay);
-      fmpDelay += 100; // stagger by 100ms = ~40s for 407 tickers
+      fmpDelay += 200; // stagger by 200ms = ~81s for 407 tickers (avoids FMP rate limits)
     });
   }
 
