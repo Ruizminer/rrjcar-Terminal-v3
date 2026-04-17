@@ -3977,75 +3977,47 @@ function finishScan(){
     if(wrap) wrap.style.display = 'none';
   }, 2500);
 
-  // Pre-fetch FMP data for top GO tickers in background \u2014 warms cache before user clicks
+  // Pre-fetch FMP data sequentially to avoid rate limits
+  // Sequential chain: each fetch completes before the next starts
   var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
   if(!fmpKey && typeof FMP_KEY_DEFAULT !== 'undefined') fmpKey = FMP_KEY_DEFAULT;
   if(fmpKey){
-    // Deduplicate and skip already-cached tickers
     var seen = {};
-    var goTickers = G.results.filter(function(r){ return r.score >= 65; })
+    var fmpQueue = G.results
+      .filter(function(r){ return r.score >= 65; })
+      .sort(function(a,b){ return b.score - a.score; })
       .map(function(r){ return r.ticker; })
       .filter(function(t){ if(seen[t]||G_FMP_CACHE[t]) return false; seen[t]=true; return true; });
-    var fmpDelay = 0;
-    goTickers.forEach(function(t){
-      setTimeout(function(){
-        fetchFmpData(t).then(function(data){
-          if(!data) return;
-          // Re-score this ticker with fresh FMP data
+
+    var fmpBatchCount = 0;
+    function fetchNextFmp(idx){
+      if(idx >= fmpQueue.length) return;
+      var t = fmpQueue[idx];
+      // Skip if already cached (may have been fetched by a click in the meantime)
+      if(G_FMP_CACHE[t]){ fetchNextFmp(idx+1); return; }
+      fetchFmpData(t).then(function(data){
+        if(data){
           var r = G.results.filter(function(x){ return x.ticker===t; })[0];
           if(r){
             var updated = scoreIt(t, r.ind, r.opt);
             r.score=updated.score; r.techScore=updated.techScore; r.fundScore=updated.fundScore;
             r.isGo=updated.isGo; r.rules=updated.rules; r.passes=updated.passes;
           }
-        });
-        // Re-render after last FMP fetch
-        if(fmpDelay >= (goTickers.length - 1) * 100){
-          setTimeout(function(){
-            G.results.sort(function(a,b){ return b.score - a.score; });
-            G.filtered = G.results.slice();
-            renderBuySig(); renderScan();
-            var f20 = G.results.filter(function(r){ return r.fundScore === 20; }).length;
-            toast('FMP loaded — ' + f20 + '/' + G.results.length + ' tickers Fund 20/20');
-          }, 500);
-        }
-      }, fmpDelay);
-      fmpDelay += 400; // stagger by 400ms = ~136s for unique uncached tickers
-    });
-  }
-
-  // Background history pre-fetch: populates G_HIST_CACHE for all tickers
-  // so list scores match detail scores without requiring a click
-  var tradierKeyHist = '';
-  try{ tradierKeyHist = localStorage.getItem('rrjcar_tradier') || ''; }catch(e){}
-  if(tradierKeyHist){
-    var histDelay = 500; // start after FMP pre-fetch begins
-    var batchCount = 0;
-    // Sort by score desc so high scorers get history first
-    var histOrder = G.results.slice().sort(function(a,b){ return b.score - a.score; });
-    histOrder.forEach(function(r){
-      if(G_HIST_CACHE[r.ticker]) return; // already cached, skip
-      setTimeout(function(){
-        var gResult = G.results.find(function(x){ return x.ticker === r.ticker; });
-        if(!gResult) return;
-        fetchIndicatorHistory(r.ticker).then(function(days){
-          if(!days) return;
-          G_HIST_CACHE[r.ticker] = days;
-          // Re-score with fresh history data
-          var updated = scoreIt(r.ticker, gResult.ind, gResult.opt);
-          gResult.score = updated.score; gResult.techScore = updated.techScore; gResult.fundScore = updated.fundScore;
-          gResult.isGo = updated.isGo; gResult.rules = updated.rules; gResult.passes = updated.passes;
-          // Re-render list every 10 completions to avoid thrashing
-          batchCount++;
-          if(batchCount % 10 === 0){
+          fmpBatchCount++;
+          if(fmpBatchCount % 10 === 0){
             G.results.sort(function(a,b){ return b.score - a.score; });
             G.filtered = G.results.slice();
             renderBuySig(); renderScan();
           }
-        });
-      }, histDelay);
-      histDelay += 50;  // 50ms stagger = ~21s for 429 tickers (cached skipped)
-    });
+        }
+        // Wait 350ms before next fetch regardless of success/failure
+        setTimeout(function(){ fetchNextFmp(idx+1); }, 350);
+      }).catch(function(){
+        setTimeout(function(){ fetchNextFmp(idx+1); }, 350);
+      });
+    }
+    // Start after 1s delay to let scan settle
+    setTimeout(function(){ fetchNextFmp(0); }, 1000);
   }
 
   var goCount = G.results.filter(function(r){ return r.isGo; }).length;
