@@ -3006,37 +3006,30 @@ async function fetchFmpData(ticker){
   if(!fmpKey) return null;
 
   // FMP migrated to /stable/ endpoints Aug 31 2025 \u2014 v3 legacy endpoints blocked for new keys
+  // Strategy: fetch PT consensus first (most reliable), then estimates as enrichment
+  // Keeps calls to 1-2 per ticker to stay well under rate limits
   var base = 'https://financialmodelingprep.com/stable';
   try{
-    // Fetch analyst estimates + grades in parallel
-    var results = await Promise.all([
-      fetch(base+'/analyst-estimates?symbol='+ticker+'&period=annual&limit=5&apikey='+fmpKey).then(function(r){return r.json();}),
-      fetch(base+'/grades?symbol='+ticker+'&limit=20&apikey='+fmpKey).then(function(r){return r.json();}),
-      fetch(base+'/price-target-consensus?symbol='+ticker+'&apikey='+fmpKey).then(function(r){return r.json();})
-    ]);
-    var estRes = results[0], gradesRes = results[1], ptRes = results[2];
+    // Step 1: fetch price-target-consensus (always reliable on Starter plan)
+    var ptRes = await fetch(base+'/price-target-consensus?symbol='+ticker+'&apikey='+fmpKey).then(function(r){return r.json();});
+    var ptValid = Array.isArray(ptRes) && ptRes[0] && ptRes[0].targetConsensus > 0;
 
-    // Revision detection: use numAnalystsEps from estimate record (active analyst count)
-    // Guard: FMP may return {Error Message:...} instead of array if endpoint unavailable
+    // Step 2: fetch analyst estimates only if PT call succeeded (circuit breaker)
+    var estRes = [], gradesRes = [];
+    if(ptValid){
+      var estData = await fetch(base+'/analyst-estimates?symbol='+ticker+'&period=annual&limit=2&apikey='+fmpKey).then(function(r){return r.json();}).catch(function(){return [];});
+      estRes = Array.isArray(estData) && !estData['Error Message'] ? estData : [];
+    }
+
+    // Revision detection: use numAnalystsEps from estimate record
     var revisionsUp = 0;
-    var thirtyDaysAgo = Date.now() - (30 * 86400000);
-    var estOk = Array.isArray(estRes) && estRes.length > 0 && !estRes['Error Message'];
-    if(estOk){
+    var upgradesLast30 = 0;
+    if(estRes.length > 0){
       var numAnalysts = estRes[0].numAnalystsEps || estRes[0].numAnalystsRevenue || 0;
       if(numAnalysts >= 2) revisionsUp = Math.min(numAnalysts, 5);
     }
-
-    // Analyst upgrades in last 30 days = direct revision-up signal
-    var upgradesLast30 = 0;
-    var gradesOk = Array.isArray(gradesRes) && !gradesRes['Error Message'];
-    if(gradesOk){
-      gradesRes.forEach(function(g){
-        if(new Date(g.date).getTime() >= thirtyDaysAgo && g.action === 'upgrade') upgradesLast30++;
-      });
-    }
-    if(upgradesLast30 > 0) revisionsUp = Math.max(revisionsUp, upgradesLast30 * 2);
-    // Fallback: if estimates endpoint errored but PT exists, use PT as analyst coverage proxy
-    if(!estOk && Array.isArray(ptRes) && ptRes[0] && ptRes[0].targetConsensus > 0) revisionsUp = 2;
+    // Fallback: if estimates empty but PT exists, PT presence = analyst coverage confirmed
+    if(revisionsUp === 0 && ptValid) revisionsUp = 2;
 
     var data = {
       revisionsUp:        revisionsUp,
