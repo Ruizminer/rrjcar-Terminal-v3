@@ -3997,15 +3997,17 @@ function finishScan(){
           }
         });
         // Re-render after last FMP fetch
-        if(fmpDelay === (goTickers.length - 1) * 300){
+        if(fmpDelay >= (goTickers.length - 1) * 100){
           setTimeout(function(){
             G.results.sort(function(a,b){ return b.score - a.score; });
             G.filtered = G.results.slice();
             renderBuySig(); renderScan();
+            var f20 = G.results.filter(function(r){ return r.fundScore === 20; }).length;
+            toast('FMP loaded — ' + f20 + '/' + G.results.length + ' tickers Fund 20/20');
           }, 500);
         }
       }, fmpDelay);
-      fmpDelay += 300; // stagger by 300ms to avoid rate limiting
+      fmpDelay += 100; // stagger by 100ms = ~40s for 407 tickers
     });
   }
 
