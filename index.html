@@ -2973,6 +2973,7 @@ function calcCMO(days, period){
 }
 
 var G_FMP_CACHE = {};
+var G_FMP_INFLIGHT = {}; // in-flight promise dedup
 
 function fmpCacheKey(ticker){ return 'rrjcar_fmp_' + ticker; }
 
@@ -2999,6 +3000,8 @@ async function fetchFmpData(ticker){
   if(G_FMP_CACHE[ticker]) return G_FMP_CACHE[ticker];
   var cached = loadFmpCache(ticker);
   if(cached){ G_FMP_CACHE[ticker] = cached; return cached; }
+  // Return existing in-flight promise if already fetching this ticker
+  if(G_FMP_INFLIGHT[ticker]) return G_FMP_INFLIGHT[ticker];
 
   var fmpKey = '';
   try{ fmpKey = localStorage.getItem('rrjcar_fmp') || ''; }catch(e){}
@@ -3009,6 +3012,7 @@ async function fetchFmpData(ticker){
   // Strategy: fetch PT consensus first (most reliable), then estimates as enrichment
   // Keeps calls to 1-2 per ticker to stay well under rate limits
   var base = 'https://financialmodelingprep.com/stable';
+  G_FMP_INFLIGHT[ticker] = (async function(){
   try{
     // Step 1: fetch price-target-consensus (always reliable on Starter plan)
     var ptRes = await fetch(base+'/price-target-consensus?symbol='+ticker+'&apikey='+fmpKey).then(function(r){return r.json();});
@@ -3054,7 +3058,11 @@ async function fetchFmpData(ticker){
   } catch(e){
     console.warn('FMP fetch error for '+ticker+':', e);
     return null;
+  } finally {
+    delete G_FMP_INFLIGHT[ticker];
   }
+  })();
+  return G_FMP_INFLIGHT[ticker];
 }
 
 function scoreIt(ticker, ind, opt){
