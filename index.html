@@ -4049,8 +4049,8 @@ function finishScan(){
         setTimeout(function(){ fetchNextFmp(idx+1); }, 350);
       });
     }
-    // Start after 1s delay to let scan settle
-    setTimeout(function(){ fetchNextFmp(0); }, 1000);
+    // FMP chain now kicks off after hist completes (see histDone >= histTotal below)
+    // Do NOT start here — scores are too low before hist populates
   }
 
   // Background history pre-fetch: populates G_HIST_CACHE for all tickers
@@ -4062,8 +4062,19 @@ function finishScan(){
     var batchCount = 0;
     // Sort by score desc so high scorers get history first
     var histOrder = G.results.slice().sort(function(a,b){ return b.score - a.score; });
+    var histTotal = histOrder.filter(function(r){ return !G_HIST_CACHE[r.ticker]; }).length;
+    var histDone  = 0;
     histOrder.forEach(function(r){
-      if(G_HIST_CACHE[r.ticker]) return; // already cached, skip
+      if(G_HIST_CACHE[r.ticker]){
+        // Already cached — re-score immediately
+        var gRes = G.results.find(function(x){ return x.ticker === r.ticker; });
+        if(gRes){
+          var u = scoreIt(r.ticker, gRes.ind, gRes.opt);
+          gRes.score=u.score; gRes.techScore=u.techScore; gRes.fundScore=u.fundScore;
+          gRes.isGo=u.isGo; gRes.rules=u.rules; gRes.passes=u.passes;
+        }
+        return;
+      }
       setTimeout(function(){
         var gResult = G.results.find(function(x){ return x.ticker === r.ticker; });
         if(!gResult) return;
@@ -4074,15 +4085,26 @@ function finishScan(){
           gResult.score = updated.score; gResult.techScore = updated.techScore; gResult.fundScore = updated.fundScore;
           gResult.isGo = updated.isGo; gResult.rules = updated.rules; gResult.passes = updated.passes;
           batchCount++;
+          histDone++;
           if(batchCount % 10 === 0){
             G.results.sort(function(a,b){ return b.score - a.score; });
             G.filtered = G.results.slice();
             renderBuySig(); renderScan();
           }
+          // When all hist fetches complete, kick off FMP with updated scores
+          if(histDone >= histTotal){
+            G.results.sort(function(a,b){ return b.score - a.score; });
+            G.filtered = G.results.slice();
+            renderBuySig(); renderScan();
+            // Now launch FMP chain with accurate post-hist scores
+            if(fmpKey) setTimeout(function(){ fetchNextFmp(0); }, 500);
+          }
         });
       }, histDelay);
       histDelay += 50; // 50ms stagger
     });
+    // If all tickers were already cached, kick off FMP immediately
+    if(histTotal === 0 && fmpKey) setTimeout(function(){ fetchNextFmp(0); }, 500);
   }
 
   var goCount = G.results.filter(function(r){ return r.isGo; }).length;
