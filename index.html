@@ -3017,21 +3017,26 @@ async function fetchFmpData(ticker){
     var estRes = results[0], gradesRes = results[1], ptRes = results[2];
 
     // Revision detection: use numAnalystsEps from estimate record (active analyst count)
+    // Guard: FMP may return {Error Message:...} instead of array if endpoint unavailable
     var revisionsUp = 0;
     var thirtyDaysAgo = Date.now() - (30 * 86400000);
-    if(Array.isArray(estRes) && estRes.length > 0){
+    var estOk = Array.isArray(estRes) && estRes.length > 0 && !estRes['Error Message'];
+    if(estOk){
       var numAnalysts = estRes[0].numAnalystsEps || estRes[0].numAnalystsRevenue || 0;
       if(numAnalysts >= 2) revisionsUp = Math.min(numAnalysts, 5);
     }
 
     // Analyst upgrades in last 30 days = direct revision-up signal
     var upgradesLast30 = 0;
-    if(Array.isArray(gradesRes)){
+    var gradesOk = Array.isArray(gradesRes) && !gradesRes['Error Message'];
+    if(gradesOk){
       gradesRes.forEach(function(g){
         if(new Date(g.date).getTime() >= thirtyDaysAgo && g.action === 'upgrade') upgradesLast30++;
       });
     }
     if(upgradesLast30 > 0) revisionsUp = Math.max(revisionsUp, upgradesLast30 * 2);
+    // Fallback: if estimates endpoint errored but PT exists, use PT as analyst coverage proxy
+    if(!estOk && Array.isArray(ptRes) && ptRes[0] && ptRes[0].targetConsensus > 0) revisionsUp = 2;
 
     var data = {
       revisionsUp:        revisionsUp,
@@ -3977,7 +3982,7 @@ function finishScan(){
   var fmpKey='';try{fmpKey=localStorage.getItem('rrjcar_fmp')||'';}catch(e){}
   if(!fmpKey && typeof FMP_KEY_DEFAULT !== 'undefined') fmpKey = FMP_KEY_DEFAULT;
   if(fmpKey){
-    var goTickers = G.results.filter(function(r){ return r.isGo; }).slice(0,20).map(function(r){ return r.ticker; });
+    var goTickers = G.results.filter(function(r){ return r.score >= 65; }).map(function(r){ return r.ticker; });
     var fmpDelay = 0;
     goTickers.forEach(function(t){
       setTimeout(function(){
