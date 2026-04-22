@@ -588,6 +588,13 @@ tr.sel-row td{background:var(--blu3);}
             <span style="color:var(--gry);font-size:10px;">% return</span>
           </div>
         </div>
+        <div class="ts-field">
+          <label>Hard stop</label>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" id="ts-hard-stop" value="25" min="0" step="1" style="width:60px;" onchange="saveAppSettings()" title="Close immediately if position drops below this % loss (0 = disabled)">
+            <span style="color:var(--gry);font-size:10px;">% loss</span>
+          </div>
+        </div>
         <div class="ts-field" style="align-self:flex-end;">
           <label>Auto-arm</label>
           <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
@@ -4686,6 +4693,7 @@ function getTsDefaultSettings(){
     activate:  parseFloat(eid('ts-default-activate') ? eid('ts-default-activate').value : 6)  || 6,
     pullback:  parseFloat(eid('ts-default-pullback')  ? eid('ts-default-pullback').value  : 3)  || 3,
     disRet:    parseFloat(eid('ts-default-disret')    ? eid('ts-default-disret').value    : 2)  || 2,
+    hardStop:  parseFloat(eid('ts-hard-stop')         ? eid('ts-hard-stop').value         : 25) || 0,
     disPull:   '',
     closeMode: eid('ts-close-mode') ? eid('ts-close-mode').value : 'step',
     enabled:   true
@@ -5099,6 +5107,19 @@ async function runTsCheck(){
     var ret=p.pnlPct;
     if(!G.tsState[sym])G.tsState[sym]={status:'inactive',peak:p.pnl,peakPct:ret};
     var st=G.tsState[sym];
+
+    // HARD STOP — fires regardless of trail stop status, independent of armed/watching state
+    // Threshold from global default (per-position override not needed — this is always a floor)
+    var hardStopPct = -(Math.abs(parseFloat(eid('ts-hard-stop') ? eid('ts-hard-stop').value : 25) || 25));
+    if(!G.tsTriggered[sym] && hardStopPct < 0 && ret <= hardStopPct){
+      st.status='triggered';
+      G.tsTriggered[sym]=true;
+      tsLog(p.underlying+': HARD STOP \u2014 loss '+fmt2(ret)+'% hit floor '+fmt2(hardStopPct)+'%','triggered');
+      addAlert(p.underlying,'HARD STOP triggered \u2014 loss '+fmt2(ret)+'% | closing position','nogo');
+      toast('\u26d4 Hard stop: '+p.underlying+' '+fmt2(ret)+'%');
+      executeTsClose(p,closeMode,creds);
+      continue;
+    }
 
     // Update peak
     if(ret>st.peakPct){
@@ -7101,6 +7122,7 @@ function saveAppSettings(){
       defaultActivate: eid('ts-default-activate') ? eid('ts-default-activate').value : '6',
       defaultPullback: eid('ts-default-pullback')  ? eid('ts-default-pullback').value  : '3',
       defaultDisRet:   eid('ts-default-disret')    ? eid('ts-default-disret').value    : '2',
+      defaultHardStop: eid('ts-hard-stop')         ? eid('ts-hard-stop').value         : '25',
       autoArm:         eid('ts-auto-arm')          ? eid('ts-auto-arm').checked        : true,
       tsActive:        G.tsActive  // persist poller active state across reloads
     };
@@ -7154,6 +7176,7 @@ function loadAppSettings(){
       if(eid('ts-default-activate')   && ts.defaultActivate)  eid('ts-default-activate').value   = ts.defaultActivate;
       if(eid('ts-default-pullback')   && ts.defaultPullback)  eid('ts-default-pullback').value   = ts.defaultPullback;
       if(eid('ts-default-disret')     && ts.defaultDisRet)    eid('ts-default-disret').value     = ts.defaultDisRet;
+      if(eid('ts-hard-stop')          && ts.defaultHardStop)  eid('ts-hard-stop').value          = ts.defaultHardStop;
       if(eid('ts-auto-arm')           && ts.autoArm !== undefined) eid('ts-auto-arm').checked    = ts.autoArm;
       // Flag to restart poller on next positions load if it was active before reload
       if(ts.tsActive) G._tsRestoreActive = true;
