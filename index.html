@@ -5111,8 +5111,12 @@ async function runTsCheck(){
 
     // HARD STOP — fires regardless of trail stop status, independent of armed/watching state
     // Threshold from global default (per-position override not needed — this is always a floor)
+    // DIT guard: don't fire on day 0 — spread slippage at open can look like a −25% loss
+    // immediately. Give the position at least 1 calendar day before the hard stop evaluates.
+    var _openTs = p.openTs || null;
+    var _ditDays = _openTs ? Math.floor((Date.now() - new Date(_openTs).getTime()) / 864e5) : 0;
     var hardStopPct = -(Math.abs(parseFloat(eid('ts-hard-stop') ? eid('ts-hard-stop').value : 25) || 25));
-    if(!G.tsTriggered[sym] && hardStopPct < 0 && ret <= hardStopPct){
+    if(!G.tsTriggered[sym] && hardStopPct < 0 && ret <= hardStopPct && _ditDays >= 1){
       st.status='triggered';
       G.tsTriggered[sym]=true;
       tsLog(p.underlying+': HARD STOP \u2014 loss '+fmt2(ret)+'% hit floor '+fmt2(hardStopPct)+'%','triggered');
