@@ -5135,10 +5135,10 @@ async function runTsCheck(){
     var disabledByPull = disPull && pullFromHigh > disPull;
 
     // CRITICAL FIX: disRet should only disable if position has NOT yet reached activate threshold
-    // Once armed (ret >= activateAt), disRet no longer applies \u2014 pullback handles exit
-    // This prevents the disable guard from blocking positions that dip below disRet
-    // before they get a chance to reach the activation threshold
-    var alreadyArmedOrHigher = st.status === 'armed' || st.status === 'triggered';
+    // Use a sticky everArmed flag: once a position peaks past activateAt it can never be
+    // re-disabled by disRet, even if it crashes back below that level between polls.
+    if(ret >= activateAt) st.everArmed = true;
+    var alreadyArmedOrHigher = st.everArmed || st.status === 'armed' || st.status === 'triggered';
     if(alreadyArmedOrHigher) disabledByRet = false; // armed positions use pullback only
 
     if(disabledByRet || disabledByPull){
