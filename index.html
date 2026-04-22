@@ -7203,6 +7203,18 @@ function loadAppSettings(){
           if(st.status === 'disabled' && (st.peakPct || 0) < activateAt){
             st = {status:'watching', peak:0, peakPct:0};
           }
+          // If state says triggered but position is still open, the close order failed to fill.
+          // Reset to armed so the poller re-evaluates and re-attempts the close.
+          // If position is no longer open, mark tsTriggered so the poller stays suppressed.
+          if(st.status === 'triggered'){
+            var stillOpen = (G.positions||[]).some(function(p){ return p.symbol === sym; });
+            if(stillOpen){
+              st = {status:'armed', peak:st.peak||0, peakPct:st.peakPct||0, everArmed:true};
+              console.warn('TS restore: '+sym+' was triggered but still open — reset to armed for re-evaluation');
+            } else {
+              G.tsTriggered[sym] = true;
+            }
+          }
           G.tsState[sym] = st;
         }
       });
