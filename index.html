@@ -5746,6 +5746,11 @@ function matchTrades(orders){
         openOrderId:openLots.length>0?openLots[0].id:null,
         side:isLong?'LONG':'SHORT'
       });
+      // Recover entry score + rules snapshot from posOpenData (written at auto-trader entry)
+      var _pod2 = G.posOpenData && (G.posOpenData[sym] || {});
+      var _lastT = trades[trades.length-1];
+      if(_lastT && _pod2.entryScore !== undefined) _lastT.entryScore = _pod2.entryScore;
+      if(_lastT && _pod2.entryRules)               _lastT.entryRules = _pod2.entryRules;
       // Remove matched open lot
       if(openLots.length>0) openLots.shift();
     }
@@ -5753,6 +5758,10 @@ function matchTrades(orders){
   return trades;
 }
 
+function closedTradesKey(){
+  var m='sandbox';try{m=localStorage.getItem('rrjcar_mode')||'sandbox';}catch(e){}
+  return 'rrjcar_closed_trades_'+m;
+}
 function fetchClosedPositions(){
   var creds=getTradierCreds();
   var acct=G.acctId||localStorage.getItem('rrjcar_acct')||'';
@@ -5810,7 +5819,7 @@ function fetchClosedPositions(){
     // This handles sandbox resets and date range gaps
     if(!orders.length){
       var cachedTrades = [];
-      try{ cachedTrades = JSON.parse(localStorage.getItem('rrjcar_closed_trades')||'[]'); }catch(e){}
+      try{ cachedTrades = JSON.parse(localStorage.getItem(closedTradesKey())||'[]'); }catch(e){}
       if(cachedTrades.length){
         G_closed.raw = [];
         G_closed.trades = cachedTrades;
@@ -5865,13 +5874,13 @@ function fetchClosedPositions(){
     // Persist trades to localStorage and merge with any previously saved trades
     // This survives Tradier sandbox resets which truncate order history
     var savedTrades = [];
-    try{ savedTrades = JSON.parse(localStorage.getItem('rrjcar_closed_trades')||'[]'); }catch(e){}
+    try{ savedTrades = JSON.parse(localStorage.getItem(closedTradesKey())||'[]'); }catch(e){}
     // Build a map of closeOrderId -> trade for deduplication (fresh API data wins)
     var tradeMap = {};
     savedTrades.forEach(function(t){ if(t.closeOrderId) tradeMap[t.closeOrderId] = t; });
     matched.forEach(function(t){ if(t.closeOrderId) tradeMap[t.closeOrderId] = t; });
     var allTrades = Object.values(tradeMap).sort(function(a,b){ return new Date(b.closeDate)-new Date(a.closeDate); });
-    try{ localStorage.setItem('rrjcar_closed_trades', JSON.stringify(allTrades)); }catch(e){}
+    try{ localStorage.setItem(closedTradesKey(), JSON.stringify(allTrades)); }catch(e){}
 
     G_closed.raw=allFilled;
     G_closed.trades=allTrades;
@@ -6820,6 +6829,13 @@ function atExecuteTrade(signal, budget){
     G_AT.openedToday[signal.ticker] = true;
     G_AT.openedToday[signal.ticker+'_ts'] = Date.now();
     saveAutoTraderState();
+    // Snapshot entry score + passing rules into posOpenData (recovered into closed trade record)
+    var _snapRules = [];
+    if(signal.rules){ signal.rules.forEach(function(ru){ if(ru.pass) _snapRules.push(ru.n); }); }
+    if(!G.posOpenData[occSym]){ G.posOpenData[occSym] = {}; }
+    G.posOpenData[occSym].entryScore = signal.score;
+    G.posOpenData[occSym].entryRules = _snapRules;
+    try{ localStorage.setItem('rrjcar_pos_open', JSON.stringify(G.posOpenData)); }catch(e){}
     atUpdateStats();
 
     // Set sf-fallback based on auto-trader setting, restore after
