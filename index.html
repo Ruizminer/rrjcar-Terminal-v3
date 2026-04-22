@@ -4772,12 +4772,32 @@ function toggleTsRow(sym){
   if(!isOpen) cfgRow.classList.add('open');
 }
 
+
+// ── Positions table sort ──────────────────────────────────────────────────────
+var G_posSort = {col:'', dir:1};
+function sortPosTable(th, col){
+  if(G_posSort.col===col){ G_posSort.dir*=-1; } else { G_posSort.col=col; G_posSort.dir=1; }
+  // reset all header arrows
+  var ths = th.closest('thead').querySelectorAll('th');
+  ths.forEach(function(h){ h.textContent = h.textContent.replace(/[\u25B2\u25BC\u25BF]/g,'').trim(); });
+  th.textContent = th.textContent.trim() + (G_posSort.dir===1?' \u25B2':' \u25BC');
+  // sort positions array
+  G.positions.sort(function(a,b){
+    var tsA = G.tsState[a.symbol]||{peakPct:0};
+    var tsB = G.tsState[b.symbol]||{peakPct:0};
+    var va = tsA.peakPct>0 ? tsA.peakPct/2 : -1;
+    var vb = tsB.peakPct>0 ? tsB.peakPct/2 : -1;
+    return (va-vb)*G_posSort.dir;
+  });
+  renderPositionsTable(G.positions, eid('pos-src').textContent);
+}
+
 function renderPositionsTable(pos,srcLabel){
   eid('pos-src').textContent=srcLabel||'';
   var wrap=eid('pos-tbl-wrap');
   if(!pos.length){wrap.innerHTML='<div class="empty-det" style="min-height:200px;"><div class="ei">\u25a0</div><p>No open positions</p></div>';return;}
   var totalPnl=0,totalCost=0;pos.forEach(function(p){totalPnl+=p.pnl;totalCost+=p.cost;});
-  var colCount = 20; // total columns
+  var colCount = 21; // total columns
 
   // Auto-apply default trail stop config to any unconfigured positions
   var symbols = pos.map(function(p){ return p.symbol; });
@@ -4795,7 +4815,7 @@ function renderPositionsTable(pos,srcLabel){
   var html='<table><thead><tr>'
     +'<th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>EXPIRY</th><th>DIT</th><th>DTE</th><th>HIGH %</th><th>OPENED</th><th>UL OPEN</th><th>UL NOW</th><th>QTY</th>'
     +'<th>AVG COST</th><th>LAST</th><th>P&L $</th><th>P&L %</th>'
-    +'<th>TRAIL STOP</th><th>STATUS</th><th>ACTION</th><th></th><th></th>'
+    +'<th>TRAIL STOP</th><th style="cursor:pointer;" onclick="sortPosTable(this,\'targetPct\')">TARGET &#x25BF;</th><th>STATUS</th><th>ACTION</th><th></th><th></th>'
     +'</tr></thead><tbody>';
 
   pos.forEach(function(p){
@@ -4811,8 +4831,7 @@ function renderPositionsTable(pos,srcLabel){
     var tsCls   = tsState.status||'inactive';
     // If config not enabled, override to show OFF
     if(!cfg.enabled && tsState.status==='inactive') { tsLabel='OFF'; tsCls='inactive'; }
-    var tsInfo  = tsState.status==='armed'?(' peak: +'+fmt2(tsState.peakPct)+'%')
-                : tsState.status==='watching'?(' +'+fmt2(p.pnlPct)+'%')
+    var tsInfo  = tsState.status==='watching'?(' +'+fmt2(p.pnlPct)+'%')
                 : cfg.enabled&&tsState.status==='inactive'?' (activate: '+cfg.activate+'%)' : '';
     var trailBadge = '<span class="ts-badge '+tsCls+'">'
       +'<span class="ts-dot"></span>'+tsLabel+'</span>'
@@ -4899,8 +4918,7 @@ function renderPositionsTable(pos,srcLabel){
       +'<td>$'+fmt2(p.last)+'</td>'
       +'<td class="'+pnlCls+'">'+(p.pnl>=0?'+':'')+fmtD(p.pnl)+'</td>'
       +'<td class="'+pnlCls+'">'+(p.pnlPct>=0?'+':'')+fmtP(p.pnlPct)+'</td>'
-      +'<td>'+trailBadge+'</td>'
-      +'<td>'+statusBadge+'</td>'
+      +'<td>'+trailBadge+'</td>'      +(function(){        var tgt=tsState.peakPct>0?tsState.peakPct/2:0;        var cur=p.pnlPct||0;        if(!tgt)return '<td style="color:var(--gry);font-size:10px;">--</td>';        var exceeded=cur>=tgt;        var clr=exceeded?'var(--grn)':'var(--ambb)';        return '<td style="color:'+clr+';font-weight:700;">+'+fmt2(tgt)+'%'+(exceeded?'<span style="font-size:9px;margin-left:3px;">&checkmark;</span>':'')+'</td>';      })()      +'<td>'+statusBadge+'</td>'
       +'<td><button class="cbtn" onclick="doClose(this)">CLOSE</button></td>'
       +'<td><button class="btn ts-enable-btn" style="'+(cfgEnabled?'border-color:var(--grn);color:var(--grn);':'')+'" '
         +'onclick="toggleTsRow(\''+sym+'\')">\u25b4 TRAIL</button></td>'
