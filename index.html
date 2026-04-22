@@ -2335,7 +2335,9 @@ function cancelOrder(creds,acct,orderId){
 
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 
-async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,stepSize,maxAttempts,delaySec,direction){
+async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,stepSize,maxAttempts,delaySec,direction,fallbackMode){
+  // fallbackMode: 'market'|'none'|undefined. If undefined, reads #sf-fallback DOM (manual use).
+  // AT entry/close callers MUST pass this explicitly to avoid shared DOM state corruption.
   // direction: 'up' = open (bid\u2192ask), 'down' = close (ask\u2192bid)
   var goingUp=(direction!=='down');
   G.stepFillActive=true;
@@ -2415,9 +2417,8 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
       sfLog('Max attempts reached without fill.','rejected');
       addAlert(sym,'Step Fill: max attempts ('+maxAttempts+') reached \u2014 not filled','warn');
 
-      // Check fallback setting
-      var fallbackEl=eid('sf-fallback');
-      var fallback=fallbackEl?fallbackEl.value:'none';
+      // Check fallback setting — use explicit param if provided, otherwise read DOM (manual use)
+      var fallback = (fallbackMode !== undefined) ? fallbackMode : (eid('sf-fallback') ? eid('sf-fallback').value : 'none');
       if(fallback==='market'){
         sfLog('Fallback: submitting MARKET order...','sent');
         var mktBody='class=option'
@@ -5117,6 +5118,12 @@ async function runTsCheck(){
       tsLog(p.underlying+': HARD STOP \u2014 loss '+fmt2(ret)+'% hit floor '+fmt2(hardStopPct)+'%','triggered');
       addAlert(p.underlying,'HARD STOP triggered \u2014 loss '+fmt2(ret)+'% | closing position','nogo');
       toast('\u26d4 Hard stop: '+p.underlying+' '+fmt2(ret)+'%');
+      // Reset the openedToday cooldown timestamp to NOW so the 4-hour re-entry block
+      // restarts from the close, not the original open. Prevents same-day re-entry after loss.
+      if(G_AT.openedToday[p.underlying]){
+        G_AT.openedToday[p.underlying+'_ts'] = Date.now();
+        saveAutoTraderState();
+      }
       executeTsClose(p,closeMode,creds);
       continue;
     }
@@ -5177,6 +5184,11 @@ async function runTsCheck(){
         tsLog(p.underlying+': TRIGGERED \u2014 pulled back '+fmt2(pullback)+'pp from peak +'+fmt2(st.peakPct)+'%','triggered');
         addAlert(p.underlying,'Trailing stop TRIGGERED \u2014 closing position','go');
         toast('\u26a1 Trail Stop triggered: '+p.underlying);
+        // Reset cooldown timestamp from close so re-entry window restarts from now
+        if(G_AT.openedToday[p.underlying]){
+          G_AT.openedToday[p.underlying+'_ts'] = Date.now();
+          saveAutoTraderState();
+        }
         executeTsClose(p,closeMode,creds);
       }
     }
@@ -5256,7 +5268,7 @@ function executeTsClose(p,closeMode,creds){
       var limitPx=+(b - spread*0.15).toFixed(2);
       var stepSize=calcEffectiveStepSize(limitPx, startPx, maxAtt);
       tsLog(p.underlying+': step close mid='+DS2+fmt2(mid)+' bid='+DS2+fmt2(b)+' ask='+DS2+fmt2(a)+' | step '+DS2+fmt2(stepSize)+' x'+maxAtt+' @ 3s','triggered');
-      runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),startPx,limitPx,stepSize,maxAtt,3,'down');
+      runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),startPx,limitPx,stepSize,maxAtt,3,'down','none');
       switchTab('order');
     })(bid, ask);
     if(creds){
@@ -6794,9 +6806,17 @@ function atExecuteTrade(signal, budget){
   var creds=getTradierCreds();
   var acct=G.acctId||localStorage.getItem('rrjcar_acct')||'';
   if(!creds||!acct){ atLog('No API key/account \u2014 cannot execute','err'); return; }
+  signal._tradeId = Date.now(); // unique stamp for this specific execution attempt
+  G_AT.openedToday[signal.ticker+'_ts'] = signal._tradeId; // claim the slot immediately
+  G_AT.openedToday[signal.ticker] = signal._tradeId;       // value = tradeId for race detection
   G_AT.inFlightTickers[signal.ticker]=true;
   atLog('Fetching best contract for '+signal.ticker+'...','');
   fetchOptionContract(signal.ticker, signal.price, function(optData){
+    // Re-check: if openedToday was set by a concurrent call while fetchOptionContract was in-flight, abort
+    if(G_AT.openedToday[signal.ticker+'_ts'] && (Date.now() - G_AT.openedToday[signal.ticker+'_ts']) < 120000 && G_AT.openedToday[signal.ticker] !== signal._tradeId){
+      delete G_AT.inFlightTickers[signal.ticker];
+      atLog(signal.ticker+': duplicate entry detected after contract fetch \u2014 aborting','warn'); return;
+    }
     if(!optData){
       delete G_AT.inFlightTickers[signal.ticker];
       atLog(signal.ticker+': no contract available \u2014 skipping','err'); return;
@@ -6859,19 +6879,14 @@ function atExecuteTrade(signal, budget){
     try{ localStorage.setItem('rrjcar_pos_open', JSON.stringify(G.posOpenData)); }catch(e){}
     atUpdateStats();
 
-    // Set sf-fallback based on auto-trader setting, restore after
-    var prevFallback = eid('sf-fallback') ? eid('sf-fallback').value : 'none';
+    // Capture fallback mode NOW (before async) — never touch the shared #sf-fallback DOM element.
+    // Mutating a shared DOM input was causing concurrent step fills to inherit 'market' fallback.
     var useMktFallback = getAutoTraderSettings().marketFallback;
-    if(eid('sf-fallback')) eid('sf-fallback').value = useMktFallback ? 'market' : 'none';
+    var atFallbackMode = useMktFallback ? 'market' : 'none';
     if(useMktFallback) atLog(signal.ticker+': market fallback enabled \u2014 will fire if step fill misses','warn');
 
-    runStepFill(creds,acct,occSym,signal.ticker,'buy_to_open',qty,startPx,limitPx,stepSize,11,3,'up');
+    runStepFill(creds,acct,occSym,signal.ticker,'buy_to_open',qty,startPx,limitPx,stepSize,11,3,'up',atFallbackMode);
 
-    // Restore sf-fallback after step fill launches (step fill reads it asynchronously)
-    // Restore after max step fill duration so it doesn't affect other step fills
-    setTimeout(function(){
-      if(eid('sf-fallback')) eid('sf-fallback').value = prevFallback;
-    }, (11*5+15)*1000);
     // Clear in-flight after max step fill duration (11 attempts x 5s + 10s buffer)
     setTimeout(function(){
       delete G_AT.inFlightTickers[signal.ticker];
