@@ -6655,6 +6655,7 @@ function isMarketHours(){
 function atHasOpenPosition(ticker){
   if(G.positions && G.positions.some(function(p){ return p.underlying===ticker; })) return true;
   if(G_AT.inFlightTickers[ticker]) return true;
+  if(G_AT.openedToday[ticker]) return true; // already claimed this session — block re-entry
   return false;
 }
 
@@ -6810,17 +6811,17 @@ function atExecuteTrade(signal, budget){
   var creds=getTradierCreds();
   var acct=G.acctId||localStorage.getItem('rrjcar_acct')||'';
   if(!creds||!acct){ atLog('No API key/account \u2014 cannot execute','err'); return; }
-  signal._tradeId = Date.now(); // unique stamp for this specific execution attempt
-  G_AT.openedToday[signal.ticker+'_ts'] = signal._tradeId; // claim the slot immediately
-  G_AT.openedToday[signal.ticker] = signal._tradeId;       // value = tradeId for race detection
+  // Guard: if openedToday already has this ticker (set by a prior cycle still in-flight), abort.
+  // This is the primary double-entry prevention — must check BEFORE setting inFlightTickers.
+  if(G_AT.openedToday[signal.ticker]){
+    atLog(signal.ticker+': already opened today \u2014 skipping duplicate entry','warn'); return;
+  }
+  // Claim the slot atomically before any async work
+  G_AT.openedToday[signal.ticker] = true;
+  G_AT.openedToday[signal.ticker+'_ts'] = Date.now();
   G_AT.inFlightTickers[signal.ticker]=true;
   atLog('Fetching best contract for '+signal.ticker+'...','');
   fetchOptionContract(signal.ticker, signal.price, function(optData){
-    // Re-check: if openedToday was set by a concurrent call while fetchOptionContract was in-flight, abort
-    if(G_AT.openedToday[signal.ticker+'_ts'] && (Date.now() - G_AT.openedToday[signal.ticker+'_ts']) < 120000 && G_AT.openedToday[signal.ticker] !== signal._tradeId){
-      delete G_AT.inFlightTickers[signal.ticker];
-      atLog(signal.ticker+': duplicate entry detected after contract fetch \u2014 aborting','warn'); return;
-    }
     if(!optData){
       delete G_AT.inFlightTickers[signal.ticker];
       atLog(signal.ticker+': no contract available \u2014 skipping','err'); return;
@@ -6871,8 +6872,8 @@ function atExecuteTrade(signal, budget){
     if(eid('ord-lmt'))    eid('ord-lmt').value    = fmt2(startPx);
     G.liveQuote = {bid:bid,ask:ask,mid:((bid+ask)/2)};
     G_AT.orderCount++;
-    G_AT.openedToday[signal.ticker] = true;
-    G_AT.openedToday[signal.ticker+'_ts'] = Date.now();
+    // openedToday already set with _tradeId at atExecuteTrade entry — do NOT overwrite here.
+    // Overwriting resets the _ts to now, breaking the duplicate-entry race guard.
     saveAutoTraderState();
     // Snapshot entry score + passing rules into posOpenData (recovered into closed trade record)
     var _snapRules = [];
