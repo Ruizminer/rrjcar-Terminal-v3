@@ -5272,7 +5272,9 @@ function executeTsClose(p,closeMode,creds){
       var limitPx=+(b - spread*0.15).toFixed(2);
       var stepSize=calcEffectiveStepSize(limitPx, startPx, maxAtt);
       tsLog(p.underlying+': step close mid='+DS2+fmt2(mid)+' bid='+DS2+fmt2(b)+' ask='+DS2+fmt2(a)+' | step '+DS2+fmt2(stepSize)+' x'+maxAtt+' @ 3s','triggered');
-      runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),startPx,limitPx,stepSize,maxAtt,3,'down','none');
+      // Use market fallback — if all step fill limits are rejected (illiquid option),
+      // a market order is the only way to guarantee the position closes.
+      runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),startPx,limitPx,stepSize,maxAtt,3,'down','market');
       switchTab('order');
     })(bid, ask);
     if(creds){
