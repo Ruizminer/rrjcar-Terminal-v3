@@ -2420,12 +2420,23 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
       // Check fallback setting — use explicit param if provided, otherwise read DOM (manual use)
       var fallback = (fallbackMode !== undefined) ? fallbackMode : (eid('sf-fallback') ? eid('sf-fallback').value : 'none');
       if(fallback==='market'){
-        sfLog('Fallback: submitting MARKET order...','sent');
+        // Budget guard: re-check qty at current price before market order (price may have moved since limit calc)
+        var mktQty = qty;
+        if(side === 'buy_to_open'){
+          var _atS = getAutoTraderSettings();
+          var _estPx = currentPrice || startPrice;
+          if(_estPx > 0){
+            var _budgetQty = Math.floor(_atS.budget / (_estPx * 100));
+            mktQty = Math.max(1, Math.min(_budgetQty, _atS.maxContracts || 10, qty));
+          }
+          if(mktQty !== qty) sfLog('Market fallback: qty '+qty+' → '+mktQty+' (budget guard at $'+fmt2(_estPx)+'/contract)','warn');
+        }
+        sfLog('Fallback: submitting MARKET order (qty='+mktQty+')...','sent');
         var mktBody='class=option'
           +'&symbol='+encodeURIComponent(sym)
           +'&option_symbol='+encodeURIComponent(occSym)
           +'&side='+encodeURIComponent(side)
-          +'&quantity='+qty
+          +'&quantity='+mktQty
           +'&type=market'
           +'&duration=day';
         try{
@@ -2492,8 +2503,9 @@ function calcQtyFromBudget(){
     return;
   }
   var costPerContract = lmt * 100; // 1 contract = 100 shares
-  var maxContracts = Math.floor(budget / costPerContract);
-  if(maxContracts < 1) maxContracts = 1;
+  var atSettings = getAutoTraderSettings();
+  var budgetMaxQty = Math.floor(budget / costPerContract);
+  var maxContracts = Math.min(budgetMaxQty < 1 ? 1 : budgetMaxQty, atSettings.maxContracts || 10);
   eid('ord-qty').value = maxContracts;
   var totalCost = (maxContracts * costPerContract).toFixed(2);
   eid('ord-budget-hint').textContent = maxContracts + ' contracts @ $' + fmt2(totalCost);
@@ -6838,19 +6850,19 @@ function atExecuteTrade(signal, budget){
     // while preventing over-buying cheap options ($3 opt without cap = 6 contracts)
     var s = getAutoTraderSettings();
     var maxContracts = s.maxContracts || 3;
-    var qtyByBudget = Math.floor(budget/(limitPrice*100));
+    var qtyByBudget = Math.floor(s.budget/(limitPrice*100));
     var qty = Math.max(1, Math.min(qtyByBudget, maxContracts));
     var actualCost = (qty * limitPrice * 100).toFixed(0);
 
     // Skip if even 1 contract exceeds the budget
-    if(limitPrice * 100 > budget){
+    if(limitPrice * 100 > s.budget){
       delete G_AT.inFlightTickers[signal.ticker];
-      atLog(signal.ticker+': SKIPPED \u2014 1 contract costs $'+fmt2(limitPrice*100)+' which exceeds budget $'+budget,'warn');
-      addAlert(signal.ticker, 'Auto-trader skipped: $'+fmt2(limitPrice*100)+'/contract exceeds $'+budget+' budget', 'nogo');
+      atLog(signal.ticker+': SKIPPED \u2014 1 contract costs $'+fmt2(limitPrice*100)+' which exceeds budget $'+s.budget,'warn');
+      addAlert(signal.ticker, 'Auto-trader skipped: $'+fmt2(limitPrice*100)+'/contract exceeds $'+s.budget+' budget', 'nogo');
       return;
     }
 
-    atLog(signal.ticker+': $'+fmt2(limitPrice)+'/contract \u2192 '+qty+' contract'+(qty>1?'s':'')+' ($'+actualCost+') [budget: $'+budget+', max contracts: '+maxContracts+']','');
+    atLog(signal.ticker+': $'+fmt2(limitPrice)+'/contract \u2192 '+qty+' contract'+(qty>1?'s':'')+' ($'+actualCost+') [budget: $'+s.budget+', max contracts: '+maxContracts+']','');
     var occSym = buildOccSym(signal.ticker,'CALL',optData.strike,optData.exp);
     var bid = optData.bid||limitPrice*0.98;
     var ask = optData.ask||limitPrice*1.02;
