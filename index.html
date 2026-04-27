@@ -5250,15 +5250,19 @@ function executeTsClose(p,closeMode,creds){
     tsLog(p.underlying+': cannot close \u2014 no API key or account ID','warn');return;
   }
   if(closeMode==='market'){
+    // Cap close qty using posOpenData — Tradier may report stale/doubled qty from prior sessions
+    var _pod=G.posOpenData&&G.posOpenData[p.symbol];
+    var closeQty=(_pod&&_pod.qty&&_pod.qty<Math.abs(p.qty))?_pod.qty:Math.abs(p.qty);
+    if(closeQty!==Math.abs(p.qty)) tsLog(p.underlying+': qty capped '+Math.abs(p.qty)+' → '+closeQty+' (posOpenData guard)','warn');
     // Market close
     var body='class=option'
       +'&symbol='+encodeURIComponent(p.underlying)
       +'&option_symbol='+encodeURIComponent(p.symbol)
       +'&side='+encodeURIComponent(side)
-      +'&quantity='+Math.abs(p.qty)
+      +'&quantity='+closeQty
       +'&type=market'
       +'&duration=day';
-    if(p.type==='STOCK')body='class=equity&symbol='+encodeURIComponent(p.underlying)+'&side=sell&quantity='+Math.abs(p.qty)+'&type=market&duration=day';
+    if(p.type==='STOCK')body='class=equity&symbol='+encodeURIComponent(p.underlying)+'&side=sell&quantity='+closeQty+'&type=market&duration=day';
     fetch(creds.host+'/v1/accounts/'+acct+'/orders',{
       method:'POST',
       headers:{Authorization:'Bearer '+creds.key,Accept:'application/json','Content-Type':'application/x-www-form-urlencoded'},
@@ -5286,7 +5290,10 @@ function executeTsClose(p,closeMode,creds){
       tsLog(p.underlying+': step close mid='+DS2+fmt2(mid)+' bid='+DS2+fmt2(b)+' ask='+DS2+fmt2(a)+' | step '+DS2+fmt2(stepSize)+' x'+maxAtt+' @ 3s','triggered');
       // Use market fallback — if all step fill limits are rejected (illiquid option),
       // a market order is the only way to guarantee the position closes.
-      runStepFill(creds,acct,p.symbol,p.underlying,side,Math.abs(p.qty),startPx,limitPx,stepSize,maxAtt,3,'down','market');
+      var _pod2=G.posOpenData&&G.posOpenData[p.symbol];
+      var _closeQty2=(_pod2&&_pod2.qty&&_pod2.qty<Math.abs(p.qty))?_pod2.qty:Math.abs(p.qty);
+      if(_closeQty2!==Math.abs(p.qty)) tsLog(p.underlying+': step close qty capped '+Math.abs(p.qty)+' → '+_closeQty2+' (posOpenData guard)','warn');
+      runStepFill(creds,acct,p.symbol,p.underlying,side,_closeQty2,startPx,limitPx,stepSize,maxAtt,3,'down','market');
       switchTab('order');
     })(bid, ask);
     if(creds){
