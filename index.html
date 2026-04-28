@@ -4670,8 +4670,9 @@ function fetchPositionsDirect(key,mode,host,acct){
             if(!pod.costBasis && p.cost){ pod.costBasis = p.cost||0; pod.qty = Math.abs(p.qty)||0; try{localStorage.setItem('rrjcar_pos_open',JSON.stringify(G.posOpenData));}catch(e){} }
           }
           // Attach open data + current underlying to position object
+          // Always sync openTs from posOpenData so hard stop DIT guard has accurate data
           var od = G.posOpenData[p.symbol]||{};
-          p.openTs = od.openTs||null;
+          p.openTs = od.openTs || p.dateAcquired || null;
           p.underlyingAtOpen = od.underlyingAtOpen||0;
           p.underlyingNow = uQuotes[p.underlying]||0;
         });
