@@ -5093,7 +5093,24 @@ async function runTsCheck(){
     // Skip if this position has no trailing stop enabled
     var cfg=getTsConfig(sym);
     if(!cfg.enabled)continue;
-    if(G.tsTriggered[sym])continue;
+    if(G.tsTriggered[sym]){
+      // Position still open after trigger — close order may have failed.
+      // After 90s, clear the flag so the poller can retry the close.
+      var _trigTs = G.tsTriggeredAt && G.tsTriggeredAt[sym];
+      var _elapsed = _trigTs ? (Date.now() - _trigTs) : Infinity;
+      if(_elapsed > 90000){
+        tsLog(p.underlying+': close not confirmed after 90s \u2014 retrying','warn');
+        delete G.tsTriggered[sym];
+        if(G.tsTriggeredAt) delete G.tsTriggeredAt[sym];
+        // Fall through to re-evaluate below
+      } else {
+        // Still within retry window — update peak so HIGH% stays current, then skip
+        if(!G.tsState[sym]) G.tsState[sym]={status:'triggered',peak:p.pnl,peakPct:p.pnlPct};
+        var _st = G.tsState[sym];
+        if(p.pnl > (_st.peak||0)){ _st.peak=p.pnl; _st.peakPct=p.pnlPct; }
+        continue;
+      }
+    }
 
     // Per-position settings
     var activateAt  = cfg.activate  || 50;
@@ -5131,6 +5148,8 @@ async function runTsCheck(){
     if(!G.tsTriggered[sym] && hardStopPct < 0 && ret <= hardStopPct && _ditDays >= 1){
       st.status='triggered';
       G.tsTriggered[sym]=true;
+      if(!G.tsTriggeredAt) G.tsTriggeredAt={};
+      G.tsTriggeredAt[sym]=Date.now();
       tsLog(p.underlying+': HARD STOP \u2014 loss '+fmt2(ret)+'% hit floor '+fmt2(hardStopPct)+'%','triggered');
       addAlert(p.underlying,'HARD STOP triggered \u2014 loss '+fmt2(ret)+'% | closing position','nogo');
       toast('\u26d4 Hard stop: '+p.underlying+' '+fmt2(ret)+'%');
@@ -5197,6 +5216,8 @@ async function runTsCheck(){
       if(pullback>=pullbackPct){
         st.status='triggered';
         G.tsTriggered[sym]=true;
+        if(!G.tsTriggeredAt) G.tsTriggeredAt={};
+        G.tsTriggeredAt[sym]=Date.now();
         tsLog(p.underlying+': TRIGGERED \u2014 pulled back '+fmt2(pullback)+'pp from peak +'+fmt2(st.peakPct)+'%','triggered');
         addAlert(p.underlying,'Trailing stop TRIGGERED \u2014 closing position','go');
         toast('\u26a1 Trail Stop triggered: '+p.underlying);
