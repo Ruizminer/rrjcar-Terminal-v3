@@ -4940,7 +4940,23 @@ function renderPositionsTable(pos,srcLabel){
       +'<td>$'+fmt2(p.last)+'</td>'
       +'<td class="'+pnlCls+'">'+(p.pnl>=0?'+':'')+fmtD(p.pnl)+'</td>'
       +'<td class="'+pnlCls+'">'+(p.pnlPct>=0?'+':'')+fmtP(p.pnlPct)+'</td>'
-      +'<td>'+trailBadge+'</td>'      +(function(){        var tgt=tsState.peakPct>0?tsState.peakPct/2:0;        var cur=p.pnlPct||0;        if(!tgt)return '<td style="color:var(--gry);font-size:10px;">--</td>';        var exceeded=cur>=tgt;        var clr=exceeded?'var(--grn)':'var(--ambb)';        return '<td style="color:'+clr+';font-weight:700;">+'+fmt2(tgt)+'%'+(exceeded?'<span style="font-size:9px;margin-left:3px;">&checkmark;</span>':'')+'</td>';      })()      +'<td>'+statusBadge+'</td>'
+      +'<td>'+trailBadge+'</td>'
+      +(function(){
+        var _pull = cfg.pullback || 3;
+        var _act  = cfg.activate || 6;
+        if(tsState.status==='armed'||tsState.status==='triggered'){
+          var _trigAt = tsState.peakPct - _pull;
+          var _hit = p.pnlPct <= _trigAt;
+          var _clr = _hit?'var(--red)':'var(--grn)';
+          return '<td style="color:'+_clr+';font-weight:700;">'+fmt2(_trigAt)+'%<span style="font-size:9px;margin-left:3px;color:var(--gry);">trail</span></td>';
+        }
+        if(tsState.status==='watching'||tsState.status==='inactive'){
+          var _exceeded = (p.pnlPct||0) >= _act;
+          return '<td style="color:'+(_exceeded?'var(--grn)':'var(--ambb)')+';font-weight:700;">+'+fmt2(_act)+'%'+(_exceeded?'<span style="font-size:9px;margin-left:3px;">&#x2713;</span>':'')+'</td>';
+        }
+        return '<td style="color:var(--gry);font-size:10px;">--</td>';
+      })()
+      +'<td>'+statusBadge+'</td>'
       +'<td><button class="cbtn" onclick="doClose(this)">CLOSE</button></td>'
       +'<td><button class="btn ts-enable-btn" style="'+(cfgEnabled?'border-color:var(--grn);color:var(--grn);':'')+'" '
         +'onclick="toggleTsRow(\''+sym+'\')">\u25b4 TRAIL</button></td>'
