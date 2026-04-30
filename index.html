@@ -5155,6 +5155,14 @@ async function runTsCheck(){
     if(!G.tsState[sym])G.tsState[sym]={status:'inactive',peak:p.pnl,peakPct:ret};
     var st=G.tsState[sym];
 
+    // Stale triggered state: status='triggered' but not in G.tsTriggered means the close
+    // was never attempted this session (state restored from localStorage without a live close order).
+    // Reset to 'armed' so the armed block fires immediately and submits the close.
+    if(st.status==='triggered' && !G.tsTriggered[sym]){
+      tsLog(p.underlying+': stale triggered \u2014 resetting to armed','warn');
+      st.status='armed';
+    }
+
     // HARD STOP — fires regardless of trail stop status, independent of armed/watching state
     // Threshold from global default (per-position override not needed — this is always a floor)
     // DIT guard: don't fire on day 0 — spread slippage at open can look like a −25% loss
