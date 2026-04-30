@@ -5287,6 +5287,11 @@ function executeTsClose(p,closeMode,creds){
   if(!acct||!creds){
     tsLog(p.underlying+': cannot close \u2014 no API key or account ID','warn');return;
   }
+  // Re-stamp tsTriggeredAt so the 90s retry window resets from THIS close attempt.
+  // Without this, the retry loop fires every 90s regardless of whether a close just ran.
+  G.tsTriggered[p.symbol] = true;
+  if(!G.tsTriggeredAt) G.tsTriggeredAt = {};
+  G.tsTriggeredAt[p.symbol] = Date.now();
   if(closeMode==='market'){
     // Cap close qty using posOpenData — Tradier may report stale/doubled qty from prior sessions
     var _pod=G.posOpenData&&G.posOpenData[p.symbol];
@@ -7177,7 +7182,7 @@ function updateHeaderQuotes(){
 //  SETTINGS PERSISTENCE
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
-var APP_VERSION = '3.6';
+var APP_VERSION = '3.7';
 var FMP_KEY_DEFAULT = 'IPvsKpxwgJfimD4BIjF5ntLiNGuAPrqQ'; // shared team key \u2014 individual keys override via API tab
 
 function saveAppSettings(){
