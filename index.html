@@ -5184,7 +5184,11 @@ async function runTsCheck(){
         G_AT.openedToday[p.underlying+'_ts'] = Date.now();
         saveAutoTraderState();
       }
-      executeTsClose(p,closeMode,creds);
+      if(isMarketHours()){
+        executeTsClose(p,closeMode,creds);
+      } else {
+        tsLog(p.underlying+': HARD STOP armed \u2014 outside market hours, will close at open','warn');
+      }
       continue;
     }
 
@@ -5251,7 +5255,11 @@ async function runTsCheck(){
           G_AT.openedToday[p.underlying+'_ts'] = Date.now();
           saveAutoTraderState();
         }
-        executeTsClose(p,closeMode,creds);
+        if(isMarketHours()){
+          executeTsClose(p,closeMode,creds);
+        } else {
+          tsLog(p.underlying+': trail stop armed \u2014 outside market hours, will close at open','warn');
+        }
       }
     }
   }
