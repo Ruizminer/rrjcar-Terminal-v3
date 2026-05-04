@@ -6686,7 +6686,7 @@ function getAutoTraderSettings(){
       budget:       +(s.budget       || (eid('at-budget')        ? eid('at-budget').value        : 0) || 500),
       maxContracts: +(s.maxContracts || (eid('at-max-contracts') ? eid('at-max-contracts').value : 0) || 3),
       dailyLoss:    +(s.dailyLoss    || (eid('at-daily-loss')     ? eid('at-daily-loss').value    : 0) || 500),
-      minScore:       +(s.minScore       || (eid('at-min-score')        ? eid('at-min-score').value       : 0) || 120),
+      minScore:       +(s.minScore != null && s.minScore > 0 ? s.minScore : (eid('at-min-score') ? eid('at-min-score').value : 120)) || 120,
       hoursGate:      s.hoursGate !== false,
       maxPositions:   +(s.maxPositions   || (eid('at-max-positions')   ? eid('at-max-positions').value   : 0) || 3),
       marketFallback: !!s.marketFallback,
@@ -6883,6 +6883,13 @@ function atExecuteTrade(signal, budget){
   var creds=getTradierCreds();
   var acct=G.acctId||localStorage.getItem('rrjcar_acct')||'';
   if(!creds||!acct){ atLog('No API key/account \u2014 cannot execute','err'); return; }
+  // Hard minScore gate — re-read settings fresh in case they changed since candidate was built
+  var _s = getAutoTraderSettings();
+  if(signal.score < _s.minScore){
+    atLog(signal.ticker+': BLOCKED \u2014 score '+signal.score+' < minScore '+_s.minScore+' (settings may have changed)','warn');
+    addAlert(signal.ticker,'Auto-trader blocked: score '+signal.score+' below minScore '+_s.minScore,'nogo');
+    return;
+  }
   // Guard: if openedToday already has this ticker (set by a prior cycle still in-flight), abort.
   // This is the primary double-entry prevention — must check BEFORE setting inFlightTickers.
   if(G_AT.openedToday[signal.ticker]){
