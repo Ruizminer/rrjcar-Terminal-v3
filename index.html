@@ -2821,7 +2821,7 @@ function fetchOptionContract(ticker,simPrice,callback,monthFilter){
          return Math.abs(o.strike-price)<Math.abs(best-price)?o.strike:best;
        }, calls[0].strike);
 
-       // +/-10 strike window
+       // +/-10 strike window — unchanged, OTM strikes remain eligible
        var strikesSorted = calls.map(function(o){return o.strike;})
          .filter(function(v,i,a){return a.indexOf(v)===i;})
          .sort(function(a,b){return a-b;});
@@ -2833,27 +2833,56 @@ function fetchOptionContract(ticker,simPrice,callback,monthFilter){
 
        calls.forEach(function(o){
          if(!strikeSet[o.strike]) return;
-         candidates.push({opt:o, expDate:chain.expDate, dte:chain.dte, atmStrike:atmStrike, vol:o.volume||0});
+
+         // Spread gate: reject contracts where bid/ask spread > 20% of mid.
+         // Prevents entering contracts where slippage consumes the trade immediately.
+         var _mid = (o.bid+o.ask)/2;
+         var _spread = o.ask-o.bid;
+         var _spreadPct = _mid>0 ? (_spread/_mid*100) : 999;
+         if(_spreadPct > 20) return;
+
+         // Delta proximity weight: scales raw volume so extreme OTM speculation
+         // volume can't override a genuinely liquid near-money contract.
+         // Volume is still the primary driver — this just applies a multiplier
+         // that reflects how useful the contract actually is for directional trades.
+         // delta 0.30-0.55 = 1.0× (ideal range, no penalty)
+         // delta 0.20-0.29 = 0.75× (mild OTM — still viable)
+         // delta 0.10-0.19 = 0.45× (extended OTM — volume must be significantly higher to win)
+         // delta 0.02-0.09 = 0.15× (deep OTM lottery — needs overwhelming volume to be selected)
+         var d = Math.abs(o.greeks.delta);
+         var dWt = d >= 0.30 ? 1.0 : d >= 0.20 ? 0.75 : d >= 0.10 ? 0.45 : 0.15;
+         var rawVol = (o.volume||0) > 0 ? o.volume : (o.open_interest||0) * 0.05; // use OI proxy if no vol
+         var weightedVol = rawVol * dWt;
+
+         candidates.push({
+           opt:o, expDate:chain.expDate, dte:chain.dte, atmStrike:atmStrike,
+           vol:o.volume||0, weightedVol:weightedVol, delta:d, spreadPct:_spreadPct
+         });
        });
      });
 
      if(!candidates.length){callback(null);return;}
 
-     // Prefer primary window candidates unless month filter active
+     // Prefer primary DTE window unless month filter active
      var pool;
      if(monthFilter){
-       pool = candidates; // all candidates are already in the target month
+       pool = candidates;
      } else {
-       var primaryCands = candidates.filter(function(c){ return c.dte>10&&c.dte<35; });
+       var primaryCands = candidates.filter(function(c){ return c.dte>=21&&c.dte<=45; });
+       // Fallback: widen to 14-60 if primary window empty
+       if(!primaryCands.length) primaryCands = candidates.filter(function(c){ return c.dte>=14&&c.dte<=60; });
        pool = primaryCands.length ? primaryCands : candidates;
-       var withVol = pool.filter(function(c){ return c.vol>0; });
-       if(withVol.length) pool = withVol;
+       // Prefer candidates with real volume; fall back to OI-proxy if none
+       var withRealVol = pool.filter(function(c){ return c.vol>0; });
+       if(withRealVol.length) pool = withRealVol;
      }
 
-     // Sort: primary=volume desc, tie-break within 20%=shorter DTE
+     // Sort: delta-weighted volume desc, tie-break within 20% = shorter DTE
+     // Volume remains the primary signal — delta weight reins in extreme OTM
+     // without excluding OTM strikes from consideration entirely.
      pool.sort(function(a,b){
-       var vA = a.vol>0?a.vol:(a.opt.open_interest||0);
-       var vB = b.vol>0?b.vol:(b.opt.open_interest||0);
+       var vA = a.weightedVol;
+       var vB = b.weightedVol;
        var tied = Math.abs(vA-vB)/(Math.max(vA,vB)||1) <= 0.20;
        if(tied) return a.dte-b.dte;
        return vB-vA;
@@ -2887,8 +2916,11 @@ function fetchOptionContract(ticker,simPrice,callback,monthFilter){
        livePrice:  price,
        live:       true,
        atmStrike:  winner.atmStrike,
-       tierUsed:   monthFilter ? 'month-filter' : 'vol-rank',
+       tierUsed:   monthFilter ? 'month-filter' : 'delta-vol-rank',
        monthFilter: monthFilter || null,
+       selDelta:   winner.delta,
+       selSpreadPct: +winner.spreadPct.toFixed(1),
+       selWeightedVol: Math.round(winner.weightedVol),
        _pool:      pool
      });
    }).catch(function(){callback(null);});
@@ -7021,7 +7053,12 @@ function atExecuteTrade(signal, budget){
       return;
     }
 
-    atLog(signal.ticker+': $'+fmt2(limitPrice)+'/contract \u2192 '+qty+' contract'+(qty>1?'s':'')+' ($'+actualCost+') [budget: $'+s.budget+', max contracts: '+maxContracts+']','');
+    atLog(signal.ticker+': $'+fmt2(limitPrice)+'/contract \u2192 '+qty+' contract'+(qty>1?'s':'')+' ($'+actualCost+')'
+      +' | strike $'+optData.strike+' \u0394'+fmt2(optData.selDelta||optData.delta)
+      +' spread '+fmt2(optData.selSpreadPct||optData.spreadPct)+'%'
+      +' DTE '+optData.dte
+      +(optData.selWeightedVol?' wVol '+optData.selWeightedVol:'')
+      +' [budget: $'+s.budget+', max: '+maxContracts+']','');
     var occSym = buildOccSym(signal.ticker,'CALL',optData.strike,optData.exp);
     var bid = optData.bid||limitPrice*0.98;
     var ask = optData.ask||limitPrice*1.02;
