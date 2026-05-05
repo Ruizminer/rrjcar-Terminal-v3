@@ -4667,7 +4667,11 @@ function fetchPositionsDirect(key,mode,host,acct){
           } else {
             // Patch missing costBasis/qty on entries created before this field was added
             var pod = G.posOpenData[p.symbol];
-            if(!pod.costBasis && p.cost){ pod.costBasis = p.cost||0; pod.qty = Math.abs(p.qty)||0; try{localStorage.setItem('rrjcar_pos_open',JSON.stringify(G.posOpenData));}catch(e){} }
+            var podChanged = false;
+            if(!pod.costBasis && p.cost){ pod.costBasis = p.cost||0; pod.qty = Math.abs(p.qty)||0; podChanged = true; }
+            // Patch missing underlyingAtOpen — use current quote as best available approximation
+            if(!pod.underlyingAtOpen && uQuotes[p.underlying]){ pod.underlyingAtOpen = uQuotes[p.underlying]; podChanged = true; }
+            if(podChanged){ try{localStorage.setItem('rrjcar_pos_open',JSON.stringify(G.posOpenData));}catch(e){} }
           }
           // Attach open data + current underlying to position object
           // Always sync openTs from posOpenData so hard stop DIT guard has accurate data
