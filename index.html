@@ -3121,24 +3121,104 @@ function scoreIt(ticker, ind, opt){
   // Above 200 EMA
   var ema200Ok = ind.ema200 > 0 ? ind.price > ind.ema200 : ind.ema20 > ind.ema50; // fallback if 200 not available
 
-  var techChecks = [
-    {ok:rsiOk,   n:'RSI 40-70',        val:'RSI '+ind.rsi,                                          pts:8},
-    {ok:macdOk,  n:'MACD Hist +',      val:''+(ind.macd>=0?'+':'')+ind.macd,                        pts:10},
-    {ok:adxOk,   n:'ADX > 25',         val:'ADX '+ind.adx,                                          pts:8},
-    {ok:emaOk,   n:'EMA20 > EMA50',    val:'$'+fmt2(ind.ema20)+' > $'+fmt2(ind.ema50),              pts:10},
-    {ok:volOk,   n:'Vol > Avg',        val:fmtK(ind.vol)+' > '+fmtK(ind.avgVol),                   pts:8},
-    {ok:tfOk,    n:'TF Aligned 2/3',   val:ind.tf+'/3',                                             pts:12},
-    {ok:sectOk,  n:'Sector PF > 2',    val:'PF '+pf,                                               pts:5},
-    // Momentum Quality rules (Tradier-derived)
-    {ok:hiOk,    n:'52Wk Hi Prox <15%',val:ind.week52hi>0?'$'+fmt2(ind.price)+' / $'+fmt2(ind.week52hi):'no data', pts:10},
-    {ok:rsRelOk, n:'RS > SPY (5d)',    val:ind.relStr5d>0?'+'+ind.relStr5d.toFixed(2)+'%':ind.relStr5d.toFixed(2)+'%', pts:8},
-    {ok:accelOk, n:'Price Accel',      val:(ind.changePct>=0?'+':'')+ind.changePct.toFixed(2)+'% vs '+ind.avgChangePct5d.toFixed(2)+'%avg', pts:7},
-    {ok:ema200Ok,n:'Price > EMA200',   val:ind.ema200>0?'$'+fmt2(ind.price)+' > $'+fmt2(ind.ema200):'via EMA trend', pts:6}
-  ];
-  techChecks.forEach(function(c){
-    if(c.ok){ score += c.pts; techScore += c.pts; }
-    res.push({n:c.n, pass:c.ok, val:c.val, filter:false, pts:c.pts});
-  });
+  // ── CONTINUOUS SCORING HELPERS ────────────────────────────────────────────────
+  // Scale a value within a range to a 0–1 curve (linear)
+  function scalePts(val, lo, hi, maxPts){
+    if(val <= lo) return 0;
+    if(val >= hi) return maxPts;
+    return +(((val-lo)/(hi-lo))*maxPts).toFixed(1);
+  }
+  // Score RSI on a curve — best at center (55), penalised near boundaries
+  function rsiScore(rsi, maxPts){
+    if(rsi < 35 || rsi > 75) return 0;
+    var dist = Math.abs(rsi - 55); // 0=perfect, 20=boundary
+    return +Math.max(0, maxPts - (dist/20)*maxPts).toFixed(1);
+  }
+
+  // ── GAP-UP MODIFIER ───────────────────────────────────────────────────────────
+  // Measures gap severity and whether price is still continuing above the open.
+  // Net effect ranges from −10 (stalled extreme gap) to 0 (no/mild gap or continuation).
+  var gapPct      = ind.changePct || 0;
+  var avg5d       = Math.abs(ind.avgChangePct5d) > 0.1 ? Math.abs(ind.avgChangePct5d) : 0.5;
+  var gapRatio    = gapPct / avg5d;                       // how many times the average daily move
+  var aboveOpen   = ind.openPx > 0 ? ind.price > ind.openPx * 1.002 : false; // still running +0.2% above open
+  var gapPenalty  = 0;
+  var gapLabel    = 'no gap';
+  if(gapPct > 5 || gapRatio > 5){
+    // Extreme gap: heavy penalty, reduced if still trending
+    gapPenalty = aboveOpen ? -6 : -12;
+    gapLabel   = 'extreme gap '+(gapPct>=0?'+':'')+gapPct.toFixed(1)+'%'+(aboveOpen?' (continuing)':' (stalled)');
+  } else if(gapRatio > 3 || gapPct > 3){
+    // Strong gap: moderate penalty, removed if continuing
+    gapPenalty = aboveOpen ? -2 : -7;
+    gapLabel   = 'strong gap '+(gapPct>=0?'+':'')+gapPct.toFixed(1)+'%'+(aboveOpen?' (continuing)':' (stalled)');
+  } else if(gapRatio > 1.5 || gapPct > 1.5){
+    // Moderate gap: small penalty if stalled, none if continuing
+    gapPenalty = aboveOpen ? 0 : -3;
+    gapLabel   = 'moderate gap '+(gapPct>=0?'+':'')+gapPct.toFixed(1)+'%'+(aboveOpen?' (continuing)':' (fading)');
+  }
+  if(gapPenalty !== 0){ score += gapPenalty; }
+  var gapPass = gapPenalty > -6; // show as pass if penalty is mild
+  res.push({n:'Gap-up filter', pass:gapPass, val:gapLabel+(gapPenalty!==0?' ('+gapPenalty+'pts)':''), filter:false, pts:0, isGap:true});
+
+  // ── CONTINUOUS TECH SCORING ───────────────────────────────────────────────────
+  // RSI: continuous curve centred at 55, max 8pts
+  var rsiPts  = rsiScore(ind.rsi, 8);
+  var rsiPass = rsiPts >= 4;
+  score += rsiPts; techScore += rsiPts;
+  res.push({n:'RSI 40-70', pass:rsiPass, val:'RSI '+ind.rsi+' ('+rsiPts.toFixed(1)+'pts)', filter:false, pts:8});
+
+  // MACD: binary — signal quality matters more than magnitude
+  if(macdOk){ score += 10; techScore += 10; }
+  res.push({n:'MACD Hist +', pass:macdOk, val:''+(ind.macd>=0?'+':'')+ind.macd, filter:false, pts:10});
+
+  // ADX: continuous linear 22→40, max 8pts
+  var adxPts  = scalePts(ind.adx, 22, 40, 8);
+  var adxPass = ind.adx > 25;
+  score += adxPts; techScore += adxPts;
+  res.push({n:'ADX > 25', pass:adxPass, val:'ADX '+ind.adx+' ('+adxPts.toFixed(1)+'pts)', filter:false, pts:8});
+
+  // EMA20 > EMA50: binary — crossover is structural
+  if(emaOk){ score += 10; techScore += 10; }
+  res.push({n:'EMA20 > EMA50', pass:emaOk, val:'$'+fmt2(ind.ema20)+' > $'+fmt2(ind.ema50), filter:false, pts:10});
+
+  // Vol > Avg: continuous ratio 1.0×→2.5×, max 8pts
+  var volRatio = ind.avgVol > 0 ? ind.vol / ind.avgVol : 1;
+  var volPts   = scalePts(volRatio, 0.8, 2.5, 8);
+  var volPass  = ind.vol > ind.avgVol;
+  score += volPts; techScore += volPts;
+  res.push({n:'Vol > Avg', pass:volPass, val:fmtK(ind.vol)+' / '+fmtK(ind.avgVol)+' ('+volPts.toFixed(1)+'pts)', filter:false, pts:8});
+
+  // TF Aligned: tiered 4/8/12 pts for 1/2/3 of 3
+  var tfPts = ind.tf === 3 ? 12 : ind.tf === 2 ? 8 : ind.tf === 1 ? 4 : 0;
+  score += tfPts; techScore += tfPts;
+  res.push({n:'TF Aligned 2/3', pass:ind.tf >= 2, val:ind.tf+'/3 ('+tfPts+'pts)', filter:false, pts:12});
+
+  // Sector PF: binary
+  if(sectOk){ score += 5; techScore += 5; }
+  res.push({n:'Sector PF > 2', pass:sectOk, val:'PF '+pf, filter:false, pts:5});
+
+  // 52Wk Hi Proximity: continuous — closer to 52wk hi scores higher, max 10pts
+  var hiPct  = ind.week52hi > 0 ? ((ind.price - ind.week52hi * 0.85) / (ind.week52hi * 0.15)) : 0;
+  var hiPts  = ind.week52hi > 0 ? scalePts(hiPct, 0, 1, 10) : 0;
+  score += hiPts; techScore += hiPts;
+  res.push({n:'52Wk Hi Prox <15%', pass:hiOk, val:ind.week52hi>0?'$'+fmt2(ind.price)+' / $'+fmt2(ind.week52hi)+' ('+hiPts.toFixed(1)+'pts)':'no data', filter:false, pts:10});
+
+  // RS > SPY: continuous — stronger outperformance scores higher, max 8pts
+  var rsPts = ind.relStr5d > 0 ? scalePts(ind.relStr5d, 0, 3, 8) : 0;
+  score += rsPts; techScore += rsPts;
+  res.push({n:'RS > SPY (5d)', pass:rsRelOk, val:(ind.relStr5d>=0?'+':'')+ind.relStr5d.toFixed(2)+'% ('+rsPts.toFixed(1)+'pts)', filter:false, pts:8});
+
+  // Price Accel: continuous — moderate acceleration good, extreme = gap-up risk already penalised above
+  // Only add pts for healthy acceleration (1×–2.5× avg); extreme handled by gap penalty
+  var accelRatio = avg5d > 0 ? gapPct / avg5d : 0;
+  var accelPts   = accelRatio > 0 ? scalePts(Math.min(accelRatio, 2.5), 0, 2.5, 7) : 0;
+  score += accelPts; techScore += accelPts;
+  res.push({n:'Price Accel', pass:accelOk, val:(ind.changePct>=0?'+':'')+ind.changePct.toFixed(2)+'% vs '+ind.avgChangePct5d.toFixed(2)+'%avg ('+accelPts.toFixed(1)+'pts)', filter:false, pts:7});
+
+  // EMA200: binary — structural trend
+  if(ema200Ok){ score += 6; techScore += 6; }
+  res.push({n:'Price > EMA200', pass:ema200Ok, val:ind.ema200>0?'$'+fmt2(ind.price)+' > $'+fmt2(ind.ema200):'via EMA trend', filter:false, pts:6});
 
   // \u2500\u2500 SECTION B: FMP Daily Signals (2 rules, 20 pts) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
   var analystOk = fmp ? fmp.analystRevisionsOk : false;
@@ -3842,7 +3922,8 @@ async function fetchDynamicUniverse(key, mode){
       // v3.5 momentum quality fields from Tradier bulk quote
       week52hi: parseFloat(q.week_52_high) || 0,
       week52lo: parseFloat(q.week_52_low) || 0,
-      changePct5d: changePct // today's change as proxy; relative strength computed vs SPY below
+      changePct5d: changePct, // today's change as proxy; relative strength computed vs SPY below
+      openPx: parseFloat(q.open) || 0,  // intraday open price for gap-up continuation signal
     });
   });
 
@@ -3955,7 +4036,8 @@ function runScan(){
         week52hi: u.week52hi || 0,
         relStr5d: u.relStr5d || 0,
         changePct: u.changePct || 0,
-        avgChangePct5d: u.avgChangePct5d || 0
+        avgChangePct5d: u.avgChangePct5d || 0,
+        openPx: u.openPx || 0,  // intraday open price for gap-up continuation
       };
 
       // Use simulated options as placeholder \u2014 real options fetched on detail click
