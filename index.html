@@ -3316,15 +3316,15 @@ function scoreIt(ticker, ind, opt){
   res.push({n:'GEX Call Heavy', pass:gexCallHeavy, val:gexVal, filter:false, pts:6, isGex:true});
 
   // \u2500\u2500 GO DECISION \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  var total = clamp(score, 0, 150); // 144 base + 6 GEX bonus
+  var total = Math.round(clamp(score, 0, 150)); // round — continuous rules produce decimal intermediates
   var isGo  = total >= 110 && !avoidBad;
 
   return {
     score:      total,
-    techScore:  clamp(techScore, 0, 85),
-    fundScore:  clamp(fundScore, 0, 20),
+    techScore:  Math.round(clamp(techScore, 0, 85)),
+    fundScore:  Math.round(clamp(fundScore, 0, 20)),
     isGo:       isGo,
-    filtersPass:true, // no hard filters in v3.5 \u2014 options evaluated downstream
+    filtersPass:true, // no hard filters in v3.5 — options evaluated downstream
     rules:      res,
     passes:     res.filter(function(r){ return r.pass; }).length
   };
