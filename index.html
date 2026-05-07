@@ -2420,6 +2420,14 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
       // Check fallback setting — use explicit param if provided, otherwise read DOM (manual use)
       var fallback = (fallbackMode !== undefined) ? fallbackMode : (eid('sf-fallback') ? eid('sf-fallback').value : 'none');
       if(fallback==='market'){
+        // Market hours gate: don't submit market fallback outside trading hours.
+        // The step fill may have started within hours but the fallback fires after 11 attempts
+        // (~165s later) which can push past close. Sandbox market orders fill after hours,
+        // causing unexpected closes. If outside hours, log and let the 90s retry handle it.
+        if(!isMarketHours()){
+          sfLog(sym+': market fallback suppressed — outside market hours (will retry at open)','warn');
+          break;
+        }
         // Budget guard: re-check qty at current price before market order (price may have moved since limit calc)
         var mktQty = qty;
         if(side === 'buy_to_open'){
@@ -7355,7 +7363,7 @@ function updateHeaderQuotes(){
 //  SETTINGS PERSISTENCE
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
-var APP_VERSION = '3.7';
+var APP_VERSION = '3.8';
 var FMP_KEY_DEFAULT = 'IPvsKpxwgJfimD4BIjF5ntLiNGuAPrqQ'; // shared team key \u2014 individual keys override via API tab
 
 function saveAppSettings(){
