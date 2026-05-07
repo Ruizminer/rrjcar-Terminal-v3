@@ -2786,12 +2786,29 @@ function fetchOptionContract(ticker,simPrice,callback,monthFilter){
      validExps = dates.filter(function(d){ return d.slice(0,7) === monthFilter; });
      if(!validExps.length){callback(null);return;}
    } else {
-     // Default mode: 10-35 calendar DTE window
-     validExps = dates.filter(function(d){ var cd=calDays(d); return cd>10&&cd<35; });
-     // Fallback: widen to 7-50
-     if(!validExps.length) validExps = dates.filter(function(d){ var cd=calDays(d); return cd>7&&cd<50; });
-     // Last resort: any future
-     if(!validExps.length) validExps = dates.filter(function(d){ return calDays(d)>0; });
+     // Standard monthly helper: returns true if date is the 3rd Friday of its month.
+     // Tradier sandbox returns weeklies + monthlies — weeklies often have no liquid contracts.
+     // Prefer standard monthlies to avoid non-standard expiries like June 30 that may not exist.
+     function isStdMonthly(dateStr){
+       var d = new Date(dateStr+'T12:00:00Z');
+       if(d.getDay() !== 5) return false; // must be Friday
+       var day = d.getUTCDate();
+       return day >= 15 && day <= 21;     // 3rd Friday always falls 15-21
+     }
+
+     var allFuture = dates.filter(function(d){ return calDays(d) > 0; });
+
+     // Primary: standard monthlies in 21-45 DTE
+     validExps = allFuture.filter(function(d){ var cd=calDays(d); return cd>=21&&cd<=45 && isStdMonthly(d); });
+     // Fallback 1: any expiry (incl weeklies) in 21-45 DTE
+     if(!validExps.length) validExps = allFuture.filter(function(d){ var cd=calDays(d); return cd>=21&&cd<=45; });
+     // Fallback 2: standard monthlies in 14-60 DTE
+     if(!validExps.length) validExps = allFuture.filter(function(d){ var cd=calDays(d); return cd>=14&&cd<=60 && isStdMonthly(d); });
+     // Fallback 3: any expiry in 14-60 DTE
+     if(!validExps.length) validExps = allFuture.filter(function(d){ var cd=calDays(d); return cd>=14&&cd<=60; });
+     // Last resort: nearest standard monthly
+     if(!validExps.length) validExps = allFuture.filter(isStdMonthly).slice(0,2);
+     if(!validExps.length) validExps = allFuture.slice(0,2);
      if(!validExps.length){callback(null);return;}
    }
 
@@ -2889,6 +2906,16 @@ function fetchOptionContract(ticker,simPrice,callback,monthFilter){
      });
 
      var winner=pool[0];
+
+     // Minimum liquidity gate: if the top candidate has no volume AND no open interest
+     // it's a non-existent or illiquid contract (e.g. a weekly with no market).
+     // Try next candidates until one has real liquidity, or fall back to best available.
+     for(var _wi=0; _wi<pool.length; _wi++){
+       var _c = pool[_wi];
+       if((_c.vol > 0) || (_c.opt.open_interest > 0)){ winner = _c; break; }
+       if(_wi === pool.length-1){ winner = pool[0]; } // all empty — use first anyway
+     }
+
      var chosen=winner.opt;
      var mid=(chosen.bid+chosen.ask)/2;
      var spread=chosen.ask-chosen.bid;
