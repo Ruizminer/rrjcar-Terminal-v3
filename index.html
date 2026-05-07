@@ -4938,6 +4938,23 @@ function saveTsConfig(sym){
   toast('Trail stop saved for '+sym);
 }
 
+function toggleManualMode(sym){
+  if(!G.posOpenData[sym]) G.posOpenData[sym] = {};
+  var wasManual = !!G.posOpenData[sym].manualMode;
+  G.posOpenData[sym].manualMode = !wasManual;
+  try{ localStorage.setItem('rrjcar_pos_open', JSON.stringify(G.posOpenData)); }catch(e){}
+  var ul = (G.positions.find(function(p){ return p.symbol===sym; })||{}).underlying||sym;
+  if(G.posOpenData[sym].manualMode){
+    addAlert(ul,'Manual mode ON \u2014 trail stop and hard stop disabled for this position','warn');
+    toast('\u270b '+ul+': manual mode ON');
+  } else {
+    addAlert(ul,'Manual mode OFF \u2014 automated exits re-enabled','go');
+    toast('\u1f916 '+ul+': auto mode restored');
+  }
+  // Re-render positions table to update button state
+  if(G.positions && G.positions.length) renderPositionsTable(G.positions, document.getElementById('pos-src')?.textContent||'');
+}
+
 function toggleTsRow(sym){
   var cfgRow = document.getElementById('tscfg-'+sym);
   if(!cfgRow) return;
@@ -5111,6 +5128,12 @@ function renderPositionsTable(pos,srcLabel){
       })()
       +'<td>'+statusBadge+'</td>'
       +'<td><button class="cbtn" onclick="doClose(this)">CLOSE</button></td>'
+      +(function(){
+        var isManual = G.posOpenData && G.posOpenData[sym] && G.posOpenData[sym].manualMode;
+        return '<td><button class="btn" style="font-size:10px;padding:3px 8px;'+(isManual?'border-color:var(--amb3);color:var(--ambb);background:var(--amb0);':'')+'" '
+          +'title="Toggle manual mode: disables trail stop and hard stop for this position" '
+          +'onclick="toggleManualMode(\''+sym+'\')">'+(isManual?'\u270b MANUAL':'\u1f916 AUTO')+'</button></td>';
+      })()
       +'<td><button class="btn ts-enable-btn" style="'+(cfgEnabled?'border-color:var(--grn);color:var(--grn);':'')+'" '
         +'onclick="toggleTsRow(\''+sym+'\')">\u25b4 TRAIL</button></td>'
       +'<td><button class="btn" style="font-size:10px;padding:3px 8px;border-color:var(--blu3);color:var(--blub);" '
@@ -5263,6 +5286,8 @@ async function runTsCheck(){
     // Skip if this position has no trailing stop enabled
     var cfg=getTsConfig(sym);
     if(!cfg.enabled)continue;
+    // Skip positions in manual mode — user has disabled automated exits for this position
+    if(G.posOpenData && G.posOpenData[sym] && G.posOpenData[sym].manualMode) continue;
     if(G.tsTriggered[sym]){
       // Position still open after trigger — close order may have failed.
       // After 90s, clear the flag so the poller can retry the close.
