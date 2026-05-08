@@ -4828,6 +4828,15 @@ function fetchPositionsDirect(key,mode,host,acct){
           p.openTs = od.openTs || p.dateAcquired || null;
           p.underlyingAtOpen = od.underlyingAtOpen||0;
           p.underlyingNow = uQuotes[p.underlying]||0;
+          // Seed tsState for new positions so HIGH% starts tracking immediately
+          // even if the trail stop poller hasn't run yet (e.g. poller is off)
+          if(!G.tsState[p.symbol]){
+            G.tsState[p.symbol] = {status:'watching', peak:p.pnl||0, peakPct:p.pnlPct||0};
+          } else if((p.pnlPct||0) > (G.tsState[p.symbol].peakPct||0)){
+            // Update peak if current P&L exceeds recorded peak (catches up after page reload)
+            G.tsState[p.symbol].peak    = p.pnl||0;
+            G.tsState[p.symbol].peakPct = p.pnlPct||0;
+          }
         });
         G.positions=pos;renderPositionsTable(pos,mode==='live'?'[TRADIER LIVE]':' [TRADIER SANDBOX]');fetchBalances();
         // Restore trail stop poller if it was active before page reload
