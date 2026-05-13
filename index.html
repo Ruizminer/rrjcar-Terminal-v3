@@ -3131,8 +3131,15 @@ async function fetchCalendarData(tickers){
   var base = 'https://financialmodelingprep.com/stable';
   var today = new Date().toISOString().slice(0,10);
 
-  // Only fetch tickers not already in today's cache
-  var needed = tickers.filter(function(t){ return !G_CAL_CACHE[t]; });
+  // Only fetch tickers not already in today's cache with valid data
+  // Retry if both earnings and exDiv are null (previous fetch may have failed or used wrong endpoint)
+  var needed = tickers.filter(function(t){
+    var c = G_CAL_CACHE[t];
+    if(!c) return true;                              // not cached at all
+    if(c.fetched !== today) return true;             // stale date
+    if(c.earnings === null && c.exDiv === null) return true; // cached nulls — retry
+    return false;
+  });
   if(!needed.length) return;
 
   for(var i=0; i<needed.length; i++){
