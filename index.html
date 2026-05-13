@@ -3093,6 +3093,45 @@ function calcMACD(days){
   return +(ema12 - ema26).toFixed(4);
 }
 
+function calcRSI(days, period){
+  // Wilder's RSI — requires period+1 bars minimum
+  period = period || 14;
+  if(!days || days.length < period+1) return 50;
+  var closes = days.map(function(d){ return parseFloat(d.close); });
+  var gains = 0, losses = 0;
+  for(var i = closes.length - period; i < closes.length; i++){
+    var chg = closes[i] - closes[i-1];
+    if(chg >= 0) gains += chg; else losses -= chg;
+  }
+  var avgG = gains / period, avgL = losses / period;
+  if(avgL === 0) return 100;
+  var rs = avgG / avgL;
+  return +Math.round(100 - 100 / (1 + rs));
+}
+
+function calcADX(days, period){
+  // Simplified ADX — requires 2×period bars minimum
+  period = period || 14;
+  if(!days || days.length < period*2) return 30;
+  var recent = days.slice(-period*2);
+  var trSum = 0, dmPSum = 0, dmMSum = 0;
+  for(var i = 1; i < recent.length; i++){
+    var hi = parseFloat(recent[i].high), lo = parseFloat(recent[i].low), cls = parseFloat(recent[i-1].close);
+    var tr = Math.max(hi-lo, Math.abs(hi-cls), Math.abs(lo-cls));
+    var upMove = hi - parseFloat(recent[i-1].high);
+    var downMove = parseFloat(recent[i-1].low) - lo;
+    trSum += tr;
+    if(upMove > downMove && upMove > 0) dmPSum += upMove;
+    if(downMove > upMove && downMove > 0) dmMSum += downMove;
+  }
+  if(trSum === 0) return 30;
+  var diP = (dmPSum / trSum) * 100;
+  var diM = (dmMSum / trSum) * 100;
+  var diSum = diP + diM;
+  if(diSum === 0) return 30;
+  return +Math.round(100 * Math.abs(diP - diM) / diSum);
+}
+
 var G_FMP_CACHE = {};
 var G_FMP_INFLIGHT = {}; // in-flight promise dedup
 
@@ -4396,11 +4435,16 @@ function finishScan(){
     var histDone  = 0;
     histOrder.forEach(function(r){
       if(G_HIST_CACHE[r.ticker]){
-        // Already cached — update MACD from history then re-score immediately
+        // Already cached — update MACD, RSI, ADX from history then re-score immediately
         var gRes = G.results.find(function(x){ return x.ticker === r.ticker; });
         if(gRes){
-          var cachedMacd = calcMACD(G_HIST_CACHE[r.ticker]);
-          if(cachedMacd !== 0) gRes.ind.macd = cachedMacd;
+          var _h = G_HIST_CACHE[r.ticker];
+          var cachedMacd = calcMACD(_h);
+          var cachedRsi  = calcRSI(_h);
+          var cachedAdx  = calcADX(_h);
+          if(cachedMacd !== 0)  gRes.ind.macd = cachedMacd;
+          if(cachedRsi  !== 50) gRes.ind.rsi  = cachedRsi;
+          if(cachedAdx  !== 30) gRes.ind.adx  = cachedAdx;
           var u = scoreIt(r.ticker, gRes.ind, gRes.opt);
           gRes.score=u.score; gRes.techScore=u.techScore; gRes.fundScore=u.fundScore;
           gRes.isGo=u.isGo; gRes.rules=u.rules; gRes.passes=u.passes;
@@ -4417,6 +4461,10 @@ function finishScan(){
           // ind.macd was placeholder 0 at initial score — now replace with real value
           var macdVal = calcMACD(days);
           if(macdVal !== 0) gResult.ind.macd = macdVal;
+          var rsiVal = calcRSI(days);
+          if(rsiVal !== 50) gResult.ind.rsi = rsiVal;
+          var adxVal = calcADX(days);
+          if(adxVal !== 30) gResult.ind.adx = adxVal;
           var updated = scoreIt(r.ticker, gResult.ind, gResult.opt);
           gResult.score = updated.score; gResult.techScore = updated.techScore; gResult.fundScore = updated.fundScore;
           gResult.isGo = updated.isGo; gResult.rules = updated.rules; gResult.passes = updated.passes;
