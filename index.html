@@ -3172,6 +3172,8 @@ async function fetchCalendarData(tickers){
       G_CAL_CACHE[tk] = { earnings: null, exDiv: null, fetched: today };
     }
     saveCalendarCache();
+    // Re-render buy signals every 3 tickers so cards update progressively
+    if(i % 3 === 2 && G.results && G.results.length) renderBuySig();
     if(i < needed.length-1) await new Promise(function(r){ setTimeout(r, 600); });
   }
 }
@@ -3180,7 +3182,11 @@ async function fetchCalendarData(tickers){
 function triggerCalendarFetch(){
   if(!G.results || !G.results.length) return;
   var goTickers = G.results.filter(function(r){ return r.isGo; }).map(function(r){ return r.ticker; });
-  if(goTickers.length) fetchCalendarData(goTickers);
+  if(!goTickers.length) return;
+  // Re-render cards after fetch completes so all tickers show their dates
+  fetchCalendarData(goTickers).then(function(){
+    if(G.results && G.results.length) renderBuySig();
+  });
 }
 
 async function fetchFmpData(ticker){
