@@ -4396,9 +4396,11 @@ function finishScan(){
     var histDone  = 0;
     histOrder.forEach(function(r){
       if(G_HIST_CACHE[r.ticker]){
-        // Already cached — re-score immediately
+        // Already cached — update MACD from history then re-score immediately
         var gRes = G.results.find(function(x){ return x.ticker === r.ticker; });
         if(gRes){
+          var cachedMacd = calcMACD(G_HIST_CACHE[r.ticker]);
+          if(cachedMacd !== 0) gRes.ind.macd = cachedMacd;
           var u = scoreIt(r.ticker, gRes.ind, gRes.opt);
           gRes.score=u.score; gRes.techScore=u.techScore; gRes.fundScore=u.fundScore;
           gRes.isGo=u.isGo; gRes.rules=u.rules; gRes.passes=u.passes;
