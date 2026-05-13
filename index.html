@@ -2980,7 +2980,7 @@ function fetchOptionContract(ticker,simPrice,callback,monthFilter){
 }
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 //  INDICATOR HISTORY CACHE + CALCULATIONS (RSI Accel, MFI, CMO)
-//  Single 25-day Tradier history fetch per ticker, 24hr localStorage TTL
+//  Single 60-day Tradier history fetch (42 trading days, enough for EMA26/MACD) per ticker, 24hr localStorage TTL
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 var G_HIST_CACHE = {};
@@ -2993,6 +2993,8 @@ function loadHistCache(ticker){
     if(!raw) return null;
     var obj = JSON.parse(raw);
     if(Date.now() - (obj.ts||0) > 86400000) return null;
+    // Invalidate short caches from the old 25-day window — need 26+ days for MACD
+    if(!obj.days || obj.days.length < 26) return null;
     return obj.days;
   } catch(e){ return null; }
 }
@@ -3013,14 +3015,14 @@ async function fetchIndicatorHistory(ticker){
   var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
   var end  = new Date().toISOString().split('T')[0];
-  var start= new Date(Date.now()-25*864e5).toISOString().split('T')[0];
+  var start= new Date(Date.now()-60*864e5).toISOString().split('T')[0]; // 60 cal days ≈ 42 trading days, enough for EMA26
   try{
     var r = await fetch(host+'/v1/markets/history?symbol='+ticker+'&interval=daily&start='+start+'&end='+end,
       {headers:{Authorization:'Bearer '+key,Accept:'application/json'}});
     var d = await r.json();
     var days = d.history && d.history.day ? d.history.day : [];
     if(!Array.isArray(days)) days = [days];
-    if(days.length < 3) return null;
+    if(days.length < 5) return null; // need at least 5 for RSI/CMO; MACD needs 26 (handled by calcMACD returning 0 if insufficient)
     saveHistCache(ticker, days);
     return days;
   } catch(e){ return null; }
