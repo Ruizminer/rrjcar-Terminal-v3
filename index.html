@@ -3073,6 +3073,21 @@ function calcCMO(days, period){
   }
   var total=sumUp+sumDn;
   if(total===0) return 0;
+
+function calcMACD(days){
+  // Returns MACD histogram value (EMA12 - EMA26 of closes)
+  // Requires at least 26 bars; returns 0 if insufficient data
+  if(!days || days.length < 26) return 0;
+  var closes = days.map(function(d){ return parseFloat(d.close); });
+  function emaOf(data, period){
+    var k = 2/(period+1), em = data[0];
+    for(var i=1;i<data.length;i++) em = data[i]*k + em*(1-k);
+    return em;
+  }
+  var ema12 = emaOf(closes, 12);
+  var ema26 = emaOf(closes, 26);
+  return +(ema12 - ema26).toFixed(4);
+}
   return +(((sumUp-sumDn)/total)*100).toFixed(1);
 }
 
@@ -4221,6 +4236,16 @@ function runScan(){
     G.results = [];
     var total = screened.length;
 
+    // Pre-populate G_FMP_CACHE from localStorage for all scanned tickers.
+    // scoreIt checks G_FMP_CACHE in memory — without this, tickers with valid
+    // cached FMP data in localStorage show "No FMP key" and lose 20pts.
+    screened.forEach(function(u){
+      if(!G_FMP_CACHE[u.t]){
+        var cached = loadFmpCache(u.t);
+        if(cached) G_FMP_CACHE[u.t] = cached;
+      }
+    });
+
     screened.forEach(function(u, idx){
       // Build indicators from what Tradier bulk quote already gave us
       // New v3.5 momentum quality fields included
@@ -4384,6 +4409,10 @@ function finishScan(){
         fetchIndicatorHistory(r.ticker).then(function(days){
           if(!days) return;
           G_HIST_CACHE[r.ticker] = days;
+          // Compute MACD from history and update ind before re-scoring
+          // ind.macd was placeholder 0 at initial score — now replace with real value
+          var macdVal = calcMACD(days);
+          if(macdVal !== 0) gResult.ind.macd = macdVal;
           var updated = scoreIt(r.ticker, gResult.ind, gResult.opt);
           gResult.score = updated.score; gResult.techScore = updated.techScore; gResult.fundScore = updated.fundScore;
           gResult.isGo = updated.isGo; gResult.rules = updated.rules; gResult.passes = updated.passes;
