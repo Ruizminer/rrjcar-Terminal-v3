@@ -3075,6 +3075,8 @@ function calcCMO(days, period){
   }
   var total=sumUp+sumDn;
   if(total===0) return 0;
+  return +(100*(sumUp-sumDn)/total).toFixed(1);
+}
 
 function calcMACD(days){
   // Returns MACD histogram value (EMA12 - EMA26 of closes)
@@ -3089,8 +3091,6 @@ function calcMACD(days){
   var ema12 = emaOf(closes, 12);
   var ema26 = emaOf(closes, 26);
   return +(ema12 - ema26).toFixed(4);
-}
-  return +(((sumUp-sumDn)/total)*100).toFixed(1);
 }
 
 var G_FMP_CACHE = {};
