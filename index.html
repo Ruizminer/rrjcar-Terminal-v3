@@ -3966,7 +3966,13 @@ function viewDetail(ticker,detId,emptyId){
    G.detailOpt={ticker:ticker,strike:optData.strike,exp:optData.exp};
    buildDetail(r,detId,emptyId);
    fetchIndicatorHistory(ticker).then(function(days){
-    if(days){G_HIST_CACHE[ticker]=days;}
+    if(days){
+      G_HIST_CACHE[ticker]=days;
+      // Update computed indicators from history
+      var mv=calcMACD(days); if(mv!==0) r.ind.macd=mv;
+      var rv=calcRSI(days);  if(rv!==50) r.ind.rsi=rv;
+      var av=calcADX(days);  if(av!==30) r.ind.adx=av;
+    }
     var s1=scoreIt(ticker,r.ind,r.opt);
     r.score=s1.score;r.techScore=s1.techScore;r.fundScore=s1.fundScore;
     r.isGo=s1.isGo;r.rules=s1.rules;r.passes=s1.passes;
