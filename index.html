@@ -2372,6 +2372,12 @@ async function runStepFill(creds,acct,occSym,sym,side,qty,startPrice,limitPrice,
       sfLog('Order #'+orderId+' placed (status: '+res.status+')','sent');
     }catch(e){
       sfLog('Order rejected: '+e.message,'rejected');
+      // Hard abort: buying power / margin errors won't resolve by retrying at a different price
+      if(e.message && (e.message.toLowerCase().includes('buying power') || e.message.toLowerCase().includes('margin') || e.message.toLowerCase().includes('insufficient'))){
+        sfLog('Aborting step fill \u2014 insufficient buying power.','rejected');
+        addAlert(sym,'Step fill aborted: insufficient buying power for '+occSym,'nogo');
+        break;
+      }
       var atLimit=(goingUp&&currentPrice>=limitPrice)||(!goingUp&&currentPrice<=limitPrice);
       if(atLimit){sfLog('Reached price limit \u2014 stopping.','rejected');break;}
       currentPrice=goingUp?+(currentPrice+stepSize).toFixed(2):+(currentPrice-stepSize).toFixed(2);
@@ -2546,6 +2552,16 @@ function previewOrder(){
   var stepOn=eid('step-fill-toggle').checked;
   var closing=isCloseAction(action);
   var pb=G.liveQuote?G.liveQuote.bid:0, pa=G.liveQuote?G.liveQuote.ask:0;
+
+  // Budget warning for buy orders
+  var budgetWarning = '';
+  if(!closing && lmt){
+    var orderCost = parseFloat(lmt) * parseInt(qty) * 100;
+    var atBudget  = getAutoTraderSettings().budget;
+    if(orderCost > atBudget){
+      budgetWarning = '<br><span style="color:var(--red);font-weight:500;">⚠ Cost $'+Math.round(orderCost).toLocaleString()+' exceeds AT budget $'+atBudget.toLocaleString()+'</span>';
+    }
+  }
   var pm=parseInt(eid('sf-max').value)||10;
   var effStep=calcEffectiveStepSize(pb||0,pa||0,pm);
   var fallbackEl2=eid('sf-fallback');
@@ -2555,6 +2571,7 @@ function previewOrder(){
     +'Contract: <b>'+occSym+'</b><br>'
     +side+' x'+qty+' '+otype+(lmt?' lmt:$'+lmt:'')+(type==='STOCK'?' (stock)':' (option)')+'<br>'
     +'Acct: '+acctVal
+    +budgetWarning
     +stepInfo;
   res.className='ord-result show';
   res.style.borderColor='var(--amb)';
@@ -3081,6 +3098,80 @@ function saveFmpCache(ticker, data){
     localStorage.setItem(fmpCacheKey(ticker), JSON.stringify(data));
     G_FMP_CACHE[ticker] = data;
   } catch(e){}
+}
+
+// ── CALENDAR CACHE (earnings + ex-div) — fetched once per day ─────────────────
+var G_CAL_CACHE = {};
+var CAL_CACHE_KEY = 'rrjcar_calendar_' + new Date().toISOString().slice(0,10); // keyed by date
+
+function loadCalendarCache(){
+  try{
+    var raw = localStorage.getItem(CAL_CACHE_KEY);
+    if(!raw) return;
+    G_CAL_CACHE = JSON.parse(raw);
+    // Clean up yesterday's cache keys
+    Object.keys(localStorage).forEach(function(k){
+      if(k.startsWith('rrjcar_calendar_') && k !== CAL_CACHE_KEY){
+        try{ localStorage.removeItem(k); }catch(e){}
+      }
+    });
+  } catch(e){ G_CAL_CACHE = {}; }
+}
+
+function saveCalendarCache(){
+  try{ localStorage.setItem(CAL_CACHE_KEY, JSON.stringify(G_CAL_CACHE)); }catch(e){}
+}
+
+// Fetch earnings + ex-div for a list of tickers — queued at 600ms intervals
+// to stay well within FMP Starter plan rate limits
+async function fetchCalendarData(tickers){
+  var fmpKey = '';
+  try{ fmpKey = localStorage.getItem('rrjcar_fmp') || ''; }catch(e){}
+  if(!fmpKey) return;
+  var base = 'https://financialmodelingprep.com/stable';
+  var today = new Date().toISOString().slice(0,10);
+  var in60d = new Date(Date.now() + 60*864e5).toISOString().slice(0,10);
+
+  // Only fetch tickers not already in today's cache
+  var needed = tickers.filter(function(t){ return !G_CAL_CACHE[t]; });
+  if(!needed.length) return;
+
+  for(var i=0; i<needed.length; i++){
+    var tk = needed[i];
+    try{
+      // Earnings: next upcoming date
+      var earnRes = await fetch(base+'/earning_calendar?symbol='+tk+'&from='+today+'&to='+in60d+'&apikey='+fmpKey)
+        .then(function(r){ return r.json(); }).catch(function(){ return []; });
+      var nextEarnings = null;
+      if(Array.isArray(earnRes) && earnRes.length){
+        var future = earnRes.filter(function(e){ return e.date >= today; }).sort(function(a,b){ return a.date < b.date ? -1:1; });
+        if(future.length) nextEarnings = future[0].date;
+      }
+
+      // Ex-dividend: next upcoming date
+      var divRes = await fetch(base+'/stock_dividend_adjusted?symbol='+tk+'&limit=5&apikey='+fmpKey)
+        .then(function(r){ return r.json(); }).catch(function(){ return []; });
+      var nextExDiv = null;
+      if(Array.isArray(divRes) && divRes.length){
+        var futureDiv = divRes.filter(function(d){ return d.recordDate && d.recordDate >= today; })
+          .sort(function(a,b){ return a.recordDate < b.recordDate ? -1:1; });
+        if(futureDiv.length) nextExDiv = futureDiv[0].recordDate;
+      }
+
+      G_CAL_CACHE[tk] = { earnings: nextEarnings, exDiv: nextExDiv, fetched: today };
+    } catch(e){
+      G_CAL_CACHE[tk] = { earnings: null, exDiv: null, fetched: today };
+    }
+    saveCalendarCache();
+    if(i < needed.length-1) await new Promise(function(r){ setTimeout(r, 600); });
+  }
+}
+
+// Called after each scan completes — fetches calendar data for GO tickers only
+function triggerCalendarFetch(){
+  if(!G.results || !G.results.length) return;
+  var goTickers = G.results.filter(function(r){ return r.isGo; }).map(function(r){ return r.ticker; });
+  if(goTickers.length) fetchCalendarData(goTickers);
 }
 
 async function fetchFmpData(ticker){
@@ -3837,11 +3928,25 @@ function renderBuySig(){
     var card=document.createElement('div');
     card.className='sig-card'+(r.isGo?'':' nogo-card');card.dataset.ticker=r.ticker;
     var tk=r.ticker;
+    // Calendar data — fetched once/day in background after scan completes
+    var _cal = G_CAL_CACHE[tk]||{};
+    var _earnStr='', _exDivStr='';
+    if(_cal.earnings){
+      var _eDays = Math.round((new Date(_cal.earnings)-new Date())/864e5);
+      var _eClr = _eDays<=7?'color:var(--red)':_eDays<=14?'color:var(--ambb)':'color:var(--gry)';
+      _earnStr = '<span style="'+_eClr+';font-size:10px;">'+(_eDays<=7?'\u26a0 ':'')+_cal.earnings+(_eDays>=0?' ('+_eDays+'d)':'')+'</span>';
+    }
+    if(_cal.exDiv){
+      var _xDays = Math.round((new Date(_cal.exDiv)-new Date())/864e5);
+      if(_xDays>=0&&_xDays<=45) _exDivStr='<span style="color:var(--blu3);font-size:10px;">\u25c6 ExDiv '+_cal.exDiv+' ('+_xDays+'d)</span>';
+    }
+    var _calRow=(_earnStr||_exDivStr)?'<div style="display:flex;gap:8px;margin-top:2px;flex-wrap:wrap;">'+_earnStr+_exDivStr+'</div>':'';
     card.innerHTML='<div class="sc-l"><div class="tk">'+tk+'</div>'
       +'<div class="sc '+(r.isGo?'go':'nogo')+'">'+r.score+'</div>'
       +'<div class="sect">'+r.sector+'</div></div>'
       +'<div class="sc-r"><div class="pr">$'+fmt2(r.price)+'</div>'
-      +'<div class="ind">RSI '+r.ind.rsi+' | ADX '+r.ind.adx+'</div></div>';
+      +'<div class="ind">RSI '+r.ind.rsi+' | ADX '+r.ind.adx+'</div>'
+      +_calRow+'</div>';
     card.onclick=function(){viewDetail(tk,'bs-detail','bs-empty');};
     if(r.isGo) goList.appendChild(card); else noList.appendChild(card);
   });
@@ -4148,6 +4253,8 @@ function finishScan(){
   eid('bs-scan').textContent = G.results.length;
   renderBuySig(); renderScan();
   G.scanRunning = false;
+  // Fetch earnings + ex-div for GO tickers once per day in background
+  setTimeout(triggerCalendarFetch, 1500);
 
   var btn = eid('sc-run-btn');
   if(btn){ btn.disabled = false; btn.textContent = '\u21bb SCAN'; }
@@ -4806,11 +4913,16 @@ function fetchPositionsDirect(key,mode,host,acct){
           if(q){var mid=q.bid&&q.ask?(q.bid+q.ask)/2:(q.last||0);p.last=mid;p.bid=q.bid||0;p.ask=q.ask||0;var contractVal=mid*Math.abs(p.qty)*100;p.pnl=contractVal-p.cost;p.pnlPct=p.cost?((p.pnl/p.cost)*100):0;}
           // Record first-seen data (open timestamp + underlying price at open)
           if(!G.posOpenData[p.symbol]){
+            // Default manualMode based on how the position was opened:
+            // AT entries → auto exit (manualMode: false) — system manages exit
+            // Manual order ticket entries → manual mode (manualMode: true) — user manages exit
+            var isAtEntry = !!(G_AT.openedToday && G_AT.openedToday[p.underlying]);
             G.posOpenData[p.symbol]={
               openTs: now,
               underlyingAtOpen: uQuotes[p.underlying]||0,
               costBasis: p.cost||0,
               qty: Math.abs(p.qty)||0,
+              manualMode: !isAtEntry,  // true = manual, false = auto
             };
             try{localStorage.setItem('rrjcar_pos_open',JSON.stringify(G.posOpenData));}catch(e){}
           } else {
@@ -6992,7 +7104,9 @@ function loadAutoTraderState(){
     G_AT.orderCount=s.orderCount||0; G_AT.dailyPnl=s.dailyPnl||0;
     G_AT.disarmedByLoss=!!s.disarmedByLoss; G_AT.openedToday=s.openedToday||{};
     atUpdateStats();
-    if(s.enabled && !G_AT.disarmedByLoss){ setTimeout(startAutoTrader, 2500); }
+    // AT enabled state is NOT restored on page load — requires manual enable each session.
+    // This prevents the AT from auto-firing after a deploy or accidental refresh.
+    // (s.enabled is saved but intentionally ignored here)
   }catch(e){}
 }
 
@@ -7553,6 +7667,7 @@ function init(){
   loadKeys();
   loadWL();
   loadAppSettings();
+  loadCalendarCache();
   loadTvSettings();
   loadNotifSettings();
   loadAutoTraderSettings();
