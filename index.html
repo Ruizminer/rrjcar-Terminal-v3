@@ -3181,18 +3181,23 @@ async function fetchCalendarData(tickers){
     saveCalendarCache();
     // Re-render buy signals every 3 tickers so cards update progressively
     if(i % 3 === 2 && G.results && G.results.length) renderBuySig();
-    if(i < needed.length-1) await new Promise(function(r){ setTimeout(r, 600); });
+    if(i < needed.length-1) await new Promise(function(r){ setTimeout(r, 300); });
   }
 }
 
-// Called after each scan completes — fetches calendar data for GO tickers only
+// Called after each scan completes — fetches calendar data for all scan tickers once/day.
+// GO tickers are fetched first (immediate), then all others at 300ms intervals in background.
 function triggerCalendarFetch(){
   if(!G.results || !G.results.length) return;
-  var goTickers = G.results.filter(function(r){ return r.isGo; }).map(function(r){ return r.ticker; });
-  if(!goTickers.length) return;
-  // Re-render cards after fetch completes so all tickers show their dates
+  var goTickers  = G.results.filter(function(r){ return r.isGo;  }).map(function(r){ return r.ticker; });
+  var allTickers = G.results.filter(function(r){ return !r.isGo; }).map(function(r){ return r.ticker; });
+  // Fetch GO tickers first, re-render when done, then fetch the rest in background
   fetchCalendarData(goTickers).then(function(){
     if(G.results && G.results.length) renderBuySig();
+    // Now fetch non-GO tickers in background — no re-render needed until complete
+    fetchCalendarData(allTickers).then(function(){
+      if(G.results && G.results.length) renderBuySig();
+    });
   });
 }
 
