@@ -3130,7 +3130,6 @@ async function fetchCalendarData(tickers){
   if(!fmpKey) return;
   var base = 'https://financialmodelingprep.com/stable';
   var today = new Date().toISOString().slice(0,10);
-  var in60d = new Date(Date.now() + 60*864e5).toISOString().slice(0,10);
 
   // Only fetch tickers not already in today's cache
   var needed = tickers.filter(function(t){ return !G_CAL_CACHE[t]; });
@@ -3139,23 +3138,33 @@ async function fetchCalendarData(tickers){
   for(var i=0; i<needed.length; i++){
     var tk = needed[i];
     try{
-      // Earnings: next upcoming date
-      var earnRes = await fetch(base+'/earning_calendar?symbol='+tk+'&from='+today+'&to='+in60d+'&apikey='+fmpKey)
+      // Earnings: /stable/earnings returns upcoming dates (epsActual=null = not yet reported)
+      var earnRes = await fetch(base+'/earnings?symbol='+tk+'&limit=5&apikey='+fmpKey)
         .then(function(r){ return r.json(); }).catch(function(){ return []; });
       var nextEarnings = null;
       if(Array.isArray(earnRes) && earnRes.length){
-        var future = earnRes.filter(function(e){ return e.date >= today; }).sort(function(a,b){ return a.date < b.date ? -1:1; });
+        var future = earnRes.filter(function(e){ return e.date >= today && e.epsActual === null; })
+          .sort(function(a,b){ return a.date < b.date ? -1:1; });
         if(future.length) nextEarnings = future[0].date;
       }
 
-      // Ex-dividend: next upcoming date
-      var divRes = await fetch(base+'/stock_dividend_adjusted?symbol='+tk+'&limit=5&apikey='+fmpKey)
+      // Ex-dividend: /stable/dividends returns historical records — estimate next from pattern
+      var divRes = await fetch(base+'/dividends?symbol='+tk+'&limit=8&apikey='+fmpKey)
         .then(function(r){ return r.json(); }).catch(function(){ return []; });
       var nextExDiv = null;
       if(Array.isArray(divRes) && divRes.length){
-        var futureDiv = divRes.filter(function(d){ return d.recordDate && d.recordDate >= today; })
-          .sort(function(a,b){ return a.recordDate < b.recordDate ? -1:1; });
-        if(futureDiv.length) nextExDiv = futureDiv[0].recordDate;
+        // Sort descending, take most recent
+        var sorted = divRes.slice().sort(function(a,b){ return a.date < b.date ? 1:-1; });
+        var last = sorted[0];
+        if(last && last.date && last.frequency){
+          var lastMs = new Date(last.date).getTime();
+          var freqDays = last.frequency === 'Quarterly' ? 91 :
+                         last.frequency === 'Monthly'   ? 30 :
+                         last.frequency === 'Annual'    ? 365 : 91;
+          var nextMs = lastMs + freqDays * 864e5;
+          var nextStr = new Date(nextMs).toISOString().slice(0,10);
+          if(nextStr >= today) nextExDiv = nextStr + '*'; // * = estimated from frequency
+        }
       }
 
       G_CAL_CACHE[tk] = { earnings: nextEarnings, exDiv: nextExDiv, fetched: today };
