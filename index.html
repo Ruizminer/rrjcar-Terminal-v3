@@ -2993,8 +2993,8 @@ function loadHistCache(ticker){
     if(!raw) return null;
     var obj = JSON.parse(raw);
     if(Date.now() - (obj.ts||0) > 86400000) return null;
-    // Invalidate short caches from the old 25-day window — need 26+ days for MACD
-    if(!obj.days || obj.days.length < 26) return null;
+    // Invalidate short caches from the old 60-day window — need 50+ days for EMA50, 200 for EMA200
+    if(!obj.days || obj.days.length < 50) return null;
     return obj.days;
   } catch(e){ return null; }
 }
@@ -3015,7 +3015,7 @@ async function fetchIndicatorHistory(ticker){
   var mode=localStorage.getItem('rrjcar_mode')||'sandbox';
   var host=mode==='live'?'https://api.tradier.com':'https://sandbox.tradier.com';
   var end  = new Date().toISOString().split('T')[0];
-  var start= new Date(Date.now()-60*864e5).toISOString().split('T')[0]; // 60 cal days ≈ 42 trading days, enough for EMA26
+  var start= new Date(Date.now()-300*864e5).toISOString().split('T')[0]; // 300 cal days ≈ 210 trading days, enough for EMA200
   try{
     var r = await fetch(host+'/v1/markets/history?symbol='+ticker+'&interval=daily&start='+start+'&end='+end,
       {headers:{Authorization:'Bearer '+key,Accept:'application/json'}});
@@ -3130,6 +3130,48 @@ function calcADX(days, period){
   var diSum = diP + diM;
   if(diSum === 0) return 30;
   return +Math.round(100 * Math.abs(diP - diM) / diSum);
+}
+
+function calcEMA(days, period){
+  if(!days || days.length < period) return 0;
+  var closes = days.map(function(d){ return typeof d.close !== 'undefined' ? parseFloat(d.close) : d; });
+  var k = 2/(period+1);
+  var em = closes.slice(0,period).reduce(function(a,b){ return a+b; },0)/period;
+  for(var i=period;i<closes.length;i++) em = closes[i]*k + em*(1-k);
+  return +em.toFixed(4);
+}
+
+function calcTF(days){
+  // Multi-timeframe alignment from daily bars — returns 0/1/2/3 timeframes aligned (bullish)
+  if(!days||days.length<20) return 2;
+
+  // Daily: EMA10 > EMA20
+  var e10d=calcEMA(days,10), e20d=calcEMA(days,20);
+  var dailyOk = e10d>0&&e20d>0&&e10d>e20d ? 1 : 0;
+
+  // Weekly: aggregate daily → weekly close (last day of each week), EMA5 > EMA10
+  var weekly=[],wk='';
+  days.forEach(function(d){
+    var dt=new Date(d.date), yr=dt.getFullYear();
+    var wn=Math.ceil((dt.getTime()-new Date(yr,0,1).getTime())/604800000);
+    var key=yr+'W'+wn;
+    if(key!==wk){ wk=key; weekly.push({close:parseFloat(d.close)}); }
+    else{ weekly[weekly.length-1].close=parseFloat(d.close); }
+  });
+  var e5w=weekly.length>=10?calcEMA(weekly,5):0, e10w=weekly.length>=10?calcEMA(weekly,10):0;
+  var weeklyOk=e5w>0&&e10w>0&&e5w>e10w ? 1 : 0;
+
+  // Monthly: aggregate daily → monthly close, EMA3 > EMA6
+  var monthly=[],mo='';
+  days.forEach(function(d){
+    var mk=d.date.slice(0,7);
+    if(mk!==mo){ mo=mk; monthly.push({close:parseFloat(d.close)}); }
+    else{ monthly[monthly.length-1].close=parseFloat(d.close); }
+  });
+  var e3m=monthly.length>=6?calcEMA(monthly,3):0, e6m=monthly.length>=6?calcEMA(monthly,6):0;
+  var monthlyOk=e3m>0&&e6m>0&&e3m>e6m ? 1 : 0;
+
+  return dailyOk + weeklyOk + monthlyOk;
 }
 
 var G_FMP_CACHE = {};
@@ -3969,9 +4011,13 @@ function viewDetail(ticker,detId,emptyId){
     if(days){
       G_HIST_CACHE[ticker]=days;
       // Update computed indicators from history
-      var mv=calcMACD(days); if(mv!==0) r.ind.macd=mv;
-      var rv=calcRSI(days);  if(rv!==50) r.ind.rsi=rv;
-      var av=calcADX(days);  if(av!==30) r.ind.adx=av;
+      var mv=calcMACD(days); if(mv!==0)  r.ind.macd=mv;
+      var rv=calcRSI(days);  if(rv!==50)  r.ind.rsi=rv;
+      var av=calcADX(days);  if(av!==30)  r.ind.adx=av;
+      var e20=calcEMA(days,20);  if(e20>0) r.ind.ema20=e20;
+      var e50=calcEMA(days,50);  if(e50>0) r.ind.ema50=e50;
+      var e200=calcEMA(days,200); if(e200>0) r.ind.ema200=e200;
+      var tf=calcTF(days); r.ind.tf=tf;
     }
     var s1=scoreIt(ticker,r.ind,r.opt);
     r.score=s1.score;r.techScore=s1.techScore;r.fundScore=s1.fundScore;
@@ -4298,8 +4344,8 @@ function runScan(){
       // New v3.5 momentum quality fields included
       var ind = {
         rsi: 50, macd: 0, adx: 30,
-        ema20: u.price * 0.99, ema50: u.price * 0.97,
-        ema200: u.price * 0.93,
+        ema20: u.price * 0.99, ema50: u.price * 0.97,  // placeholders — overwritten by calcEMA() in hist callback
+        ema200: u.price * 0.93,                          // placeholder — overwritten by calcEMA(days,200)
         atr: u.price * 0.015,
         vol: u.volume, avgVol: u.avgVol, tf: 2,
         // New v3.5 fields from Tradier bulk quote
@@ -4445,12 +4491,13 @@ function finishScan(){
         var gRes = G.results.find(function(x){ return x.ticker === r.ticker; });
         if(gRes){
           var _h = G_HIST_CACHE[r.ticker];
-          var cachedMacd = calcMACD(_h);
-          var cachedRsi  = calcRSI(_h);
-          var cachedAdx  = calcADX(_h);
-          if(cachedMacd !== 0)  gRes.ind.macd = cachedMacd;
-          if(cachedRsi  !== 50) gRes.ind.rsi  = cachedRsi;
-          if(cachedAdx  !== 30) gRes.ind.adx  = cachedAdx;
+          var cachedMacd=calcMACD(_h); if(cachedMacd!==0)  gRes.ind.macd=cachedMacd;
+          var cachedRsi=calcRSI(_h);   if(cachedRsi!==50)   gRes.ind.rsi=cachedRsi;
+          var cachedAdx=calcADX(_h);   if(cachedAdx!==30)   gRes.ind.adx=cachedAdx;
+          var cachedE20=calcEMA(_h,20);   if(cachedE20>0)  gRes.ind.ema20=cachedE20;
+          var cachedE50=calcEMA(_h,50);   if(cachedE50>0)  gRes.ind.ema50=cachedE50;
+          var cachedE200=calcEMA(_h,200); if(cachedE200>0) gRes.ind.ema200=cachedE200;
+          gRes.ind.tf = calcTF(_h);
           var u = scoreIt(r.ticker, gRes.ind, gRes.opt);
           gRes.score=u.score; gRes.techScore=u.techScore; gRes.fundScore=u.fundScore;
           gRes.isGo=u.isGo; gRes.rules=u.rules; gRes.passes=u.passes;
@@ -4465,12 +4512,13 @@ function finishScan(){
           G_HIST_CACHE[r.ticker] = days;
           // Compute MACD from history and update ind before re-scoring
           // ind.macd was placeholder 0 at initial score — now replace with real value
-          var macdVal = calcMACD(days);
-          if(macdVal !== 0) gResult.ind.macd = macdVal;
-          var rsiVal = calcRSI(days);
-          if(rsiVal !== 50) gResult.ind.rsi = rsiVal;
-          var adxVal = calcADX(days);
-          if(adxVal !== 30) gResult.ind.adx = adxVal;
+          var macdVal=calcMACD(days); if(macdVal!==0)  gResult.ind.macd=macdVal;
+          var rsiVal=calcRSI(days);   if(rsiVal!==50)   gResult.ind.rsi=rsiVal;
+          var adxVal=calcADX(days);   if(adxVal!==30)   gResult.ind.adx=adxVal;
+          var e20v=calcEMA(days,20);   if(e20v>0)  gResult.ind.ema20=e20v;
+          var e50v=calcEMA(days,50);   if(e50v>0)  gResult.ind.ema50=e50v;
+          var e200v=calcEMA(days,200); if(e200v>0) gResult.ind.ema200=e200v;
+          gResult.ind.tf = calcTF(days);
           var updated = scoreIt(r.ticker, gResult.ind, gResult.opt);
           gResult.score = updated.score; gResult.techScore = updated.techScore; gResult.fundScore = updated.fundScore;
           gResult.isGo = updated.isGo; gResult.rules = updated.rules; gResult.passes = updated.passes;
