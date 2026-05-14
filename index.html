@@ -3488,7 +3488,9 @@ function scoreIt(ticker, ind, opt){
   res.push({n:'52Wk Hi Prox <15%', pass:hiOk, val:ind.week52hi>0?'$'+fmt2(ind.price)+' / $'+fmt2(ind.week52hi)+' ('+hiPts.toFixed(1)+'pts)':'no data', filter:false, pts:10});
 
   // RS > SPY: continuous — stronger outperformance scores higher, max 8pts
-  var rsPts = ind.relStr5d > 0 ? scalePts(ind.relStr5d, 0, 3, 8) : 0;
+  // RS > SPY: continuous 0→5% = 0→8pts. Ceiling raised from 3% to match where
+  // genuine momentum stocks actually sit (GO tickers average +4-14% RS).
+  var rsPts = ind.relStr5d > 0 ? scalePts(ind.relStr5d, 0, 5, 8) : 0;
   score += rsPts; techScore += rsPts;
   res.push({n:'RS > SPY (5d)', pass:rsRelOk, val:(ind.relStr5d>=0?'+':'')+ind.relStr5d.toFixed(2)+'% ('+rsPts.toFixed(1)+'pts)', filter:false, pts:8});
 
